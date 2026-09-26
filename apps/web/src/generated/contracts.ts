@@ -52,6 +52,8 @@ export type SaveRepositorySelectionResponse = { selectedCount: number, };
 
 export type RepositorySelectionErrorResponse = { message: string, };
 
+export const applicationVersion = "0.1.0" as const;
+
 export const httpRoutes = {
   health: "/api/health",
   workflows: "/api/workflows",

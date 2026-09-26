@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { useApplicationClient } from "../api/application-client.tsx";
+import { applicationVersion } from "../generated/contracts.ts";
 import "./AppShell.css";
 
 const pageTitles: Record<string, string> = {
@@ -10,35 +10,11 @@ const pageTitles: Record<string, string> = {
 };
 
 export function AppShell() {
-  const client = useApplicationClient();
   const location = useLocation();
-  const [serviceState, setServiceState] = useState("Connecting to core");
-  const [serviceOnline, setServiceOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     document.title = `${pageTitles[location.pathname] ?? "Overview"} · CI Watcher`;
   }, [location.pathname]);
-
-  useEffect(() => {
-    let current = true;
-    void client.health().then(
-      (health) => {
-        if (current) {
-          setServiceOnline(true);
-          setServiceState(`Core online · contract v${health.contractVersion}`);
-        }
-      },
-      () => {
-        if (current) {
-          setServiceOnline(false);
-          setServiceState("Core unavailable");
-        }
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [client]);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `nav-item${isActive ? " nav-item-active" : ""}`;
@@ -71,11 +47,7 @@ export function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          <span
-            className={`service-dot${serviceOnline === true ? " service-dot-online" : ""}${serviceOnline === false ? " service-dot-error" : ""}`}
-            aria-hidden="true"
-          />
-          <span>{serviceState}</span>
+          Version {applicationVersion}
         </div>
       </aside>
 

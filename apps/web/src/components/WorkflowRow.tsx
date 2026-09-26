@@ -43,9 +43,7 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
       </div>
       {earlierRuns.length > 0 ? (
         <details className="run-history">
-          <summary>
-            {earlierRuns.length} earlier run{earlierRuns.length === 1 ? "" : "s"}
-          </summary>
+          <summary>Previous runs</summary>
           <div className="run-history-list">
             {earlierRuns.map((run) => (
               <div className="run-history-row" key={`${run.id}:${run.attempt}`}>
