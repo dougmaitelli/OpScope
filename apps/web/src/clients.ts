@@ -3,8 +3,14 @@ import {
   desktopCommands,
   httpRoutes,
   type ApplicationClient,
+  type ConnectionSummary,
+  type ConnectionValidationErrorResponse,
+  type ConnectSourceRequest,
+  type DisconnectSourceRequest,
+  type DisconnectSourceResponse,
   type HealthResponse,
   type ListMonitorsResponse,
+  type ListSourcesResponse,
 } from "./generated/contracts.ts";
 
 export class DesktopClient implements ApplicationClient {
@@ -15,9 +21,25 @@ export class DesktopClient implements ApplicationClient {
   listMonitors(): Promise<ListMonitorsResponse> {
     return invoke<ListMonitorsResponse>(desktopCommands.listMonitors);
   }
+
+  listSources(): Promise<ListSourcesResponse> {
+    return invoke<ListSourcesResponse>(desktopCommands.listSources);
+  }
+
+  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {
+    return invoke<ConnectionSummary>(desktopCommands.connectSource, { request });
+  }
+
+  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse> {
+    return invoke<DisconnectSourceResponse>(desktopCommands.disconnectSource, { request });
+  }
 }
+
 export class HttpClient implements ApplicationClient {
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  constructor(
+    private readonly fetcher: typeof fetch = (input, init) =>
+      globalThis.fetch(input, init),
+  ) {}
 
   health(): Promise<HealthResponse> {
     return this.get<HealthResponse>(httpRoutes.health);
@@ -25,6 +47,18 @@ export class HttpClient implements ApplicationClient {
 
   listMonitors(): Promise<ListMonitorsResponse> {
     return this.get<ListMonitorsResponse>(httpRoutes.listMonitors);
+  }
+
+  listSources(): Promise<ListSourcesResponse> {
+    return this.get<ListSourcesResponse>(httpRoutes.sources);
+  }
+
+  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {
+    return this.post<ConnectionSummary>(httpRoutes.connections, request);
+  }
+
+  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse> {
+    return this.delete<DisconnectSourceResponse>(httpRoutes.connections, request);
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -35,6 +69,69 @@ export class HttpClient implements ApplicationClient {
     if (!response.ok) {
       throw new Error(`request failed with status ${response.status}`);
     }
-    return response.json() as Promise<T>;
+    return this.readJson<T>(response);
+  }
+
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetcher(path, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw await this.responseError(response);
+    }
+    return this.readJson<T>(response);
+  }
+
+  private async delete<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetcher(path, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw await this.responseError(response);
+    }
+    return this.readJson<T>(response);
+  }
+
+  private async responseError(response: Response): Promise<Error> {
+    const fallback =
+      response.status === 404
+        ? "The connection endpoint is unavailable. Restart the application service."
+        : `The application service returned status ${response.status}.`;
+    const text = await response.text();
+    if (text.length === 0) {
+      return new Error(fallback);
+    }
+
+    try {
+      const failure = JSON.parse(text) as Partial<ConnectionValidationErrorResponse>;
+      return new Error(typeof failure.message === "string" ? failure.message : fallback);
+    } catch {
+      return new Error(fallback);
+    }
+  }
+
+  private async readJson<T>(response: Response): Promise<T> {
+    const text = await response.text();
+    if (text.length === 0) {
+      throw new Error("The application service returned an empty response.");
+    }
+
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error("The application service returned an invalid response.");
+    }
   }
 }

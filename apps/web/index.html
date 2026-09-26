@@ -7,11 +7,150 @@
     <title>CI Watcher</title>
   </head>
   <body>
-    <main>
-      <h1>CI Watcher</h1>
-      <p id="connection">Connecting through the application contract…</p>
-      <ul id="monitors"></ul>
-    </main>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">CI</span>
+          <span>CI Watcher</span>
+        </div>
+
+        <nav aria-label="Primary navigation">
+          <a class="nav-item nav-item-active" id="overview-nav" href="/" aria-current="page">
+            <span class="nav-symbol" aria-hidden="true">O</span>
+            Overview
+          </a>
+          <button class="nav-item" type="button" disabled>
+            <span class="nav-symbol" aria-hidden="true">A</span>
+            Activity
+          </button>
+          <button class="nav-item" type="button" disabled>
+            <span class="nav-symbol" aria-hidden="true">R</span>
+            Repositories
+          </button>
+          <a class="nav-item" id="connections-nav" href="/connections">
+            <span class="nav-symbol" aria-hidden="true">C</span>
+            Connections
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="service-dot" id="service-dot" aria-hidden="true"></span>
+          <span id="service-state">Connecting to core</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="page-view" id="overview-view" aria-labelledby="overview-title">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">Demo workspace</p>
+            <h1 id="overview-title">Overview</h1>
+            <p class="page-description">Workflow health across your monitored repositories.</p>
+          </div>
+          <button class="secondary-button" id="refresh-button" type="button">
+            <span aria-hidden="true">↻</span>
+            Refresh
+          </button>
+        </header>
+
+        <section class="health-summary" aria-labelledby="health-heading" aria-busy="true">
+          <div class="health-heading">
+            <span class="health-icon" id="health-icon" aria-hidden="true">·</span>
+            <div>
+              <p class="section-label">Current health</p>
+              <h2 id="health-heading">Loading workflow status</h2>
+              <p id="last-updated">Waiting for the application core</p>
+            </div>
+          </div>
+          <dl class="health-stats">
+            <div>
+              <dt>Failing</dt>
+              <dd id="failing-count">—</dd>
+            </div>
+            <div>
+              <dt>Running</dt>
+              <dd id="running-count">—</dd>
+            </div>
+            <div>
+              <dt>Passing</dt>
+              <dd id="passing-count">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="overview-content">
+          <section class="panel workflows-panel" aria-labelledby="workflows-heading">
+            <div class="panel-header">
+              <div>
+                <p class="section-label">Monitors</p>
+                <h2 id="workflows-heading">Workflow health</h2>
+              </div>
+              <span class="demo-badge">Demo data</span>
+            </div>
+            <div class="workflow-list" id="monitor-list" aria-live="polite">
+              <div class="loading-row">
+                <span class="loading-block loading-avatar"></span>
+                <span class="loading-block loading-copy"></span>
+              </div>
+            </div>
+          </section>
+        </div>
+        </section>
+
+        <section class="page-view" id="connections-view" aria-labelledby="connections-title" hidden>
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Workspace settings</p>
+              <h1 id="connections-title">Connections</h1>
+              <p class="page-description">
+                Manage the services CI Watcher uses to discover monitoring data.
+              </p>
+            </div>
+          </header>
+
+          <section class="panel sources-panel" aria-labelledby="sources-heading">
+            <div class="panel-header">
+              <div>
+                <p class="section-label">Configured sources</p>
+                <h2 id="sources-heading">Monitoring connections</h2>
+              </div>
+              <span class="source-count" id="source-count">0 connected</span>
+            </div>
+            <div class="source-list" id="source-list" aria-live="polite">
+              <p class="empty-state">Loading source modules…</p>
+            </div>
+            <p class="connection-note" id="connection-note" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel connection-editor" id="connection-editor" aria-labelledby="connection-heading" hidden>
+            <div class="editor-copy">
+              <p class="section-label">Source credential</p>
+              <h2 id="connection-heading">Connect source</h2>
+              <p>
+                CI Watcher validates the account before storing the credential securely.
+              </p>
+            </div>
+            <form class="connection-form" id="connection-form">
+              <label for="source-credential" id="credential-label">Credential</label>
+              <input
+                id="source-credential"
+                name="source-credential"
+                type="password"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <p class="field-help" id="credential-help"></p>
+              <div class="editor-actions">
+                <button class="secondary-button" id="cancel-connection" type="button">Cancel</button>
+                <button class="primary-button" id="connect-button" type="submit">Connect source</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

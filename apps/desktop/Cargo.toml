@@ -10,6 +10,7 @@ tauri-build.workspace = true
 
 [dependencies]
 ciwatcher-core.workspace = true
+keyring = "4.2.0"
 tauri.workspace = true
 
 [lints]

@@ -14,7 +14,7 @@ displayed information is.
 - Desktop operation does not depend on a service run by this project.
 - Desktop and self-hosted editions share one application core and frontend.
 - Cached data always exposes its freshness and remains useful during outages.
-- Credentials never cross into the frontend.
+- Stored credentials are never returned to the frontend.
 - Missing production security configuration fails closed.
 
 ## Version-one scope
@@ -65,8 +65,12 @@ Provider-native values are retained alongside normalized values.
 
 The workspace currently provides the shared Rust core, Axum server, Tauri
 desktop shell, generated TypeScript contracts, and a small synthetic
-integration. GitHub and SQLite are not implemented yet. The unauthenticated
-development server binds only to `127.0.0.1`.
+integration. GitHub account validation and credential persistence are
+implemented; repository discovery is not implemented yet. Desktop credentials
+use the operating-system keychain. The server encrypts credentials stored in
+SQLite. Connections are managed through a source-module registry and a
+dedicated Connections view. The unauthenticated development server binds only
+to `127.0.0.1`.
 
 ```sh
 npm install
@@ -74,7 +78,7 @@ npm run contracts:generate
 npm run check
 ```
 
-Run the development server with `npm run server:dev`. Run the desktop shell with
-`npm run desktop:dev`; the Tauri CLI is installed locally by npm. See the
-[development guide](docs/development.md) for the complete command and
-dependency-boundary reference.
+For the browser UI, run `npm run server:dev` and `npm run web:dev` in separate
+terminals. Run the desktop shell with `npm run desktop:dev`; the Tauri CLI is
+installed locally by npm. See the [development guide](docs/development.md) for
+the complete command and dependency-boundary reference.

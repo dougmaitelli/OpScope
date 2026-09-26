@@ -41,10 +41,18 @@ The other root commands are:
 | `npm run contracts:check` | Fail if the committed TypeScript contract differs from Rust. |
 | `npm run desktop:build` | Build the desktop application executable without packaging an installer. |
 | `npm run server:dev` | Run the loopback-only development HTTP server on port 4317. |
+| `npm run web:dev` | Run the browser frontend on port 1420 and proxy `/api` to the development server. |
 | `npm run desktop:dev` | Run the Tauri desktop shell and shared Vite frontend. |
 
 The current HTTP server has no authentication and therefore binds exclusively
 to `127.0.0.1`. It is not a deployable self-hosted edition.
+
+The development server stores metadata and encrypted credentials under
+`.ciwatcher-data/`. It creates a 32-byte `master.key` with owner-only
+permissions on first use. Set `CIWATCHER_DATA_DIR` to move the database or
+`CIWATCHER_MASTER_KEY_FILE` to use a separately mounted raw 32-byte key file.
+Production self-hosting will require the latter rather than the development
+default.
 
 ## Dependency direction
 
@@ -60,16 +68,23 @@ Cargo.toml
 Inside `ciwatcher-core`, module dependencies point inward:
 
 ```text
-domain <── application <── integrations/fake
-   ^
-   └──────── contracts
+domain <── application <── integrations
+   ^             ^
+   └── contracts └── persistence
 ```
 
 - The domain module has no dependencies on other project modules.
 - The application module defines ports and depends only on domain concepts.
-- Integrations implement application ports and may depend on domain types.
-- Contracts map domain values into secret-free transport DTOs.
+- Integrations and persistence implement application ports and may depend on
+  domain types.
+- Response contracts contain no secret material; the connection request is the
+  sole credential-bearing transport type.
 - Axum and Tauri occur only in their executable crates.
+
+Source modules are added to the central compiled catalog in
+`integrations/mod.rs`. The shared registry exposes them to both editions
+through generic list, connect, and disconnect contracts, so the frontend
+renders new registered sources without provider-specific UI code.
 
 These are module-level rules rather than separate compilation units. If an
 integration later requires enough isolated dependencies or conditional builds

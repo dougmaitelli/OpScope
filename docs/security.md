@@ -5,7 +5,8 @@
 CI Watcher handles credentials capable of reading private repository metadata.
 Future versions may hold credentials with write permissions. Its design must:
 
-- Keep provider credentials out of the frontend and routine logs.
+- Accept new provider credentials only through intentional input, never return
+  them to the frontend, and keep them out of routine logs.
 - Authenticate every non-public self-hosted API route.
 - Prevent one security credential from serving unrelated purposes.
 - Minimize provider permissions and repository scope.
@@ -64,7 +65,8 @@ cause state changes.
 - Apply a restrictive Content Security Policy.
 - Do not load application scripts from third-party CDNs.
 - Treat provider-controlled text as untrusted and render it as text.
-- Do not expose secrets through DTOs, DOM attributes, URLs, or browser storage.
+- Do not expose stored secrets through response DTOs, DOM attributes, URLs, or
+  browser storage. Clear credential inputs after submission.
 - Desktop capabilities and commands are allowlisted narrowly.
 - The desktop webview cannot navigate to remote content with native privileges.
 
@@ -78,6 +80,13 @@ cause state changes.
   secret manager integration, never the web login password.
 - Secret values are zeroized where practical and excluded from debug output.
 - Credential replacement and deletion create audit events.
+
+The current loopback-only development server creates a local master-key file
+when none is configured. Each provider token is encrypted with XChaCha20-
+Poly1305 using a random data-encryption key; that key is separately wrapped by
+the server master key. Production server startup will require a separately
+mounted key file. Existing key files with group or world permissions are
+rejected on Unix platforms.
 
 Application encryption protects against a database-only disclosure. It does not
 claim to protect credentials after complete compromise of the running host.

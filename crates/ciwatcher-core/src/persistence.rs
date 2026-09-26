@@ -1,0 +1,495 @@
+//! SQLite metadata persistence and encrypted server-side credential storage.
+
+use crate::application::{
+    ConnectionRepository, PersistenceFailure, ProviderToken, SecretReference, SecretStore,
+    StoredConnection, ValidatedAccount,
+};
+use chacha20poly1305::aead::{Aead, Generate, KeyInit, Payload};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use rusqlite::{Connection, OptionalExtension, params};
+use std::fs::{self, OpenOptions};
+use std::io::{ErrorKind, Write};
+use std::path::Path;
+use std::sync::{Arc, Mutex, MutexGuard};
+use zeroize::Zeroizing;
+
+const MASTER_KEY_LENGTH: usize = 32;
+
+#[derive(Clone)]
+pub struct SqliteDatabase {
+    connection: Arc<Mutex<Connection>>,
+}
+
+impl SqliteDatabase {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, PersistenceFailure> {
+        let connection = Connection::open(path).map_err(|_| PersistenceFailure)?;
+        Self::initialize(connection)
+    }
+
+    pub fn in_memory() -> Result<Self, PersistenceFailure> {
+        let connection = Connection::open_in_memory().map_err(|_| PersistenceFailure)?;
+        Self::initialize(connection)
+    }
+
+    fn initialize(connection: Connection) -> Result<Self, PersistenceFailure> {
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE IF NOT EXISTS connections (
+                   id TEXT PRIMARY KEY,
+                   provider TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   login TEXT NOT NULL,
+                   display_name TEXT,
+                   profile_url TEXT NOT NULL,
+                   secret_reference TEXT NOT NULL,
+                   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+                 );
+                 CREATE TABLE IF NOT EXISTS encrypted_secrets (
+                   reference TEXT PRIMARY KEY,
+                   key_nonce BLOB NOT NULL,
+                   wrapped_key BLOB NOT NULL,
+                   value_nonce BLOB NOT NULL,
+                   ciphertext BLOB NOT NULL,
+                   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+                 );
+                 CREATE TABLE IF NOT EXISTS audit_events (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   event_type TEXT NOT NULL,
+                   connection_id TEXT NOT NULL,
+                   occurred_at INTEGER NOT NULL DEFAULT (unixepoch())
+                 );",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        Ok(Self {
+            connection: Arc::new(Mutex::new(connection)),
+        })
+    }
+
+    fn lock(&self) -> Result<MutexGuard<'_, Connection>, PersistenceFailure> {
+        self.connection.lock().map_err(|_| PersistenceFailure)
+    }
+
+    fn store_encrypted_secret(
+        &self,
+        reference: &SecretReference,
+        key_nonce: &[u8],
+        wrapped_key: &[u8],
+        value_nonce: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<(), PersistenceFailure> {
+        self.lock()?
+            .execute(
+                "INSERT INTO encrypted_secrets (
+                   reference, key_nonce, wrapped_key, value_nonce, ciphertext, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, unixepoch())
+                 ON CONFLICT(reference) DO UPDATE SET
+                   key_nonce = excluded.key_nonce,
+                   wrapped_key = excluded.wrapped_key,
+                   value_nonce = excluded.value_nonce,
+                   ciphertext = excluded.ciphertext,
+                   updated_at = unixepoch()",
+                params![
+                    reference.expose(),
+                    key_nonce,
+                    wrapped_key,
+                    value_nonce,
+                    ciphertext
+                ],
+            )
+            .map(|_| ())
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn encrypted_secret(
+        &self,
+        reference: &SecretReference,
+    ) -> Result<Option<EncryptedSecret>, PersistenceFailure> {
+        self.lock()?
+            .query_row(
+                "SELECT key_nonce, wrapped_key, value_nonce, ciphertext
+                 FROM encrypted_secrets WHERE reference = ?1",
+                [reference.expose()],
+                |row| {
+                    Ok(EncryptedSecret {
+                        key_nonce: row.get(0)?,
+                        wrapped_key: row.get(1)?,
+                        value_nonce: row.get(2)?,
+                        ciphertext: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    #[cfg(test)]
+    fn encrypted_bytes(&self, reference: &SecretReference) -> Result<Vec<u8>, PersistenceFailure> {
+        let secret = self
+            .encrypted_secret(reference)?
+            .ok_or(PersistenceFailure)?;
+        Ok([
+            secret.key_nonce,
+            secret.wrapped_key,
+            secret.value_nonce,
+            secret.ciphertext,
+        ]
+        .concat())
+    }
+
+    #[cfg(test)]
+    fn audit_event_count(&self) -> Result<i64, PersistenceFailure> {
+        self.lock()?
+            .query_row("SELECT COUNT(*) FROM audit_events", [], |row| row.get(0))
+            .map_err(|_| PersistenceFailure)
+    }
+}
+
+impl ConnectionRepository for SqliteDatabase {
+    fn save(&self, connection: &StoredConnection) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO connections (
+                   id, provider, account_id, login, display_name, profile_url,
+                   secret_reference, updated_at
+                 ) VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6, unixepoch())
+                 ON CONFLICT(id) DO UPDATE SET
+                   account_id = excluded.account_id,
+                   login = excluded.login,
+                   display_name = excluded.display_name,
+                   profile_url = excluded.profile_url,
+                   secret_reference = excluded.secret_reference,
+                   updated_at = unixepoch()",
+                params![
+                    connection.source_id,
+                    connection.account.external_id,
+                    connection.account.handle.as_deref().unwrap_or(""),
+                    connection.account.name,
+                    connection.account.profile_url.as_deref().unwrap_or(""),
+                    connection.secret_reference.expose(),
+                ],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO audit_events (event_type, connection_id)
+                 VALUES ('connection_saved', ?1)",
+                [&connection.source_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
+
+    fn get(&self, source_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure> {
+        self.lock()?
+            .query_row(
+                "SELECT account_id, login, display_name, profile_url, secret_reference
+                 FROM connections WHERE id = ?1 AND provider = ?1",
+                [source_id],
+                |row| {
+                    let handle: String = row.get(1)?;
+                    let profile_url: String = row.get(3)?;
+                    Ok(StoredConnection {
+                        source_id: source_id.to_owned(),
+                        account: ValidatedAccount {
+                            external_id: row.get(0)?,
+                            name: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                            handle: (!handle.is_empty()).then_some(handle),
+                            profile_url: (!profile_url.is_empty()).then_some(profile_url),
+                        },
+                        secret_reference: SecretReference::from_stored(row.get(4)?),
+                    })
+                },
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn delete(&self, source_id: &str) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM connections WHERE id = ?1 AND provider = ?1",
+                [source_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO audit_events (event_type, connection_id)
+                 VALUES ('connection_deleted', ?1)",
+                [source_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
+}
+
+struct EncryptedSecret {
+    key_nonce: Vec<u8>,
+    wrapped_key: Vec<u8>,
+    value_nonce: Vec<u8>,
+    ciphertext: Vec<u8>,
+}
+
+pub struct ServerMasterKey(Zeroizing<[u8; MASTER_KEY_LENGTH]>);
+
+impl ServerMasterKey {
+    pub fn generate() -> Result<Self, PersistenceFailure> {
+        let mut key = Zeroizing::new([0_u8; MASTER_KEY_LENGTH]);
+        getrandom::fill(&mut key[..]).map_err(|_| PersistenceFailure)?;
+        Ok(Self(key))
+    }
+
+    pub fn load_or_create(path: impl AsRef<Path>) -> Result<Self, PersistenceFailure> {
+        let path = path.as_ref();
+        match fs::read(path) {
+            Ok(bytes) => {
+                validate_master_key_permissions(path)?;
+                Self::from_bytes(&bytes)
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                let key = Self::generate()?;
+                write_new_master_key(path, &key.0[..])?;
+                Ok(key)
+            }
+            Err(_) => Err(PersistenceFailure),
+        }
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, PersistenceFailure> {
+        if bytes.len() != MASTER_KEY_LENGTH {
+            return Err(PersistenceFailure);
+        }
+        let mut key = Zeroizing::new([0_u8; MASTER_KEY_LENGTH]);
+        key.copy_from_slice(bytes);
+        Ok(Self(key))
+    }
+}
+
+#[cfg(unix)]
+fn validate_master_key_permissions(path: &Path) -> Result<(), PersistenceFailure> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = fs::metadata(path)
+        .map_err(|_| PersistenceFailure)?
+        .permissions()
+        .mode();
+    if mode & 0o077 == 0 {
+        Ok(())
+    } else {
+        Err(PersistenceFailure)
+    }
+}
+
+#[cfg(not(unix))]
+fn validate_master_key_permissions(_path: &Path) -> Result<(), PersistenceFailure> {
+    Ok(())
+}
+
+fn write_new_master_key(path: &Path, bytes: &[u8]) -> Result<(), PersistenceFailure> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|_| PersistenceFailure)?;
+    }
+
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).map_err(|_| PersistenceFailure)?;
+    file.write_all(bytes).map_err(|_| PersistenceFailure)?;
+    file.sync_all().map_err(|_| PersistenceFailure)
+}
+
+#[derive(Clone)]
+pub struct EncryptedSecretStore {
+    database: SqliteDatabase,
+    master_key: Arc<ServerMasterKey>,
+}
+
+impl EncryptedSecretStore {
+    #[must_use]
+    pub fn new(database: SqliteDatabase, master_key: ServerMasterKey) -> Self {
+        Self {
+            database,
+            master_key: Arc::new(master_key),
+        }
+    }
+}
+
+impl SecretStore for EncryptedSecretStore {
+    fn store(
+        &self,
+        reference: &SecretReference,
+        token: &ProviderToken,
+    ) -> Result<(), PersistenceFailure> {
+        let mut data_key = Zeroizing::new([0_u8; MASTER_KEY_LENGTH]);
+        getrandom::fill(&mut data_key[..]).map_err(|_| PersistenceFailure)?;
+        let value_nonce = XNonce::generate();
+        let value_cipher =
+            XChaCha20Poly1305::new_from_slice(&data_key[..]).map_err(|_| PersistenceFailure)?;
+        let ciphertext = value_cipher
+            .encrypt(
+                &value_nonce,
+                Payload {
+                    msg: token.expose().as_bytes(),
+                    aad: reference.expose().as_bytes(),
+                },
+            )
+            .map_err(|_| PersistenceFailure)?;
+
+        let key_nonce = XNonce::generate();
+        let master_cipher = XChaCha20Poly1305::new_from_slice(&self.master_key.0[..])
+            .map_err(|_| PersistenceFailure)?;
+        let wrapped_key = master_cipher
+            .encrypt(
+                &key_nonce,
+                Payload {
+                    msg: &data_key[..],
+                    aad: reference.expose().as_bytes(),
+                },
+            )
+            .map_err(|_| PersistenceFailure)?;
+
+        self.database.store_encrypted_secret(
+            reference,
+            &key_nonce,
+            &wrapped_key,
+            &value_nonce,
+            &ciphertext,
+        )
+    }
+
+    fn retrieve(&self, reference: &SecretReference) -> Result<ProviderToken, PersistenceFailure> {
+        let encrypted = self
+            .database
+            .encrypted_secret(reference)?
+            .ok_or(PersistenceFailure)?;
+        let key_nonce =
+            XNonce::try_from(encrypted.key_nonce.as_slice()).map_err(|_| PersistenceFailure)?;
+        let master_cipher = XChaCha20Poly1305::new_from_slice(&self.master_key.0[..])
+            .map_err(|_| PersistenceFailure)?;
+        let data_key = Zeroizing::new(
+            master_cipher
+                .decrypt(
+                    &key_nonce,
+                    Payload {
+                        msg: &encrypted.wrapped_key,
+                        aad: reference.expose().as_bytes(),
+                    },
+                )
+                .map_err(|_| PersistenceFailure)?,
+        );
+        let value_cipher =
+            XChaCha20Poly1305::new_from_slice(&data_key).map_err(|_| PersistenceFailure)?;
+        let value_nonce =
+            XNonce::try_from(encrypted.value_nonce.as_slice()).map_err(|_| PersistenceFailure)?;
+        let plaintext = Zeroizing::new(
+            value_cipher
+                .decrypt(
+                    &value_nonce,
+                    Payload {
+                        msg: &encrypted.ciphertext,
+                        aad: reference.expose().as_bytes(),
+                    },
+                )
+                .map_err(|_| PersistenceFailure)?,
+        );
+        let token = String::from_utf8(plaintext.to_vec()).map_err(|_| PersistenceFailure)?;
+        Ok(ProviderToken::new(token))
+    }
+
+    fn delete(&self, reference: &SecretReference) -> Result<(), PersistenceFailure> {
+        self.database
+            .lock()?
+            .execute(
+                "DELETE FROM encrypted_secrets WHERE reference = ?1",
+                [reference.expose()],
+            )
+            .map(|_| ())
+            .map_err(|_| PersistenceFailure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn test_connection() -> StoredConnection {
+        StoredConnection {
+            source_id: "example".to_owned(),
+            account: ValidatedAccount {
+                external_id: "42".to_owned(),
+                name: "The Octocat".to_owned(),
+                handle: Some("octocat".to_owned()),
+                profile_url: Some("https://example.com/octocat".to_owned()),
+            },
+            secret_reference: SecretReference::for_source("example", "42"),
+        }
+    }
+
+    #[test]
+    fn connection_metadata_round_trips_through_sqlite() -> Result<(), Box<dyn std::error::Error>> {
+        let database = SqliteDatabase::in_memory()?;
+        let expected = test_connection();
+        database.save(&expected)?;
+        assert_eq!(database.get("example")?, Some(expected));
+        assert_eq!(database.audit_event_count()?, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn encrypted_secret_round_trips_without_plaintext_storage()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let database = SqliteDatabase::in_memory()?;
+        let store = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+        let reference = SecretReference::for_source("example", "42");
+        let plaintext = "github_pat_super_secret";
+
+        store.store(&reference, &ProviderToken::new(plaintext.to_owned()))?;
+        let retrieved = store.retrieve(&reference)?;
+
+        assert_eq!(retrieved.expose(), plaintext);
+        assert!(
+            !database
+                .encrypted_bytes(&reference)?
+                .windows(plaintext.len())
+                .any(|window| window == plaintext.as_bytes())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn encrypted_secret_survives_database_and_key_reload() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = tempdir()?;
+        let database_path = directory.path().join("ciwatcher.sqlite3");
+        let key_path = directory.path().join("master.key");
+        let reference = SecretReference::for_source("example", "42");
+
+        {
+            let database = SqliteDatabase::open(&database_path)?;
+            let key = ServerMasterKey::load_or_create(&key_path)?;
+            let store = EncryptedSecretStore::new(database, key);
+            store.store(
+                &reference,
+                &ProviderToken::new("github_pat_restart_test".to_owned()),
+            )?;
+        }
+
+        let database = SqliteDatabase::open(&database_path)?;
+        let key = ServerMasterKey::load_or_create(&key_path)?;
+        let store = EncryptedSecretStore::new(database, key);
+        assert_eq!(
+            store.retrieve(&reference)?.expose(),
+            "github_pat_restart_test"
+        );
+        Ok(())
+    }
+}

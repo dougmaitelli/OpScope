@@ -35,7 +35,8 @@ crates/
     domain                Pure types, invariants, and state transitions
     application           Use cases and port interfaces
     contracts             Stable request and response DTOs
-    integrations          Provider adapters, beginning with a fake
+    integrations          Provider adapters, beginning with GitHub and a fake
+    persistence           SQLite metadata and encrypted server-secret adapters
 apps/
   server/                 Server composition root and HTTP adapter
   desktop/                Desktop composition root and IPC adapter
@@ -61,9 +62,17 @@ Initial ports are expected to cover:
 - Unit-of-work or transaction boundaries.
 - Application event publication.
 
+Source integrations implement the `SourceModule` interface. A module supplies
+its stable identifier, display metadata, credential-field description, and
+credential validation behavior. A central compiled catalog registers modules in
+`SourceRegistry` for both editions; generic list, connect, and disconnect use
+cases drive both transports and the Connections UI. Adding a source must not
+require a provider-specific route, IPC command, DTO, or frontend screen.
+
 Provider credentials are represented by opaque references outside the secret
 adapter. DTOs returned to a transport contain credential status and metadata,
-never secret material.
+never secret material. Credential input exists only in the intentional
+connection request.
 
 ## Frontend transports
 

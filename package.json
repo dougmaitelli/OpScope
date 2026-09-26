@@ -13,7 +13,8 @@
     "contracts:generate": "cargo run --quiet -p ciwatcher-core --bin export-contracts -- generate",
     "desktop:build": "cd apps/desktop && tauri build --no-bundle",
     "desktop:dev": "cd apps/desktop && tauri dev",
-    "server:dev": "cargo run -p ciwatcher-server"
+    "server:dev": "cargo run -p ciwatcher-server",
+    "web:dev": "npm run dev --workspace @ciwatcher/web"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
