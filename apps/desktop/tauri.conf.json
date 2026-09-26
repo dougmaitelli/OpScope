@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CI Watcher",
+  "version": "0.1.0",
+  "identifier": "dev.ciwatcher.desktop",
+  "build": {
+    "beforeBuildCommand": "npm --prefix web run build",
+    "beforeDevCommand": "npm --prefix web run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "CI Watcher",
+        "width": 960,
+        "height": 640
+      }
+    ],
+    "security": {
+      "capabilities": ["main"],
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": []
+  }
+}

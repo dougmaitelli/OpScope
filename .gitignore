@@ -1,0 +1,9 @@
+.DS_Store
+.tools/
+node_modules/
+target/
+build/bin/
+dist/
+apps/desktop/gen/
+.env
+*.local
