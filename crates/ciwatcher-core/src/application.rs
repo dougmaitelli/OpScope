@@ -1,35 +1,12 @@
 //! Application use cases and the ports they require.
 
-use crate::domain::{Monitor, Repository};
+use crate::domain::{Repository, Workflow};
 use async_trait::async_trait;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use zeroize::Zeroize;
-
-/// A failure reported by an external monitoring source.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SourceError {
-    message: String,
-}
-
-impl SourceError {
-    #[must_use]
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl Display for SourceError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl Error for SourceError {}
 
 /// A provider credential whose contents are cleared when it leaves scope.
 ///
@@ -82,6 +59,7 @@ pub struct SourceDescriptor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConnectionValidationFailure {
     InvalidCredentials,
+    PermissionDenied,
     RateLimited,
     ProviderUnavailable,
     UnexpectedResponse,
@@ -91,6 +69,7 @@ impl Display for ConnectionValidationFailure {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::InvalidCredentials => "provider rejected the credential",
+            Self::PermissionDenied => "provider credential lacks required permission",
             Self::RateLimited => "provider rate limit reached",
             Self::ProviderUnavailable => "provider unavailable",
             Self::UnexpectedResponse => "provider returned an unexpected response",
@@ -113,6 +92,12 @@ pub trait SourceModule: Send + Sync {
         &self,
         token: &ProviderToken,
     ) -> Result<Vec<Repository>, ConnectionValidationFailure>;
+
+    async fn list_workflows(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Vec<Workflow>, ConnectionValidationFailure>;
 }
 
 #[derive(Clone)]
@@ -518,6 +503,120 @@ impl SaveRepositorySelection {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoveredWorkflow {
+    pub source: SourceDescriptor,
+    pub repository: Repository,
+    pub workflow: Workflow,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowInventory {
+    pub selected_repository_count: usize,
+    pub workflows: Vec<DiscoveredWorkflow>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ListWorkflowsFailure {
+    Source(ConnectionValidationFailure),
+    StorageUnavailable,
+}
+
+impl Display for ListWorkflowsFailure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Source(failure) => Display::fmt(failure, formatter),
+            Self::StorageUnavailable => {
+                formatter.write_str("workflow discovery storage unavailable")
+            }
+        }
+    }
+}
+
+impl Error for ListWorkflowsFailure {}
+
+#[derive(Clone)]
+pub struct ListWorkflows {
+    registry: SourceRegistry,
+    connections: Arc<dyn ConnectionRepository>,
+    secrets: Arc<dyn SecretStore>,
+    selections: Arc<dyn RepositorySelectionRepository>,
+}
+
+impl ListWorkflows {
+    #[must_use]
+    pub fn new(
+        registry: SourceRegistry,
+        connections: Arc<dyn ConnectionRepository>,
+        secrets: Arc<dyn SecretStore>,
+        selections: Arc<dyn RepositorySelectionRepository>,
+    ) -> Self {
+        Self {
+            registry,
+            connections,
+            secrets,
+            selections,
+        }
+    }
+
+    pub async fn execute(&self) -> Result<WorkflowInventory, ListWorkflowsFailure> {
+        let selections = self
+            .selections
+            .list()
+            .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?;
+        let selected_repository_count = selections.len();
+        let mut workflows = Vec::new();
+
+        for module in &self.registry.modules {
+            let source = module.descriptor();
+            let selected_ids = selections
+                .iter()
+                .filter(|selection| selection.source_id == source.id)
+                .map(|selection| selection.repository_id.clone())
+                .collect::<HashSet<_>>();
+            if selected_ids.is_empty() {
+                continue;
+            }
+
+            let connection = self
+                .connections
+                .get(&source.id)
+                .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?
+                .ok_or(ListWorkflowsFailure::StorageUnavailable)?;
+            let token = self
+                .secrets
+                .retrieve(&connection.secret_reference)
+                .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?;
+            let repositories = module
+                .list_repositories(&token)
+                .await
+                .map_err(ListWorkflowsFailure::Source)?;
+
+            for repository in repositories
+                .into_iter()
+                .filter(|repository| selected_ids.contains(&repository.id))
+            {
+                let repository_workflows = module
+                    .list_workflows(&token, &repository)
+                    .await
+                    .map_err(ListWorkflowsFailure::Source)?;
+                workflows.extend(repository_workflows.into_iter().map(|workflow| {
+                    DiscoveredWorkflow {
+                        source: source.clone(),
+                        repository: repository.clone(),
+                        workflow,
+                    }
+                }));
+            }
+        }
+
+        Ok(WorkflowInventory {
+            selected_repository_count,
+            workflows,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct DisconnectSource {
     registry: SourceRegistry,
@@ -549,31 +648,5 @@ impl DisconnectSource {
         self.secrets.delete(&connection.secret_reference)?;
         self.connections.delete(source_id)?;
         Ok(true)
-    }
-}
-
-/// Port implemented by provider integrations.
-#[async_trait]
-pub trait MonitorSource: Send + Sync {
-    async fn list_monitors(&self) -> Result<Vec<Monitor>, SourceError>;
-}
-
-/// Lists monitors without knowing which provider supplies them.
-#[derive(Clone, Debug)]
-pub struct ListMonitors<S> {
-    source: S,
-}
-
-impl<S> ListMonitors<S>
-where
-    S: MonitorSource,
-{
-    #[must_use]
-    pub fn new(source: S) -> Self {
-        Self { source }
-    }
-
-    pub async fn execute(&self) -> Result<Vec<Monitor>, SourceError> {
-        self.source.list_monitors().await
     }
 }

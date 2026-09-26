@@ -2,12 +2,11 @@ import { DesktopClient, HttpClient } from "./clients.ts";
 import type {
   ApplicationClient,
   ConnectionSummary,
-  ListMonitorsResponse,
-  MonitorStatus,
-  MonitorSummary,
+  ListWorkflowsResponse,
   RepositorySourceSummary,
   RepositorySummary,
   SourceSummary,
+  WorkflowSummary,
 } from "./generated/contracts.ts";
 import "./styles.css";
 
@@ -33,10 +32,10 @@ const summary = requiredElement<HTMLElement>(".health-summary");
 const healthIcon = requiredElement<HTMLSpanElement>("#health-icon");
 const healthHeading = requiredElement<HTMLHeadingElement>("#health-heading");
 const lastUpdated = requiredElement<HTMLParagraphElement>("#last-updated");
-const failingCount = requiredElement<HTMLElement>("#failing-count");
-const runningCount = requiredElement<HTMLElement>("#running-count");
-const passingCount = requiredElement<HTMLElement>("#passing-count");
-const monitorList = requiredElement<HTMLDivElement>("#monitor-list");
+const workflowCount = requiredElement<HTMLElement>("#workflow-count");
+const activeCount = requiredElement<HTMLElement>("#active-count");
+const disabledCount = requiredElement<HTMLElement>("#disabled-count");
+const workflowList = requiredElement<HTMLDivElement>("#workflow-list");
 const refreshButton = requiredElement<HTMLButtonElement>("#refresh-button");
 const serviceDot = requiredElement<HTMLSpanElement>("#service-dot");
 const serviceState = requiredElement<HTMLSpanElement>("#service-state");
@@ -77,26 +76,15 @@ interface RepositoryListItem {
   repository: RepositorySummary;
 }
 
-type RepositoryLoadState = "loading" | "ready" | "error";
+type RepositoryLoadState = "idle" | "loading" | "ready" | "error";
 
 let repositorySources: RepositorySourceSummary[] = [];
-let repositoryLoadState: RepositoryLoadState = "loading";
+let repositoryLoadState: RepositoryLoadState = "idle";
 let repositoryLoadError = "";
 let selectedRepositoryIds = new Set<string>();
 let appliedRepositoryIds = new Set(selectedRepositoryIds);
 
-const statusLabels: Record<MonitorStatus, string> = {
-  unknown: "Unknown",
-  passing: "Passing",
-  failing: "Failing",
-  running: "Running",
-};
-
-function countStatus(response: ListMonitorsResponse, status: MonitorStatus): number {
-  return response.monitors.filter((monitor) => monitor.status === status).length;
-}
-
-function renderMonitor(monitor: MonitorSummary): HTMLElement {
+function renderWorkflow(workflow: WorkflowSummary): HTMLElement {
   const row = document.createElement("article");
   row.className = "workflow-row";
 
@@ -106,66 +94,75 @@ function renderMonitor(monitor: MonitorSummary): HTMLElement {
   const mark = document.createElement("span");
   mark.className = "workflow-mark";
   mark.setAttribute("aria-hidden", "true");
-  mark.textContent = monitor.name.slice(0, 2).toUpperCase();
+  mark.textContent = workflow.name.slice(0, 2).toUpperCase();
 
   const copy = document.createElement("div");
   const name = document.createElement("h3");
-  name.textContent = monitor.name;
+  const link = document.createElement("a");
+  link.className = "workflow-link";
+  link.href = workflow.webUrl;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = workflow.name;
+  name.append(link);
   const context = document.createElement("p");
-  context.textContent = "Demo source · workflow monitor";
+  context.textContent = `${workflow.repositoryOwner}/${workflow.repositoryName} · ${workflow.sourceName}`;
   copy.append(name, context);
   identity.append(mark, copy);
 
   const state = document.createElement("span");
-  state.className = `monitor-status monitor-status-${monitor.status}`;
-  state.textContent = statusLabels[monitor.status];
+  state.className = `workflow-state workflow-state-${workflow.state}`;
+  state.textContent = workflow.state === "active" ? "Active" : "Disabled";
 
   row.append(identity, state);
   return row;
 }
 
-function renderMonitors(response: ListMonitorsResponse): void {
-  monitorList.replaceChildren();
+function renderWorkflows(response: ListWorkflowsResponse): void {
+  workflowList.replaceChildren();
 
-  if (response.monitors.length === 0) {
+  if (response.selectedRepositoryCount === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "No workflows are being monitored yet.";
-    monitorList.append(empty);
+    empty.textContent = "Select repositories to discover workflows.";
+    workflowList.append(empty);
     return;
   }
 
-  for (const monitor of response.monitors) {
-    monitorList.append(renderMonitor(monitor));
+  if (response.workflows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No workflows were found in the selected repositories.";
+    workflowList.append(empty);
+    return;
+  }
+
+  for (const workflow of response.workflows) {
+    workflowList.append(renderWorkflow(workflow));
   }
 }
 
-function renderSummary(response: ListMonitorsResponse): void {
-  const failing = countStatus(response, "failing");
-  const running = countStatus(response, "running");
-  const passing = countStatus(response, "passing");
+function renderSummary(response: ListWorkflowsResponse): void {
+  const active = response.workflows.filter((workflow) => workflow.state === "active").length;
+  const disabled = response.workflows.length - active;
 
-  failingCount.textContent = String(failing);
-  runningCount.textContent = String(running);
-  passingCount.textContent = String(passing);
+  workflowCount.textContent = String(response.workflows.length);
+  activeCount.textContent = String(active);
+  disabledCount.textContent = String(disabled);
 
   healthIcon.className = "health-icon";
-  if (failing > 0) {
-    healthIcon.classList.add("health-icon-failing");
-    healthIcon.textContent = "!";
-    healthHeading.textContent = `${failing} workflow${failing === 1 ? "" : "s"} need attention`;
-  } else if (running > 0) {
-    healthIcon.classList.add("health-icon-running");
-    healthIcon.textContent = "↻";
-    healthHeading.textContent = "Work is currently in progress";
-  } else if (response.monitors.length > 0) {
+  if (response.workflows.length > 0) {
     healthIcon.classList.add("health-icon-passing");
     healthIcon.textContent = "✓";
-    healthHeading.textContent = "Everything looks healthy";
+    healthHeading.textContent = `${active} active workflow${active === 1 ? "" : "s"} discovered`;
+  } else if (response.selectedRepositoryCount > 0) {
+    healthIcon.classList.add("health-icon-idle");
+    healthIcon.textContent = "·";
+    healthHeading.textContent = "No workflows discovered";
   } else {
     healthIcon.classList.add("health-icon-idle");
     healthIcon.textContent = "·";
-    healthHeading.textContent = "Ready for your first connection";
+    healthHeading.textContent = "Select repositories to begin";
   }
 }
 
@@ -175,16 +172,16 @@ function setUnavailable(): void {
   serviceState.textContent = "Core unavailable";
   healthIcon.className = "health-icon health-icon-failing";
   healthIcon.textContent = "!";
-  healthHeading.textContent = "Unable to load workflow health";
+  healthHeading.textContent = "Unable to discover workflows";
   lastUpdated.textContent = "Check that the application service is running";
-  failingCount.textContent = "—";
-  runningCount.textContent = "—";
-  passingCount.textContent = "—";
-  monitorList.replaceChildren();
+  workflowCount.textContent = "—";
+  activeCount.textContent = "—";
+  disabledCount.textContent = "—";
+  workflowList.replaceChildren();
   const error = document.createElement("p");
   error.className = "empty-state empty-state-error";
   error.textContent = "The dashboard could not reach the application core.";
-  monitorList.append(error);
+  workflowList.append(error);
 }
 
 async function loadDashboard(): Promise<void> {
@@ -195,14 +192,14 @@ async function loadDashboard(): Promise<void> {
   try {
     const [health, response] = await Promise.all([
       client.health(),
-      client.listMonitors(),
+      client.listWorkflows(),
     ]);
     serviceDot.classList.remove("service-dot-error");
     serviceDot.classList.add("service-dot-online");
     serviceState.textContent = `Core online · contract v${health.contractVersion}`;
-    lastUpdated.textContent = "Updated just now · synthetic provider";
+    lastUpdated.textContent = `Updated just now · ${response.selectedRepositoryCount} selected repositor${response.selectedRepositoryCount === 1 ? "y" : "ies"}`;
     renderSummary(response);
-    renderMonitors(response);
+    renderWorkflows(response);
   } catch {
     setUnavailable();
   } finally {
@@ -265,6 +262,9 @@ function showView(view: AppView): void {
     }
   }
   document.title = `${viewTitles[view]} · CI Watcher`;
+  if (view === "repositories" && repositoryLoadState === "idle") {
+    void loadRepositories();
+  }
 }
 
 function navigateTo(view: AppView): void {
@@ -503,6 +503,7 @@ applySelection.addEventListener("click", async () => {
       }
     }
     repositoryNote.textContent = `${response.selectedCount} repositories saved for monitoring.`;
+    await loadDashboard();
   } catch (error: unknown) {
     repositoryNote.textContent = connectionErrorMessage(error);
   } finally {
@@ -706,6 +707,7 @@ connectionForm.addEventListener("submit", async (event) => {
     connectionEditor.hidden = true;
     renderSources();
     await loadRepositories();
+    await loadDashboard();
     connectionNote.textContent = `${source.name} connected.`;
   } catch (error: unknown) {
     connectionNote.classList.add("connection-note-error");
@@ -740,6 +742,7 @@ async function disconnectSource(
     pendingDisconnectId = null;
     renderSources();
     await loadRepositories();
+    await loadDashboard();
     connectionNote.textContent = `${source.name} disconnected and its credential removed.`;
   } catch (error: unknown) {
     button.disabled = false;
@@ -749,4 +752,4 @@ async function disconnectSource(
   }
 }
 
-await Promise.all([loadDashboard(), loadSources(), loadRepositories()]);
+await Promise.all([loadDashboard(), loadSources()]);

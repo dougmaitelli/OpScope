@@ -5,24 +5,24 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ciwatcher_core::application::{
-    ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource, ListMonitors,
-    ListRepositories, ListRepositoriesFailure, ListSources, MonitorSource,
+    ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource, ListRepositories,
+    ListRepositoriesFailure, ListSources, ListWorkflows, ListWorkflowsFailure,
     RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
     SecretStore, SourceRegistry,
 };
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, ConnectSourceRequest, ConnectionSummary,
     ConnectionValidationErrorResponse, DisconnectSourceRequest, DisconnectSourceResponse,
-    HEALTH_HTTP_PATH, HealthResponse, LIST_MONITORS_HTTP_PATH, ListMonitorsResponse,
-    ListRepositoriesResponse, ListSourcesResponse, REPOSITORIES_HTTP_PATH,
-    REPOSITORY_SELECTIONS_HTTP_PATH, RepositorySelectionErrorResponse, SOURCES_HTTP_PATH,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
+    HEALTH_HTTP_PATH, HealthResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
+    RepositorySelectionErrorResponse, SOURCES_HTTP_PATH, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, WORKFLOWS_HTTP_PATH,
 };
 use std::sync::Arc;
 
 #[derive(Clone)]
-struct AppState<S> {
-    list_monitors: ListMonitors<S>,
+struct AppState {
+    list_workflows: ListWorkflows,
     connect_source: ConnectSource,
     list_sources: ListSources,
     list_repositories: ListRepositories,
@@ -30,18 +30,19 @@ struct AppState<S> {
     disconnect_source: DisconnectSource,
 }
 
-pub fn router<S>(
-    source: S,
+pub fn router(
     registry: SourceRegistry,
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
     repository_selections: Arc<dyn RepositorySelectionRepository>,
-) -> Router
-where
-    S: MonitorSource + Clone + 'static,
-{
+) -> Router {
     let state = AppState {
-        list_monitors: ListMonitors::new(source),
+        list_workflows: ListWorkflows::new(
+            registry.clone(),
+            connections.clone(),
+            secrets.clone(),
+            repository_selections.clone(),
+        ),
         connect_source: ConnectSource::new(registry.clone(), connections.clone(), secrets.clone()),
         list_sources: ListSources::new(registry.clone(), connections.clone()),
         list_repositories: ListRepositories::new(
@@ -60,16 +61,16 @@ where
 
     Router::new()
         .route(HEALTH_HTTP_PATH, get(health))
-        .route(LIST_MONITORS_HTTP_PATH, get(list_monitors::<S>))
+        .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
         .route(
             CONNECTIONS_HTTP_PATH,
-            post(connect_source::<S>).delete(disconnect_source::<S>),
+            post(connect_source).delete(disconnect_source),
         )
-        .route(SOURCES_HTTP_PATH, get(list_sources::<S>))
-        .route(REPOSITORIES_HTTP_PATH, get(list_repositories::<S>))
+        .route(SOURCES_HTTP_PATH, get(list_sources))
+        .route(REPOSITORIES_HTTP_PATH, get(list_repositories))
         .route(
             REPOSITORY_SELECTIONS_HTTP_PATH,
-            put(save_repository_selection::<S>),
+            put(save_repository_selection),
         )
         .with_state(state)
 }
@@ -78,28 +79,22 @@ async fn health() -> Json<HealthResponse> {
     Json(HealthResponse::ready())
 }
 
-async fn list_monitors<S>(
-    State(state): State<AppState<S>>,
-) -> Result<Json<ListMonitorsResponse>, StatusCode>
-where
-    S: MonitorSource,
-{
+async fn list_workflows(
+    State(state): State<AppState>,
+) -> Result<Json<ListWorkflowsResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
     state
-        .list_monitors
+        .list_workflows
         .execute()
         .await
-        .map(ListMonitorsResponse::from_domain)
+        .map(ListWorkflowsResponse::from_domain)
         .map(Json)
-        .map_err(|_| StatusCode::BAD_GATEWAY)
+        .map_err(http_workflow_error)
 }
 
-async fn connect_source<S>(
-    State(state): State<AppState<S>>,
+async fn connect_source(
+    State(state): State<AppState>,
     Json(mut request): Json<ConnectSourceRequest>,
-) -> Result<Json<ConnectionSummary>, (StatusCode, Json<ConnectionValidationErrorResponse>)>
-where
-    S: MonitorSource,
-{
+) -> Result<Json<ConnectionSummary>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
     let credential = std::mem::take(&mut request.credential);
     state
         .connect_source
@@ -119,6 +114,9 @@ fn http_validation_error(
             ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ConnectSourceFailure::Validation(
+            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+        ) => StatusCode::FORBIDDEN,
+        ConnectSourceFailure::Validation(
             ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ConnectSourceFailure::Validation(
@@ -130,12 +128,9 @@ fn http_validation_error(
     (status, Json(failure.into()))
 }
 
-async fn list_sources<S>(
-    State(state): State<AppState<S>>,
-) -> Result<Json<ListSourcesResponse>, StatusCode>
-where
-    S: MonitorSource,
-{
+async fn list_sources(
+    State(state): State<AppState>,
+) -> Result<Json<ListSourcesResponse>, StatusCode> {
     state
         .list_sources
         .execute()
@@ -144,12 +139,9 @@ where
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)
 }
 
-async fn list_repositories<S>(
-    State(state): State<AppState<S>>,
-) -> Result<Json<ListRepositoriesResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)>
-where
-    S: MonitorSource,
-{
+async fn list_repositories(
+    State(state): State<AppState>,
+) -> Result<Json<ListRepositoriesResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
     state
         .list_repositories
         .execute()
@@ -167,6 +159,9 @@ fn http_repository_error(
             ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ListRepositoriesFailure::Source(
+            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+        ) => StatusCode::FORBIDDEN,
+        ListRepositoriesFailure::Source(
             ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListRepositoriesFailure::Source(
@@ -178,16 +173,35 @@ fn http_repository_error(
     (status, Json(failure.into()))
 }
 
-async fn save_repository_selection<S>(
-    State(state): State<AppState<S>>,
+fn http_workflow_error(
+    failure: ListWorkflowsFailure,
+) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
+    let status = match failure {
+        ListWorkflowsFailure::Source(
+            ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
+        ) => StatusCode::UNAUTHORIZED,
+        ListWorkflowsFailure::Source(
+            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+        ) => StatusCode::FORBIDDEN,
+        ListWorkflowsFailure::Source(
+            ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
+        ) => StatusCode::TOO_MANY_REQUESTS,
+        ListWorkflowsFailure::Source(
+            ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
+        ) => StatusCode::BAD_GATEWAY,
+        ListWorkflowsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
+}
+
+async fn save_repository_selection(
+    State(state): State<AppState>,
     Json(request): Json<SaveRepositorySelectionRequest>,
 ) -> Result<
     Json<SaveRepositorySelectionResponse>,
     (StatusCode, Json<RepositorySelectionErrorResponse>),
->
-where
-    S: MonitorSource,
-{
+> {
     state
         .save_repository_selection
         .execute(&request.into_domain())
@@ -204,13 +218,10 @@ where
         })
 }
 
-async fn disconnect_source<S>(
-    State(state): State<AppState<S>>,
+async fn disconnect_source(
+    State(state): State<AppState>,
     Json(request): Json<DisconnectSourceRequest>,
-) -> Result<Json<DisconnectSourceResponse>, StatusCode>
-where
-    S: MonitorSource,
-{
+) -> Result<Json<DisconnectSourceResponse>, StatusCode> {
     state
         .disconnect_source
         .execute(&request.source_id)
@@ -228,17 +239,16 @@ mod tests {
         ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor,
         SourceModule, ValidatedAccount,
     };
-    use ciwatcher_core::domain::{Repository, RepositoryVisibility};
-    use ciwatcher_core::integrations::fake::FakeMonitorSource;
+    use ciwatcher_core::domain::{Repository, RepositoryVisibility, Workflow, WorkflowState};
     use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     #[derive(Clone)]
-    struct FakeSourceModule;
+    struct TestSourceModule;
 
     #[async_trait]
-    impl SourceModule for FakeSourceModule {
+    impl SourceModule for TestSourceModule {
         fn descriptor(&self) -> SourceDescriptor {
             SourceDescriptor {
                 id: "example".to_owned(),
@@ -280,10 +290,28 @@ mod tests {
                 web_url: "https://example.com/example-user/example-project".to_owned(),
             }])
         }
+
+        async fn list_workflows(
+            &self,
+            token: &ProviderToken,
+            repository: &Repository,
+        ) -> Result<Vec<Workflow>, ConnectionValidationFailure> {
+            assert_eq!(token.expose(), "test_credential");
+            assert_eq!(repository.id, "repository-1");
+            Ok(vec![Workflow {
+                id: "workflow-1".to_owned(),
+                name: "Build".to_owned(),
+                path: ".github/workflows/build.yml".to_owned(),
+                state: WorkflowState::Active,
+                web_url:
+                    "https://example.com/example-user/example-project/actions/workflows/build.yml"
+                        .to_owned(),
+            }])
+        }
     }
 
     fn test_registry() -> SourceRegistry {
-        SourceRegistry::new(vec![Arc::new(FakeSourceModule)])
+        SourceRegistry::new(vec![Arc::new(TestSourceModule)])
     }
 
     #[tokio::test]
@@ -291,7 +319,6 @@ mod tests {
         let database = SqliteDatabase::in_memory()?;
         let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
         let app = router(
-            FakeMonitorSource,
             test_registry(),
             Arc::new(database.clone()),
             Arc::new(secrets),
@@ -304,13 +331,14 @@ mod tests {
             .await?;
         assert_eq!(health.status(), StatusCode::OK);
 
-        let monitors = app
-            .oneshot(Request::get(LIST_MONITORS_HTTP_PATH).body(Body::empty())?)
+        let workflows = app
+            .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
             .await?;
-        assert_eq!(monitors.status(), StatusCode::OK);
-        let body = monitors.into_body().collect().await?.to_bytes();
-        let decoded: ListMonitorsResponse = serde_json::from_slice(&body)?;
-        assert_eq!(decoded.monitors.len(), 1);
+        assert_eq!(workflows.status(), StatusCode::OK);
+        let body = workflows.into_body().collect().await?.to_bytes();
+        let decoded: ListWorkflowsResponse = serde_json::from_slice(&body)?;
+        assert_eq!(decoded.selected_repository_count, 0);
+        assert!(decoded.workflows.is_empty());
         Ok(())
     }
 
@@ -320,7 +348,6 @@ mod tests {
         let database = SqliteDatabase::in_memory()?;
         let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
         let app = router(
-            FakeMonitorSource,
             test_registry(),
             Arc::new(database.clone()),
             Arc::new(secrets),
@@ -391,6 +418,18 @@ mod tests {
         let body = repositories.into_body().collect().await?.to_bytes();
         let decoded: ListRepositoriesResponse = serde_json::from_slice(&body)?;
         assert!(decoded.sources[0].repositories[0].selected);
+
+        let workflows = app
+            .clone()
+            .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
+            .await?;
+        assert_eq!(workflows.status(), StatusCode::OK);
+        let body = workflows.into_body().collect().await?.to_bytes();
+        let decoded: ListWorkflowsResponse = serde_json::from_slice(&body)?;
+        assert_eq!(decoded.selected_repository_count, 1);
+        assert_eq!(decoded.workflows.len(), 1);
+        assert_eq!(decoded.workflows[0].name, "Build");
+        assert_eq!(decoded.workflows[0].repository_name, "example-project");
 
         let disconnected = app
             .clone()

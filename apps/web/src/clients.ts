@@ -9,7 +9,7 @@ import {
   type DisconnectSourceRequest,
   type DisconnectSourceResponse,
   type HealthResponse,
-  type ListMonitorsResponse,
+  type ListWorkflowsResponse,
   type ListRepositoriesResponse,
   type ListSourcesResponse,
   type SaveRepositorySelectionRequest,
@@ -21,8 +21,8 @@ export class DesktopClient implements ApplicationClient {
     return invoke<HealthResponse>(desktopCommands.health);
   }
 
-  listMonitors(): Promise<ListMonitorsResponse> {
-    return invoke<ListMonitorsResponse>(desktopCommands.listMonitors);
+  listWorkflows(): Promise<ListWorkflowsResponse> {
+    return invoke<ListWorkflowsResponse>(desktopCommands.listWorkflows);
   }
 
   listSources(): Promise<ListSourcesResponse> {
@@ -61,8 +61,8 @@ export class HttpClient implements ApplicationClient {
     return this.get<HealthResponse>(httpRoutes.health);
   }
 
-  listMonitors(): Promise<ListMonitorsResponse> {
-    return this.get<ListMonitorsResponse>(httpRoutes.listMonitors);
+  listWorkflows(): Promise<ListWorkflowsResponse> {
+    return this.get<ListWorkflowsResponse>(httpRoutes.workflows);
   }
 
   listSources(): Promise<ListSourcesResponse> {

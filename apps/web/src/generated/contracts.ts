@@ -2,12 +2,6 @@
 
 export type HealthResponse = { status: string, service: string, contractVersion: number, };
 
-export type MonitorStatus = "unknown" | "passing" | "failing" | "running";
-
-export type MonitorSummary = { id: string, name: string, status: MonitorStatus, };
-
-export type ListMonitorsResponse = { monitors: Array<MonitorSummary>, };
-
 export type ConnectSourceRequest = { sourceId: string, credential: string, };
 
 export type ConnectionSummary = { externalId: string, name: string, handle: string | null, profileUrl: string | null, credentialStored: boolean, };
@@ -22,7 +16,7 @@ export type DisconnectSourceRequest = { sourceId: string, };
 
 export type DisconnectSourceResponse = { disconnected: boolean, };
 
-export type ConnectionValidationErrorCode = "invalidCredentials" | "rateLimited" | "providerUnavailable" | "unexpectedResponse" | "storageUnavailable" | "unknownSource";
+export type ConnectionValidationErrorCode = "invalidCredentials" | "permissionDenied" | "rateLimited" | "providerUnavailable" | "unexpectedResponse" | "storageUnavailable" | "unknownSource";
 
 export type ConnectionValidationErrorResponse = { code: ConnectionValidationErrorCode, message: string, };
 
@@ -34,6 +28,12 @@ export type RepositorySourceSummary = { id: string, name: string, abbreviation: 
 
 export type ListRepositoriesResponse = { sources: Array<RepositorySourceSummary>, };
 
+export type WorkflowState = "active" | "disabled";
+
+export type WorkflowSummary = { id: string, name: string, path: string, state: WorkflowState, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, };
+
+export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows: Array<WorkflowSummary>, };
+
 export type RepositorySelectionSourceRequest = { sourceId: string, repositoryIds: Array<string>, };
 
 export type SaveRepositorySelectionRequest = { sources: Array<RepositorySelectionSourceRequest>, };
@@ -44,7 +44,7 @@ export type RepositorySelectionErrorResponse = { message: string, };
 
 export const httpRoutes = {
   health: "/api/health",
-  listMonitors: "/api/monitors",
+  workflows: "/api/workflows",
   sources: "/api/sources",
   connections: "/api/connections",
   repositories: "/api/repositories",
@@ -53,7 +53,7 @@ export const httpRoutes = {
 
 export const desktopCommands = {
   health: "health",
-  listMonitors: "list_monitors",
+  listWorkflows: "list_workflows",
   listSources: "list_sources",
   connectSource: "connect_source",
   disconnectSource: "disconnect_source",
@@ -63,7 +63,7 @@ export const desktopCommands = {
 
 export interface ApplicationClient {
   health(): Promise<HealthResponse>;
-  listMonitors(): Promise<ListMonitorsResponse>;
+  listWorkflows(): Promise<ListWorkflowsResponse>;
   listSources(): Promise<ListSourcesResponse>;
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;
   disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;

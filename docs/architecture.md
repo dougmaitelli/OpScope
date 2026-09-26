@@ -35,7 +35,7 @@ crates/
     domain                Pure types, invariants, and state transitions
     application           Use cases and port interfaces
     contracts             Stable request and response DTOs
-    integrations          Provider adapters, beginning with GitHub and a fake
+    integrations          Provider adapters, beginning with GitHub
     persistence           SQLite metadata and encrypted server-secret adapters
 apps/
   server/                 Server composition root and HTTP adapter
@@ -64,11 +64,11 @@ Initial ports are expected to cover:
 
 Source integrations implement the `SourceModule` interface. A module supplies
 its stable identifier, display metadata, credential-field description,
-credential validation behavior, and resource discovery. A central compiled
-catalog registers modules in `SourceRegistry` for both editions; generic list,
-connect, disconnect, and repository-discovery use cases drive both transports
-and the UI. Adding a source must not require a provider-specific route, IPC
-command, DTO, or frontend screen.
+credential validation behavior, repository discovery, and workflow discovery.
+A central compiled catalog registers modules in `SourceRegistry` for both
+editions; generic list, connect, disconnect, and discovery use cases drive both
+transports and the UI. Adding a source must not require a provider-specific
+route, IPC command, DTO, or frontend screen.
 
 Provider credentials are represented by opaque references outside the secret
 adapter. DTOs returned to a transport contain credential status and metadata,

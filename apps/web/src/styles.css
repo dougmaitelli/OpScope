@@ -415,13 +415,23 @@ h2 {
   white-space: nowrap;
 }
 
+.workflow-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.workflow-link:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
 .workflow-row p {
   margin-bottom: 0;
   color: var(--muted);
   font-size: 12px;
 }
 
-.monitor-status {
+.workflow-state {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -430,7 +440,7 @@ h2 {
   font-weight: 650;
 }
 
-.monitor-status::before {
+.workflow-state::before {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -438,28 +448,16 @@ h2 {
   content: "";
 }
 
-.monitor-status-passing {
+.workflow-state-active {
   color: var(--success);
 }
 
-.monitor-status-passing::before {
+.workflow-state-active::before {
   background: var(--success);
 }
 
-.monitor-status-running {
-  color: var(--warning);
-}
-
-.monitor-status-running::before {
-  background: var(--warning);
-}
-
-.monitor-status-failing {
-  color: var(--danger);
-}
-
-.monitor-status-failing::before {
-  background: var(--danger);
+.workflow-state-disabled {
+  color: var(--muted);
 }
 
 .loading-row {

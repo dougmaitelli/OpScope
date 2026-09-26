@@ -1,16 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use ciwatcher_core::application::{
-    ConnectSource, DisconnectSource, ListMonitors, ListRepositories, ListSources,
+    ConnectSource, DisconnectSource, ListRepositories, ListSources, ListWorkflows,
     PersistenceFailure, ProviderToken, SaveRepositorySelection, SecretReference, SecretStore,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListMonitorsResponse,
-    ListRepositoriesResponse, ListSourcesResponse, RepositorySelectionErrorResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
+    ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
 };
-use ciwatcher_core::integrations::fake::FakeMonitorSource;
 use ciwatcher_core::integrations::registered_sources;
 use ciwatcher_core::persistence::SqliteDatabase;
 use std::fs;
@@ -18,7 +17,7 @@ use std::sync::Arc;
 use tauri::{Manager, State};
 
 struct DesktopState {
-    list_monitors: ListMonitors<FakeMonitorSource>,
+    list_workflows: ListWorkflows,
     connect_source: ConnectSource,
     list_sources: ListSources,
     list_repositories: ListRepositories,
@@ -68,13 +67,15 @@ fn health() -> HealthResponse {
 }
 
 #[tauri::command]
-async fn list_monitors(state: State<'_, DesktopState>) -> Result<ListMonitorsResponse, String> {
+async fn list_workflows(
+    state: State<'_, DesktopState>,
+) -> Result<ListWorkflowsResponse, ConnectionValidationErrorResponse> {
     state
-        .list_monitors
+        .list_workflows
         .execute()
         .await
-        .map(ListMonitorsResponse::from_domain)
-        .map_err(|_| "monitor source unavailable".to_owned())
+        .map(ListWorkflowsResponse::from_domain)
+        .map_err(ConnectionValidationErrorResponse::from)
 }
 
 #[tauri::command]
@@ -146,7 +147,12 @@ fn main() {
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
             app.manage(DesktopState {
-                list_monitors: ListMonitors::new(FakeMonitorSource),
+                list_workflows: ListWorkflows::new(
+                    sources.clone(),
+                    connections.clone(),
+                    secrets.clone(),
+                    database.clone(),
+                ),
                 connect_source: ConnectSource::new(
                     sources.clone(),
                     connections.clone(),
@@ -162,7 +168,7 @@ fn main() {
                 save_repository_selection: SaveRepositorySelection::new(
                     sources.clone(),
                     connections.clone(),
-                    database,
+                    database.clone(),
                 ),
                 disconnect_source: DisconnectSource::new(sources, connections, secrets),
             });
@@ -170,7 +176,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             health,
-            list_monitors,
+            list_workflows,
             connect_source,
             list_sources,
             list_repositories,

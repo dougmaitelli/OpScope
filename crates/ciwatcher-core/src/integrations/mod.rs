@@ -3,7 +3,6 @@
 use crate::application::{ConnectionValidationFailure, SourceRegistry};
 use std::sync::Arc;
 
-pub mod fake;
 pub mod github;
 
 /// Builds the compiled source catalog shared by desktop and server editions.

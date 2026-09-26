@@ -1,26 +1,25 @@
 //! Data transfer objects shared by HTTP and desktop IPC.
 
 use crate::application::{
-    ConnectSourceFailure, ConnectionValidationFailure, ListRepositoriesFailure, RepositoryCatalog,
-    RepositoryState, SaveRepositorySelectionFailure, SourceRepositorySelection, SourceState,
-    ValidatedAccount,
+    ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
+    ListWorkflowsFailure, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
+    SourceRepositorySelection, SourceState, ValidatedAccount, WorkflowInventory,
 };
 use crate::domain::{
-    Monitor, MonitorStatus as DomainMonitorStatus,
-    RepositoryVisibility as DomainRepositoryVisibility,
+    RepositoryVisibility as DomainRepositoryVisibility, WorkflowState as DomainWorkflowState,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 3;
+pub const CONTRACT_VERSION: u8 = 4;
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
-pub const LIST_MONITORS_HTTP_PATH: &str = "/api/monitors";
+pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
 pub const REPOSITORIES_HTTP_PATH: &str = "/api/repositories";
 pub const REPOSITORY_SELECTIONS_HTTP_PATH: &str = "/api/repository-selections";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
-pub const LIST_MONITORS_DESKTOP_COMMAND: &str = "list_monitors";
+pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
 pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
 pub const DISCONNECT_SOURCE_DESKTOP_COMMAND: &str = "disconnect_source";
@@ -42,59 +41,6 @@ impl HealthResponse {
             status: "ok".to_owned(),
             service: "ciwatcher".to_owned(),
             contract_version: CONTRACT_VERSION,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub enum MonitorStatus {
-    Unknown,
-    Passing,
-    Failing,
-    Running,
-}
-
-impl From<DomainMonitorStatus> for MonitorStatus {
-    fn from(status: DomainMonitorStatus) -> Self {
-        match status {
-            DomainMonitorStatus::Unknown => Self::Unknown,
-            DomainMonitorStatus::Passing => Self::Passing,
-            DomainMonitorStatus::Failing => Self::Failing,
-            DomainMonitorStatus::Running => Self::Running,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct MonitorSummary {
-    pub id: String,
-    pub name: String,
-    pub status: MonitorStatus,
-}
-
-impl From<Monitor> for MonitorSummary {
-    fn from(monitor: Monitor) -> Self {
-        Self {
-            id: monitor.id,
-            name: monitor.name,
-            status: monitor.status.into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct ListMonitorsResponse {
-    pub monitors: Vec<MonitorSummary>,
-}
-
-impl ListMonitorsResponse {
-    #[must_use]
-    pub fn from_domain(monitors: Vec<Monitor>) -> Self {
-        Self {
-            monitors: monitors.into_iter().map(MonitorSummary::from).collect(),
         }
     }
 }
@@ -312,6 +258,77 @@ pub struct ListRepositoriesResponse {
     pub sources: Vec<RepositorySourceSummary>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkflowState {
+    Active,
+    Disabled,
+}
+
+impl From<DomainWorkflowState> for WorkflowState {
+    fn from(state: DomainWorkflowState) -> Self {
+        match state {
+            DomainWorkflowState::Active => Self::Active,
+            DomainWorkflowState::Disabled => Self::Disabled,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowSummary {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub state: WorkflowState,
+    pub web_url: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub source_abbreviation: String,
+    pub repository_id: String,
+    pub repository_owner: String,
+    pub repository_name: String,
+}
+
+impl From<DiscoveredWorkflow> for WorkflowSummary {
+    fn from(discovered: DiscoveredWorkflow) -> Self {
+        Self {
+            id: discovered.workflow.id,
+            name: discovered.workflow.name,
+            path: discovered.workflow.path,
+            state: discovered.workflow.state.into(),
+            web_url: discovered.workflow.web_url,
+            source_id: discovered.source.id,
+            source_name: discovered.source.name,
+            source_abbreviation: discovered.source.abbreviation,
+            repository_id: discovered.repository.id,
+            repository_owner: discovered.repository.owner,
+            repository_name: discovered.repository.name,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkflowsResponse {
+    pub selected_repository_count: usize,
+    pub workflows: Vec<WorkflowSummary>,
+}
+
+impl ListWorkflowsResponse {
+    #[must_use]
+    pub fn from_domain(inventory: WorkflowInventory) -> Self {
+        Self {
+            selected_repository_count: inventory.selected_repository_count,
+            workflows: inventory
+                .workflows
+                .into_iter()
+                .map(WorkflowSummary::from)
+                .collect(),
+        }
+    }
+}
+
 impl ListRepositoriesResponse {
     #[must_use]
     pub fn from_domain(catalogs: Vec<RepositoryCatalog>) -> Self {
@@ -340,6 +357,7 @@ pub struct DisconnectSourceResponse {
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionValidationErrorCode {
     InvalidCredentials,
+    PermissionDenied,
     RateLimited,
     ProviderUnavailable,
     UnexpectedResponse,
@@ -360,6 +378,10 @@ impl From<ConnectionValidationFailure> for ConnectionValidationErrorResponse {
             ConnectionValidationFailure::InvalidCredentials => (
                 ConnectionValidationErrorCode::InvalidCredentials,
                 "The source rejected this credential. Check it and try again.",
+            ),
+            ConnectionValidationFailure::PermissionDenied => (
+                ConnectionValidationErrorCode::PermissionDenied,
+                "The source credential does not have permission to read workflow metadata.",
             ),
             ConnectionValidationFailure::RateLimited => (
                 ConnectionValidationErrorCode::RateLimited,
@@ -411,14 +433,24 @@ impl From<ListRepositoriesFailure> for ConnectionValidationErrorResponse {
     }
 }
 
+impl From<ListWorkflowsFailure> for ConnectionValidationErrorResponse {
+    fn from(failure: ListWorkflowsFailure) -> Self {
+        match failure {
+            ListWorkflowsFailure::Source(failure) => failure.into(),
+            ListWorkflowsFailure::StorageUnavailable => Self {
+                code: ConnectionValidationErrorCode::StorageUnavailable,
+                message: "The selected repositories or stored credential could not be read."
+                    .to_owned(),
+            },
+        }
+    }
+}
+
 #[must_use]
 pub fn render_typescript_contract() -> String {
     let config = Config::default();
     let declarations = [
         HealthResponse::decl(&config),
-        MonitorStatus::decl(&config),
-        MonitorSummary::decl(&config),
-        ListMonitorsResponse::decl(&config),
         ConnectSourceRequest::decl(&config),
         ConnectionSummary::decl(&config),
         CredentialFieldSummary::decl(&config),
@@ -432,6 +464,9 @@ pub fn render_typescript_contract() -> String {
         RepositorySummary::decl(&config),
         RepositorySourceSummary::decl(&config),
         ListRepositoriesResponse::decl(&config),
+        WorkflowState::decl(&config),
+        WorkflowSummary::decl(&config),
+        ListWorkflowsResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),
         SaveRepositorySelectionRequest::decl(&config),
         SaveRepositorySelectionResponse::decl(&config),
@@ -439,23 +474,49 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  listMonitors: \"{LIST_MONITORS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listMonitors: \"{LIST_MONITORS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listMonitors(): Promise<ListMonitorsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::SourceDescriptor;
 
     #[test]
     fn maps_domain_values_without_exposing_infrastructure() {
-        let response = ListMonitorsResponse::from_domain(vec![Monitor {
-            id: "provider:monitor:42".to_owned(),
-            name: "Build".to_owned(),
-            status: DomainMonitorStatus::Running,
-        }]);
+        let response = WorkflowSummary::from(DiscoveredWorkflow {
+            source: SourceDescriptor {
+                id: "source".to_owned(),
+                name: "Source".to_owned(),
+                description: "Source description".to_owned(),
+                abbreviation: "SO".to_owned(),
+                credential: crate::application::CredentialField {
+                    label: "Token".to_owned(),
+                    placeholder: "token".to_owned(),
+                    help: "Help".to_owned(),
+                },
+            },
+            repository: crate::domain::Repository {
+                id: "repository".to_owned(),
+                owner: "owner".to_owned(),
+                name: "project".to_owned(),
+                description: None,
+                visibility: DomainRepositoryVisibility::Private,
+                web_url: "https://example.com/owner/project".to_owned(),
+            },
+            workflow: crate::domain::Workflow {
+                id: "workflow".to_owned(),
+                name: "Build".to_owned(),
+                path: ".ci/build.yml".to_owned(),
+                state: DomainWorkflowState::Active,
+                web_url: "https://example.com/owner/project/workflows/build".to_owned(),
+            },
+        });
 
-        assert_eq!(response.monitors[0].status, MonitorStatus::Running);
+        assert_eq!(response.source_id, "source");
+        assert_eq!(response.repository_name, "project");
+        assert_eq!(response.state, WorkflowState::Active);
     }
 
     #[test]

@@ -43,9 +43,9 @@
         <section class="page-view" id="overview-view" aria-labelledby="overview-title">
         <header class="page-header">
           <div>
-            <p class="eyebrow">Demo workspace</p>
+            <p class="eyebrow">Monitored repositories</p>
             <h1 id="overview-title">Overview</h1>
-            <p class="page-description">Workflow health across your monitored repositories.</p>
+            <p class="page-description">Workflows discovered across your selected repositories.</p>
           </div>
           <button class="secondary-button" id="refresh-button" type="button">
             <span aria-hidden="true">↻</span>
@@ -57,23 +57,23 @@
           <div class="health-heading">
             <span class="health-icon" id="health-icon" aria-hidden="true">·</span>
             <div>
-              <p class="section-label">Current health</p>
-              <h2 id="health-heading">Loading workflow status</h2>
+              <p class="section-label">Workflow inventory</p>
+              <h2 id="health-heading">Loading workflows</h2>
               <p id="last-updated">Waiting for the application core</p>
             </div>
           </div>
           <dl class="health-stats">
             <div>
-              <dt>Failing</dt>
-              <dd id="failing-count">—</dd>
+              <dt>Total</dt>
+              <dd id="workflow-count">—</dd>
             </div>
             <div>
-              <dt>Running</dt>
-              <dd id="running-count">—</dd>
+              <dt>Active</dt>
+              <dd id="active-count">—</dd>
             </div>
             <div>
-              <dt>Passing</dt>
-              <dd id="passing-count">—</dd>
+              <dt>Disabled</dt>
+              <dd id="disabled-count">—</dd>
             </div>
           </dl>
         </section>
@@ -82,12 +82,12 @@
           <section class="panel workflows-panel" aria-labelledby="workflows-heading">
             <div class="panel-header">
               <div>
-                <p class="section-label">Monitors</p>
-                <h2 id="workflows-heading">Workflow health</h2>
+                <p class="section-label">Workflows</p>
+                <h2 id="workflows-heading">Discovered workflows</h2>
               </div>
-              <span class="demo-badge">Demo data</span>
+              <span class="demo-badge">Live discovery</span>
             </div>
-            <div class="workflow-list" id="monitor-list" aria-live="polite">
+            <div class="workflow-list" id="workflow-list" aria-live="polite">
               <div class="loading-row">
                 <span class="loading-block loading-avatar"></span>
                 <span class="loading-block loading-copy"></span>
