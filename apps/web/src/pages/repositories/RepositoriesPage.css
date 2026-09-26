@@ -1,0 +1,118 @@
+.repositories-panel {
+  overflow: hidden;
+}
+
+.repository-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  background: #10151d;
+}
+
+.repository-search {
+  display: grid;
+  flex: 1 1 420px;
+  max-width: 540px;
+  gap: 5px;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.repository-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  background: #0c1118;
+  font-size: 12px;
+  outline: none;
+}
+
+.repository-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(135 169 255 / 16%);
+}
+
+.repository-search input::placeholder {
+  color: var(--subtle);
+}
+
+.repository-selection-controls,
+.repository-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.repository-list-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.repository-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  background: #10151d;
+}
+
+.repository-footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.repository-footer .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
+.repository-selection-controls .secondary-button:disabled,
+.repository-footer .secondary-button:disabled {
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .repository-toolbar,
+  .repository-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repository-search {
+    flex-basis: auto;
+    max-width: none;
+  }
+
+  .repository-footer-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .repository-toolbar,
+  .repository-footer {
+    padding: 14px;
+  }
+
+  .repository-selection-controls,
+  .repository-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -1,4 +1,5 @@
 import type { SourceSummary } from "../generated/contracts.ts";
+import "./SourceCard.css";
 
 interface SourceCardProps {
   source: SourceSummary;

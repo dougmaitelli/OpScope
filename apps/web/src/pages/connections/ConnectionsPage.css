@@ -1,0 +1,110 @@
+.sources-panel {
+  overflow: hidden;
+}
+
+.source-count {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.connection-form {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.connection-form label {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.connection-form input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  background: #0f141c;
+  font-size: 12px;
+  outline: none;
+}
+
+.connection-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(135 169 255 / 16%);
+}
+
+.connection-form input::placeholder {
+  color: var(--subtle);
+}
+
+.field-help {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.connection-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(320px, 1.2fr);
+  gap: 28px;
+  margin-top: 12px;
+  padding: 16px;
+}
+
+.editor-copy h2 {
+  margin-bottom: 5px;
+}
+
+.editor-copy > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.editor-actions .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
+.sources-panel > .connection-note {
+  margin: 0;
+  padding: 0 16px 13px;
+}
+
+.connection-note {
+  margin: 13px 0 0;
+  color: var(--accent-strong);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.connection-note-error {
+  color: var(--danger);
+}
+
+@media (max-width: 700px) {
+  .connection-editor {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .connection-editor {
+    padding: 14px;
+  }
+}

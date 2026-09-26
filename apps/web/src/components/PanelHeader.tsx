@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./PanelHeader.css";
 
 interface PanelHeaderProps {
   label: string;

@@ -2,6 +2,7 @@ import type {
   RepositorySourceSummary,
   RepositorySummary,
 } from "../generated/contracts.ts";
+import "./RepositoryRow.css";
 
 export interface RepositoryRowModel {
   selectionId: string;

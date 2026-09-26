@@ -1,0 +1,10 @@
+.empty-state {
+  margin: 0;
+  padding: 32px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-state-error {
+  color: var(--danger);
+}

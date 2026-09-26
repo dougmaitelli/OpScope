@@ -1,4 +1,5 @@
 import type { WorkflowSummary } from "../generated/contracts.ts";
+import "./WorkflowRow.css";
 
 export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
   return (

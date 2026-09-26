@@ -1,8 +1,9 @@
+import "./styles/base.css";
+import "./styles/controls.css";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App.tsx";
 import { ApplicationClientProvider } from "./api/application-client.tsx";
-import "./styles.css";
 
 const root = document.getElementById("root");
 if (!root) {

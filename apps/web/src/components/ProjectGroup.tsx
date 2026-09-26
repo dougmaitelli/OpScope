@@ -1,5 +1,6 @@
 import type { WorkflowSummary } from "../generated/contracts.ts";
 import { WorkflowRow } from "./WorkflowRow.tsx";
+import "./ProjectGroup.css";
 
 export interface WorkflowProject {
   id: string;

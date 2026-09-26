@@ -1,0 +1,154 @@
+.health-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 74px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.health-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-heading p:last-child {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.health-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  background: #1b222d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.health-icon-passing {
+  border-color: #2e7551;
+  color: var(--success);
+  background: #122a20;
+}
+
+.health-icon-running {
+  border-color: #7b6232;
+  color: var(--warning);
+  background: #2d2516;
+}
+
+.health-icon-failing {
+  border-color: #7c3e43;
+  color: var(--danger);
+  background: #30191d;
+}
+
+.health-stats {
+  display: flex;
+  margin: 0;
+}
+
+.health-stats > div {
+  min-width: 68px;
+  padding: 1px 14px;
+  border-left: 1px solid var(--border);
+}
+
+.health-stats dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.health-stats dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-content {
+  margin-top: 12px;
+}
+
+.workflows-panel {
+  min-height: 220px;
+}
+
+.workflow-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  min-height: 54px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.loading-block {
+  display: block;
+  height: 14px;
+  border-radius: 5px;
+  background: #252c37;
+}
+
+.loading-avatar {
+  width: 26px;
+  height: 26px;
+}
+
+.loading-copy {
+  width: min(240px, 55%);
+}
+
+@media (max-width: 700px) {
+  .health-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .health-stats {
+    width: 100%;
+  }
+
+  .health-stats > div {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 10px;
+  }
+
+  .health-stats > div:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .health-summary {
+    padding: 14px;
+  }
+
+  .workflow-list {
+    padding: 11px 12px 12px;
+  }
+}

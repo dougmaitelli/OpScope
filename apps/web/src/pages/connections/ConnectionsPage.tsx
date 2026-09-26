@@ -6,6 +6,7 @@ import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { SourceCard } from "../../components/SourceCard.tsx";
 import type { SourceSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
+import "./ConnectionsPage.css";
 
 export function ConnectionsPage() {
   const client = useApplicationClient();

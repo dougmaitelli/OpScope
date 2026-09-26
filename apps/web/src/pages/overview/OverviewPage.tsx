@@ -5,6 +5,7 @@ import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { groupWorkflows, ProjectGroup } from "../../components/ProjectGroup.tsx";
 import type { ListWorkflowsResponse } from "../../generated/contracts.ts";
+import "./OverviewPage.css";
 
 export function OverviewPage() {
   const client = useApplicationClient();

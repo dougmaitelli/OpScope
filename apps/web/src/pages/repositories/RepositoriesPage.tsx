@@ -9,6 +9,7 @@ import {
 } from "../../components/RepositoryRow.tsx";
 import type { RepositorySourceSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
+import "./RepositoriesPage.css";
 
 function selectionsMatch(left: Set<string>, right: Set<string>): boolean {
   return left.size === right.size && [...left].every((id) => right.has(id));
