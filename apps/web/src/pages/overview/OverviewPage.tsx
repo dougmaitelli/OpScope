@@ -203,8 +203,10 @@ export function OverviewPage() {
 
       {inventory?.stale ? (
         <div className="sync-warning" role="status">
-          <strong>Live refresh failed.</strong> Cached workflow activity is still available.
-          {inventory.syncError ? ` ${inventory.syncError}` : ""}
+          <strong>{inventory.syncError ? "Live refresh failed." : "Refresh pending."}</strong>
+          {inventory.syncError
+            ? ` Cached workflow activity is still available. ${inventory.syncError}`
+            : " Cached workflow activity is displayed while background synchronization runs."}
         </div>
       ) : null}
 

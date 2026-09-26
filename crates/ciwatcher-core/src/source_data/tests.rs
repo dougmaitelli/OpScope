@@ -283,6 +283,47 @@ async fn forced_refresh_bypasses_fresh_cache_entries() -> Result<(), Box<dyn std
 }
 
 #[tokio::test]
+async fn cache_first_returns_expired_data_without_waiting_for_the_provider()
+-> Result<(), Box<dyn std::error::Error>> {
+    let dependencies = dependencies()?;
+    let source_data = ReadThroughSourceData::cached(
+        dependencies.registry,
+        Arc::new(dependencies.database.clone()),
+        Arc::new(dependencies.secrets),
+        Arc::new(dependencies.database),
+        SourceDataCachePolicy::uniform(Duration::ZERO),
+    );
+
+    let repositories = source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?
+        .expect("connected source");
+    source_data
+        .repositories("example", RefreshMode::CacheFirst)
+        .await?;
+    assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 1);
+
+    let repository = &repositories[0];
+    source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
+    source_data
+        .workflows("example", repository, RefreshMode::CacheFirst)
+        .await?;
+    assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 1);
+
+    source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
+    let cached_runs = source_data
+        .workflow_runs("example", repository, RefreshMode::CacheFirst)
+        .await?;
+    assert!(cached_runs.stale);
+    assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn uncached_source_data_uses_the_same_interface() -> Result<(), Box<dyn std::error::Error>> {
     let dependencies = dependencies()?;
     let source_data = ReadThroughSourceData::uncached(

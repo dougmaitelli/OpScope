@@ -76,6 +76,7 @@ pub struct WorkflowRunCollection {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RefreshMode {
+    CacheFirst,
     IfStale,
     Force,
 }
@@ -253,9 +254,10 @@ impl SourceData for ReadThroughSourceData {
                 .ok()
                 .flatten()
         });
-        if refresh == RefreshMode::IfStale
-            && let Some(snapshot) = &cached
-            && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.repositories)
+        if let Some(snapshot) = &cached
+            && (refresh == RefreshMode::CacheFirst
+                || refresh == RefreshMode::IfStale
+                    && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.repositories))
         {
             return Ok(Some(snapshot.repositories.clone()));
         }
@@ -311,9 +313,10 @@ impl SourceData for ReadThroughSourceData {
                 .ok()
                 .flatten()
         });
-        if refresh == RefreshMode::IfStale
-            && let Some(snapshot) = &cached
-            && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.workflows)
+        if let Some(snapshot) = &cached
+            && (refresh == RefreshMode::CacheFirst
+                || refresh == RefreshMode::IfStale
+                    && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.workflows))
         {
             return Ok(snapshot.workflows.clone());
         }
@@ -370,22 +373,24 @@ impl SourceData for ReadThroughSourceData {
                 .flatten()
         });
 
-        if refresh == RefreshMode::IfStale
-            && let Some(snapshot) = &cached
+        if let Some(snapshot) = &cached
+            && refresh != RefreshMode::Force
             && let Some(last_successful_at) = snapshot.last_successful_at
-            && Self::is_fresh(
+        {
+            let fresh = Self::is_fresh(
                 snapshot.last_attempted_at,
                 now,
                 self.cache_policy.workflow_runs,
-            )
-        {
-            return Ok(WorkflowRunCollection {
-                runs: snapshot.runs.clone(),
-                last_attempted_at: snapshot.last_attempted_at,
-                last_successful_at,
-                stale: snapshot.last_error.is_some(),
-                error: snapshot.last_error,
-            });
+            );
+            if refresh == RefreshMode::CacheFirst || fresh {
+                return Ok(WorkflowRunCollection {
+                    runs: snapshot.runs.clone(),
+                    last_attempted_at: snapshot.last_attempted_at,
+                    last_successful_at,
+                    stale: snapshot.last_error.is_some() || !fresh,
+                    error: snapshot.last_error,
+                });
+            }
         }
 
         let token = self

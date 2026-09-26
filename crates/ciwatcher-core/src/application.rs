@@ -603,7 +603,7 @@ impl ListWorkflows {
 
             let repositories = self
                 .source_data
-                .repositories(&source.id, RefreshMode::IfStale)
+                .repositories(&source.id, RefreshMode::CacheFirst)
                 .await
                 .map_err(list_workflows_failure)?
                 .ok_or(ListWorkflowsFailure::StorageUnavailable)?;
@@ -614,12 +614,12 @@ impl ListWorkflows {
             {
                 let repository_workflows = self
                     .source_data
-                    .workflows(&source.id, &repository, RefreshMode::IfStale)
+                    .workflows(&source.id, &repository, RefreshMode::CacheFirst)
                     .await
                     .map_err(list_workflows_failure)?;
                 let repository_runs = self
                     .source_data
-                    .workflow_runs(&source.id, &repository, RefreshMode::IfStale)
+                    .workflow_runs(&source.id, &repository, RefreshMode::CacheFirst)
                     .await
                     .map_err(list_workflows_failure)?;
                 last_attempted_at = Some(
