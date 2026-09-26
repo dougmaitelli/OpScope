@@ -15,17 +15,22 @@ use ciwatcher_core::contracts::{
 use ciwatcher_core::source_data::SourceDataCache;
 use handlers::{
     AppState, connect_source, disconnect_source, health, list_repositories, list_sources,
-    list_workflows, save_repository_selection, synchronize_sources,
+    list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
 };
 use std::sync::Arc;
 
-pub fn router(
+pub struct ServerApplication {
+    pub router: Router,
+    pub synchronizer: ciwatcher_core::application::SynchronizeSources,
+}
+
+pub fn application(
     registry: SourceRegistry,
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
     repository_selections: Arc<dyn RepositorySelectionRepository>,
     source_data_cache: Arc<dyn SourceDataCache>,
-) -> Router {
+) -> ServerApplication {
     let state = AppState::new(
         registry,
         connections,
@@ -33,11 +38,15 @@ pub fn router(
         repository_selections,
         source_data_cache,
     );
+    let synchronizer = state.synchronizer();
 
-    Router::new()
+    let router = Router::new()
         .route(HEALTH_HTTP_PATH, get(health))
         .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
-        .route(SYNCHRONIZATION_HTTP_PATH, post(synchronize_sources))
+        .route(
+            SYNCHRONIZATION_HTTP_PATH,
+            get(synchronization_status).post(synchronize_sources),
+        )
         .route(
             CONNECTIONS_HTTP_PATH,
             post(connect_source).delete(disconnect_source),
@@ -48,7 +57,28 @@ pub fn router(
             REPOSITORY_SELECTIONS_HTTP_PATH,
             put(save_repository_selection),
         )
-        .with_state(state)
+        .with_state(state);
+    ServerApplication {
+        router,
+        synchronizer,
+    }
+}
+
+pub fn router(
+    registry: SourceRegistry,
+    connections: Arc<dyn ConnectionRepository>,
+    secrets: Arc<dyn SecretStore>,
+    repository_selections: Arc<dyn RepositorySelectionRepository>,
+    source_data_cache: Arc<dyn SourceDataCache>,
+) -> Router {
+    application(
+        registry,
+        connections,
+        secrets,
+        repository_selections,
+        source_data_cache,
+    )
+    .router
 }
 
 #[cfg(test)]

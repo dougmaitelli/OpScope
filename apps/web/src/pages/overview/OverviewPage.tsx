@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
@@ -8,13 +8,17 @@ import type { ListWorkflowsResponse } from "../../generated/contracts.ts";
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
 import "./OverviewPage.css";
 
+const SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS = 10_000;
+
 export function OverviewPage() {
   const client = useApplicationClient();
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const lastObservedSynchronization = useRef<number | null | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +62,51 @@ export function OverviewPage() {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [client]);
+
+  useEffect(() => {
+    let stopped = false;
+    let polling = false;
+    const poll = async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const status = await client.synchronizationStatus();
+        if (stopped) return;
+        setBackgroundSyncing(status.running);
+        const previous = lastObservedSynchronization.current;
+        lastObservedSynchronization.current = status.lastCompletedAt;
+        if (
+          previous !== undefined &&
+          status.lastCompletedAt !== null &&
+          status.lastCompletedAt !== previous
+        ) {
+          const updatedInventory = await client.listWorkflows();
+          if (!stopped) {
+            setInventory(updatedInventory);
+            setError(false);
+            setRefreshNotice(
+              status.lastFailedRepositoryCount > 0
+                ? `${status.lastFailedRepositoryCount} repositor${status.lastFailedRepositoryCount === 1 ? "y" : "ies"} could not be refreshed. Cached data remains available where possible.`
+                : null,
+            );
+          }
+        }
+      } catch {
+        // Background polling must not replace already useful dashboard data.
+      } finally {
+        polling = false;
+      }
+    };
+    void poll();
+    const interval = window.setInterval(
+      () => void poll(),
+      SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS,
+    );
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
   }, [client]);
 
   const workflows = inventory?.workflows ?? [];
@@ -110,18 +159,22 @@ export function OverviewPage() {
         description="Workflows discovered across your selected repositories."
         actions={
           <button
-            className={`secondary-button${loading ? " button-busy" : ""}`}
+            className={`secondary-button${loading || backgroundSyncing ? " button-busy" : ""}`}
             type="button"
-            disabled={loading}
+            disabled={loading || backgroundSyncing}
             onClick={() => void refresh()}
           >
             <span aria-hidden="true">↻</span>
-            {refreshing ? "Synchronizing…" : "Refresh"}
+            {refreshing || backgroundSyncing ? "Synchronizing…" : "Refresh"}
           </button>
         }
       />
 
-      <section className="health-summary" aria-labelledby="health-heading" aria-busy={loading}>
+      <section
+        className="health-summary"
+        aria-labelledby="health-heading"
+        aria-busy={loading || backgroundSyncing}
+      >
         <div className="health-heading">
           <span
             className={`health-icon health-icon-${statusTone}`}

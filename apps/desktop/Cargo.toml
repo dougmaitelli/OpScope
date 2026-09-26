@@ -12,6 +12,7 @@ tauri-build.workspace = true
 ciwatcher-core.workspace = true
 keyring = "4.2.0"
 tauri.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

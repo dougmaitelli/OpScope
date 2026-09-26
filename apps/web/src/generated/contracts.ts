@@ -42,6 +42,8 @@ export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows
 
 export type SynchronizationResponse = { selectedRepositoryCount: number, synchronizedRepositoryCount: number, failedRepositoryCount: number, skippedRepositoryCount: number, alreadyRunning: boolean, };
 
+export type SynchronizationStatusResponse = { running: boolean, activeSourceCount: number, lastCompletedAt: number | null, lastFailedRepositoryCount: number, };
+
 export type RepositorySelectionSourceRequest = { sourceId: string, repositoryIds: Array<string>, };
 
 export type SaveRepositorySelectionRequest = { sources: Array<RepositorySelectionSourceRequest>, };
@@ -64,6 +66,7 @@ export const desktopCommands = {
   health: "health",
   listWorkflows: "list_workflows",
   synchronizeSources: "synchronize_sources",
+  synchronizationStatus: "synchronization_status",
   listSources: "list_sources",
   connectSource: "connect_source",
   disconnectSource: "disconnect_source",
@@ -75,6 +78,7 @@ export interface ApplicationClient {
   health(): Promise<HealthResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
+  synchronizationStatus(): Promise<SynchronizationStatusResponse>;
   listSources(): Promise<ListSourcesResponse>;
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;
   disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;

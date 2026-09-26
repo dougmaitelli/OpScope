@@ -12,6 +12,7 @@ use ciwatcher_core::contracts::{
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
+    SynchronizationStatusResponse,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -66,6 +67,16 @@ impl AppState {
             disconnect_source: DisconnectSource::new(registry, connections, secrets),
         }
     }
+
+    pub(crate) fn synchronizer(&self) -> SynchronizeSources {
+        self.synchronize_sources.clone()
+    }
+}
+
+pub(crate) async fn synchronization_status(
+    State(state): State<AppState>,
+) -> Json<SynchronizationStatusResponse> {
+    Json(state.synchronize_sources.status().into())
 }
 
 pub(crate) async fn synchronize_sources(

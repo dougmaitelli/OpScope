@@ -15,6 +15,7 @@ import {
   type SaveRepositorySelectionRequest,
   type SaveRepositorySelectionResponse,
   type SynchronizationResponse,
+  type SynchronizationStatusResponse,
 } from "./generated/contracts.ts";
 
 export class DesktopClient implements ApplicationClient {
@@ -28,6 +29,10 @@ export class DesktopClient implements ApplicationClient {
 
   synchronizeSources(): Promise<SynchronizationResponse> {
     return invoke<SynchronizationResponse>(desktopCommands.synchronizeSources);
+  }
+
+  synchronizationStatus(): Promise<SynchronizationStatusResponse> {
+    return invoke<SynchronizationStatusResponse>(desktopCommands.synchronizationStatus);
   }
 
   listSources(): Promise<ListSourcesResponse> {
@@ -72,6 +77,10 @@ export class HttpClient implements ApplicationClient {
 
   synchronizeSources(): Promise<SynchronizationResponse> {
     return this.post<SynchronizationResponse>(httpRoutes.synchronization, {});
+  }
+
+  synchronizationStatus(): Promise<SynchronizationStatusResponse> {
+    return this.get<SynchronizationStatusResponse>(httpRoutes.synchronization);
   }
 
   listSources(): Promise<ListSourcesResponse> {

@@ -3,8 +3,8 @@
 use crate::application::{
     ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
     ListWorkflowsFailure, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
-    SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationSummary,
-    ValidatedAccount, WorkflowInventory,
+    SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationStatus,
+    SynchronizationSummary, ValidatedAccount, WorkflowInventory,
 };
 use crate::domain::{
     RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
@@ -14,7 +14,7 @@ use crate::domain::{
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 6;
+pub const CONTRACT_VERSION: u8 = 7;
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
@@ -30,6 +30,7 @@ pub const DISCONNECT_SOURCE_DESKTOP_COMMAND: &str = "disconnect_source";
 pub const LIST_REPOSITORIES_DESKTOP_COMMAND: &str = "list_repositories";
 pub const SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND: &str = "save_repository_selection";
 pub const SYNCHRONIZE_SOURCES_DESKTOP_COMMAND: &str = "synchronize_sources";
+pub const SYNCHRONIZATION_STATUS_DESKTOP_COMMAND: &str = "synchronization_status";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -458,6 +459,27 @@ impl From<SynchronizationSummary> for SynchronizationResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SynchronizationStatusResponse {
+    pub running: bool,
+    pub active_source_count: usize,
+    #[ts(type = "number | null")]
+    pub last_completed_at: Option<u64>,
+    pub last_failed_repository_count: usize,
+}
+
+impl From<SynchronizationStatus> for SynchronizationStatusResponse {
+    fn from(status: SynchronizationStatus) -> Self {
+        Self {
+            running: status.is_running(),
+            active_source_count: status.active_source_count,
+            last_completed_at: status.last_completed_at,
+            last_failed_repository_count: status.last_failed_repository_count,
+        }
+    }
+}
+
 impl ListRepositoriesResponse {
     #[must_use]
     pub fn from_domain(catalogs: Vec<RepositoryCatalog>) -> Self {
@@ -609,6 +631,7 @@ pub fn render_typescript_contract() -> String {
         WorkflowSummary::decl(&config),
         ListWorkflowsResponse::decl(&config),
         SynchronizationResponse::decl(&config),
+        SynchronizationStatusResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),
         SaveRepositorySelectionRequest::decl(&config),
         SaveRepositorySelectionResponse::decl(&config),
@@ -616,7 +639,7 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

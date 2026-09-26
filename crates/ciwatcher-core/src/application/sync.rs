@@ -3,7 +3,11 @@ use crate::source_data::{RefreshMode, SourceData};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+pub const DEFAULT_SYNCHRONIZATION_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SynchronizationFailure {
@@ -21,6 +25,8 @@ impl Error for SynchronizationFailure {}
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SynchronizationStatus {
     pub active_source_count: usize,
+    pub last_completed_at: Option<u64>,
+    pub last_failed_repository_count: usize,
 }
 
 impl SynchronizationStatus {
@@ -50,6 +56,8 @@ pub struct SynchronizeSources {
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
     active_sources: Arc<Mutex<HashSet<String>>>,
+    last_completed_at: Arc<AtomicU64>,
+    last_failed_repository_count: Arc<AtomicUsize>,
 }
 
 impl SynchronizeSources {
@@ -62,13 +70,18 @@ impl SynchronizeSources {
             source_data,
             selections,
             active_sources: Arc::new(Mutex::new(HashSet::new())),
+            last_completed_at: Arc::new(AtomicU64::new(0)),
+            last_failed_repository_count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     #[must_use]
     pub fn status(&self) -> SynchronizationStatus {
+        let last_completed_at = self.last_completed_at.load(Ordering::Acquire);
         SynchronizationStatus {
             active_source_count: lock_active_sources(&self.active_sources).len(),
+            last_completed_at: nonzero_timestamp(last_completed_at),
+            last_failed_repository_count: self.last_failed_repository_count.load(Ordering::Relaxed),
         }
     }
 
@@ -140,6 +153,11 @@ impl SynchronizeSources {
             }
         }
 
+        if summary.synchronized_repository_count + summary.failed_repository_count > 0 {
+            self.last_failed_repository_count
+                .store(summary.failed_repository_count, Ordering::Relaxed);
+            self.last_completed_at.store(now(), Ordering::Release);
+        }
         Ok(summary)
     }
 }
@@ -171,6 +189,21 @@ fn lock_active_sources(
     match active_sources.lock() {
         Ok(active_sources) => active_sources,
         Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+const fn nonzero_timestamp(timestamp: u64) -> Option<u64> {
+    if timestamp == 0 {
+        None
+    } else {
+        Some(timestamp)
     }
 }
 
@@ -323,6 +356,7 @@ mod tests {
             },
         ]));
         let synchronize = SynchronizeSources::new(source_data.clone(), selections);
+        assert_eq!(synchronize.status().last_completed_at, None);
 
         let summary = synchronize.execute().await.expect("synchronization runs");
 
@@ -330,6 +364,7 @@ mod tests {
         assert_eq!(summary.synchronized_repository_count, 1);
         assert_eq!(summary.failed_repository_count, 2);
         assert_eq!(summary.skipped_repository_count, 0);
+        assert!(synchronize.status().last_completed_at.is_some());
         assert!(
             source_data
                 .refresh_modes

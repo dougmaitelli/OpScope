@@ -9,7 +9,8 @@ use ciwatcher_core::application::{
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
     ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
-    SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, WORKFLOWS_HTTP_PATH,
+    SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse,
+    SynchronizationStatusResponse, WORKFLOWS_HTTP_PATH,
 };
 use ciwatcher_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
@@ -135,6 +136,16 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
         .await?;
     assert_eq!(health.status(), StatusCode::OK);
 
+    let synchronization = app
+        .clone()
+        .oneshot(Request::get(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    assert_eq!(synchronization.status(), StatusCode::OK);
+    let body = synchronization.into_body().collect().await?.to_bytes();
+    let decoded: SynchronizationStatusResponse = serde_json::from_slice(&body)?;
+    assert!(!decoded.running);
+    assert!(decoded.last_completed_at.is_none());
+
     let workflows = app
         .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
         .await?;
@@ -227,6 +238,15 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.synchronized_repository_count, 1);
     assert_eq!(decoded.failed_repository_count, 0);
     assert!(!decoded.already_running);
+
+    let synchronization = app
+        .clone()
+        .oneshot(Request::get(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    let body = synchronization.into_body().collect().await?.to_bytes();
+    let decoded: SynchronizationStatusResponse = serde_json::from_slice(&body)?;
+    assert!(!decoded.running);
+    assert!(decoded.last_completed_at.is_some());
 
     let repositories = app
         .clone()

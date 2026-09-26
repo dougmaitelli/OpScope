@@ -675,6 +675,7 @@ dependencies = [
  "keyring",
  "tauri",
  "tauri-build",
+ "tokio",
 ]
 
 [[package]]

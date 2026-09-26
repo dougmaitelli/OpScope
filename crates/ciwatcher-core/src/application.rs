@@ -3,7 +3,8 @@
 mod sync;
 
 pub use sync::{
-    SynchronizationFailure, SynchronizationStatus, SynchronizationSummary, SynchronizeSources,
+    DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationStatus,
+    SynchronizationSummary, SynchronizeSources,
 };
 
 use crate::domain::{Repository, Workflow, WorkflowRun};

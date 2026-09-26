@@ -1,3 +1,4 @@
+use ciwatcher_core::application::{DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizeSources};
 use ciwatcher_core::integrations::registered_sources;
 use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use std::env;
@@ -23,20 +24,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let master_key = ServerMasterKey::load_or_create(master_key_path)?;
     let secrets = EncryptedSecretStore::new(database.clone(), master_key);
     let database = Arc::new(database);
+    let application = ciwatcher_server::application(
+        sources,
+        database.clone(),
+        Arc::new(secrets),
+        database.clone(),
+        database,
+    );
+    let scheduler = tokio::spawn(run_synchronization_schedule(application.synchronizer));
+    let scheduler_abort = scheduler.abort_handle();
     println!("CI Watcher development server listening on http://127.0.0.1:4317");
-    axum::serve(
-        listener,
-        ciwatcher_server::router(
-            sources,
-            database.clone(),
-            Arc::new(secrets),
-            database.clone(),
-            database,
-        ),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    axum::serve(listener, application.router)
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            scheduler_abort.abort();
+        })
+        .await?;
+    _ = scheduler.await;
     Ok(())
+}
+
+async fn run_synchronization_schedule(synchronizer: SynchronizeSources) {
+    loop {
+        tokio::time::sleep(DEFAULT_SYNCHRONIZATION_INTERVAL).await;
+        _ = synchronizer.execute().await;
+    }
 }
 
 async fn shutdown_signal() {
