@@ -1,6 +1,7 @@
 //! Application use cases and the ports they require.
 
 use crate::domain::{Repository, Workflow};
+use crate::source_data::{SourceData, SourceDataFailure};
 use async_trait::async_trait;
 use std::collections::HashSet;
 use std::error::Error;
@@ -111,11 +112,18 @@ impl SourceRegistry {
         Self { modules }
     }
 
-    fn get(&self, source_id: &str) -> Option<Arc<dyn SourceModule>> {
+    pub(crate) fn get(&self, source_id: &str) -> Option<Arc<dyn SourceModule>> {
         self.modules
             .iter()
             .find(|module| module.descriptor().id == source_id)
             .cloned()
+    }
+
+    pub(crate) fn descriptors(&self) -> Vec<SourceDescriptor> {
+        self.modules
+            .iter()
+            .map(|module| module.descriptor())
+            .collect()
     }
 }
 
@@ -357,24 +365,18 @@ impl Error for ListRepositoriesFailure {}
 
 #[derive(Clone)]
 pub struct ListRepositories {
-    registry: SourceRegistry,
-    connections: Arc<dyn ConnectionRepository>,
-    secrets: Arc<dyn SecretStore>,
+    source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
 
 impl ListRepositories {
     #[must_use]
     pub fn new(
-        registry: SourceRegistry,
-        connections: Arc<dyn ConnectionRepository>,
-        secrets: Arc<dyn SecretStore>,
+        source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
     ) -> Self {
         Self {
-            registry,
-            connections,
-            secrets,
+            source_data,
             selections,
         }
     }
@@ -387,30 +389,23 @@ impl ListRepositories {
             .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?
             .into_iter()
             .collect::<HashSet<_>>();
-        for module in &self.registry.modules {
-            let source = module.descriptor();
-            let Some(connection) = self
-                .connections
-                .get(&source.id)
-                .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?
+        for source in self.source_data.sources() {
+            let Some(repositories) = self
+                .source_data
+                .repositories(&source.id)
+                .await
+                .map_err(list_repositories_failure)?
             else {
                 continue;
             };
-            let token = self
-                .secrets
-                .retrieve(&connection.secret_reference)
-                .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?;
-            let repositories = module
-                .list_repositories(&token)
-                .await
-                .map_err(ListRepositoriesFailure::Source)?;
+            let source_id = source.id.clone();
             catalogs.push(RepositoryCatalog {
                 source,
                 repositories: repositories
                     .into_iter()
                     .map(|repository| {
                         let is_selected = selected.contains(&RepositorySelection {
-                            source_id: connection.source_id.clone(),
+                            source_id: source_id.clone(),
                             repository_id: repository.id.clone(),
                         });
                         RepositoryState {
@@ -422,6 +417,13 @@ impl ListRepositories {
             });
         }
         Ok(catalogs)
+    }
+}
+
+fn list_repositories_failure(failure: SourceDataFailure) -> ListRepositoriesFailure {
+    match failure {
+        SourceDataFailure::Source(failure) => ListRepositoriesFailure::Source(failure),
+        SourceDataFailure::StorageUnavailable => ListRepositoriesFailure::StorageUnavailable,
     }
 }
 
@@ -537,24 +539,18 @@ impl Error for ListWorkflowsFailure {}
 
 #[derive(Clone)]
 pub struct ListWorkflows {
-    registry: SourceRegistry,
-    connections: Arc<dyn ConnectionRepository>,
-    secrets: Arc<dyn SecretStore>,
+    source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
 
 impl ListWorkflows {
     #[must_use]
     pub fn new(
-        registry: SourceRegistry,
-        connections: Arc<dyn ConnectionRepository>,
-        secrets: Arc<dyn SecretStore>,
+        source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
     ) -> Self {
         Self {
-            registry,
-            connections,
-            secrets,
+            source_data,
             selections,
         }
     }
@@ -567,8 +563,7 @@ impl ListWorkflows {
         let selected_repository_count = selections.len();
         let mut workflows = Vec::new();
 
-        for module in &self.registry.modules {
-            let source = module.descriptor();
+        for source in self.source_data.sources() {
             let selected_ids = selections
                 .iter()
                 .filter(|selection| selection.source_id == source.id)
@@ -578,28 +573,22 @@ impl ListWorkflows {
                 continue;
             }
 
-            let connection = self
-                .connections
-                .get(&source.id)
-                .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?
-                .ok_or(ListWorkflowsFailure::StorageUnavailable)?;
-            let token = self
-                .secrets
-                .retrieve(&connection.secret_reference)
-                .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?;
-            let repositories = module
-                .list_repositories(&token)
+            let repositories = self
+                .source_data
+                .repositories(&source.id)
                 .await
-                .map_err(ListWorkflowsFailure::Source)?;
+                .map_err(list_workflows_failure)?
+                .ok_or(ListWorkflowsFailure::StorageUnavailable)?;
 
             for repository in repositories
                 .into_iter()
                 .filter(|repository| selected_ids.contains(&repository.id))
             {
-                let repository_workflows = module
-                    .list_workflows(&token, &repository)
+                let repository_workflows = self
+                    .source_data
+                    .workflows(&source.id, &repository)
                     .await
-                    .map_err(ListWorkflowsFailure::Source)?;
+                    .map_err(list_workflows_failure)?;
                 workflows.extend(repository_workflows.into_iter().map(|workflow| {
                     DiscoveredWorkflow {
                         source: source.clone(),
@@ -614,6 +603,13 @@ impl ListWorkflows {
             selected_repository_count,
             workflows,
         })
+    }
+}
+
+fn list_workflows_failure(failure: SourceDataFailure) -> ListWorkflowsFailure {
+    match failure {
+        SourceDataFailure::Source(failure) => ListWorkflowsFailure::Source(failure),
+        SourceDataFailure::StorageUnavailable => ListWorkflowsFailure::StorageUnavailable,
     }
 }
 

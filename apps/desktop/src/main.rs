@@ -28,6 +28,7 @@ fn main() {
                 sources,
                 database.clone(),
                 secrets,
+                database.clone(),
                 database,
             ));
             Ok(())

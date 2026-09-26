@@ -13,6 +13,9 @@ use ciwatcher_core::contracts::{
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
 };
+use ciwatcher_core::source_data::{
+    DEFAULT_SOURCE_DATA_MAX_AGE, ReadThroughSourceData, SourceDataCache,
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -31,26 +34,24 @@ impl AppState {
         connections: Arc<dyn ConnectionRepository>,
         secrets: Arc<dyn SecretStore>,
         repository_selections: Arc<dyn RepositorySelectionRepository>,
+        source_data_cache: Arc<dyn SourceDataCache>,
     ) -> Self {
+        let source_data = Arc::new(ReadThroughSourceData::cached(
+            registry.clone(),
+            connections.clone(),
+            secrets.clone(),
+            source_data_cache,
+            DEFAULT_SOURCE_DATA_MAX_AGE,
+        ));
         Self {
-            list_workflows: ListWorkflows::new(
-                registry.clone(),
-                connections.clone(),
-                secrets.clone(),
-                repository_selections.clone(),
-            ),
+            list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),
             connect_source: ConnectSource::new(
                 registry.clone(),
                 connections.clone(),
                 secrets.clone(),
             ),
             list_sources: ListSources::new(registry.clone(), connections.clone()),
-            list_repositories: ListRepositories::new(
-                registry.clone(),
-                connections.clone(),
-                secrets.clone(),
-                repository_selections.clone(),
-            ),
+            list_repositories: ListRepositories::new(source_data, repository_selections.clone()),
             save_repository_selection: SaveRepositorySelection::new(
                 registry.clone(),
                 connections.clone(),

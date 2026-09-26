@@ -26,7 +26,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("CI Watcher development server listening on http://127.0.0.1:4317");
     axum::serve(
         listener,
-        ciwatcher_server::router(sources, database.clone(), Arc::new(secrets), database),
+        ciwatcher_server::router(
+            sources,
+            database.clone(),
+            Arc::new(secrets),
+            database.clone(),
+            database,
+        ),
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;

@@ -1,4 +1,6 @@
-//! SQLite metadata persistence and encrypted server-side credential storage.
+//! SQLite persistence for metadata, source snapshots, and encrypted server-side credentials.
+
+mod source_cache;
 
 use crate::application::{
     ConnectionRepository, PersistenceFailure, ProviderToken, RepositorySelection,
@@ -59,6 +61,45 @@ impl SqliteDatabase {
                    repository_id TEXT NOT NULL,
                    selected_at INTEGER NOT NULL DEFAULT (unixepoch()),
                    PRIMARY KEY (source_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS repository_cache_sync (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   refreshed_at INTEGER NOT NULL,
+                   PRIMARY KEY (source_id, account_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS repositories (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   owner TEXT NOT NULL,
+                   name TEXT NOT NULL,
+                   description TEXT,
+                   visibility TEXT NOT NULL,
+                   web_url TEXT NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS workflow_cache_sync (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   refreshed_at INTEGER NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS workflows (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   workflow_id TEXT NOT NULL,
+                   name TEXT NOT NULL,
+                   path TEXT NOT NULL,
+                   state TEXT NOT NULL,
+                   web_url TEXT NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id, workflow_id),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS audit_events (

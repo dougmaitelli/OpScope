@@ -11,6 +11,7 @@ use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SOURCES_HTTP_PATH, WORKFLOWS_HTTP_PATH,
 };
+use ciwatcher_core::source_data::SourceDataCache;
 use handlers::{
     AppState, connect_source, disconnect_source, health, list_repositories, list_sources,
     list_workflows, save_repository_selection,
@@ -22,8 +23,15 @@ pub fn router(
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
     repository_selections: Arc<dyn RepositorySelectionRepository>,
+    source_data_cache: Arc<dyn SourceDataCache>,
 ) -> Router {
-    let state = AppState::new(registry, connections, secrets, repository_selections);
+    let state = AppState::new(
+        registry,
+        connections,
+        secrets,
+        repository_selections,
+        source_data_cache,
+    );
 
     Router::new()
         .route(HEALTH_HTTP_PATH, get(health))

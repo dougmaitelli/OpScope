@@ -94,6 +94,7 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
         test_registry(),
         Arc::new(database.clone()),
         Arc::new(secrets),
+        Arc::new(database.clone()),
         Arc::new(database),
     );
 
@@ -123,6 +124,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         test_registry(),
         Arc::new(database.clone()),
         Arc::new(secrets),
+        Arc::new(database.clone()),
         Arc::new(database),
     );
     let response = app
