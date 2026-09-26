@@ -30,9 +30,15 @@ export type ListRepositoriesResponse = { sources: Array<RepositorySourceSummary>
 
 export type WorkflowState = "active" | "disabled";
 
-export type WorkflowSummary = { id: string, name: string, path: string, state: WorkflowState, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, };
+export type RunLifecycle = "queued" | "running" | "completed" | "unknown";
 
-export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows: Array<WorkflowSummary>, };
+export type RunOutcome = "success" | "warning" | "failure" | "cancelled" | "skipped" | "unknown";
+
+export type WorkflowRunSummary = { id: string, runNumber: number, attempt: number, title: string, lifecycle: RunLifecycle, outcome: RunOutcome, branch: string | null, commitSha: string, actor: string | null, trigger: string, createdAt: string, startedAt: string | null, updatedAt: string, webUrl: string, };
+
+export type WorkflowSummary = { id: string, name: string, path: string, state: WorkflowState, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, runs: Array<WorkflowRunSummary>, };
+
+export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows: Array<WorkflowSummary>, lastAttemptedAt: number | null, lastSuccessfulAt: number | null, stale: boolean, syncError: string | null, };
 
 export type RepositorySelectionSourceRequest = { sourceId: string, repositoryIds: Array<string>, };
 

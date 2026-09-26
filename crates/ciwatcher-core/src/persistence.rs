@@ -102,6 +102,40 @@ impl SqliteDatabase {
                    PRIMARY KEY (source_id, account_id, repository_id, workflow_id),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS workflow_run_cache_sync (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   last_attempted_at INTEGER NOT NULL,
+                   last_successful_at INTEGER,
+                   last_error TEXT,
+                   PRIMARY KEY (source_id, account_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS workflow_runs (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   run_id TEXT NOT NULL,
+                   workflow_id TEXT NOT NULL,
+                   run_number INTEGER NOT NULL,
+                   attempt INTEGER NOT NULL,
+                   title TEXT NOT NULL,
+                   lifecycle TEXT NOT NULL,
+                   outcome TEXT NOT NULL,
+                   branch TEXT,
+                   commit_sha TEXT NOT NULL,
+                   actor TEXT,
+                   trigger TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   started_at TEXT,
+                   updated_at TEXT NOT NULL,
+                   web_url TEXT NOT NULL,
+                   provider_status TEXT NOT NULL,
+                   provider_conclusion TEXT,
+                   PRIMARY KEY (source_id, account_id, repository_id, run_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    event_type TEXT NOT NULL,

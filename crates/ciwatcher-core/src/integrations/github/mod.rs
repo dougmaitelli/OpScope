@@ -4,7 +4,10 @@ use crate::application::{
     ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor, SourceModule,
     ValidatedAccount,
 };
-use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowState};
+use crate::domain::{
+    Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
+    WorkflowState,
+};
 use async_trait::async_trait;
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT as USER_AGENT_HEADER};
 use reqwest::{Client, StatusCode};
@@ -20,6 +23,8 @@ const REPOSITORIES_PER_PAGE: usize = 100;
 const MAX_REPOSITORY_PAGES: usize = 100;
 const WORKFLOWS_PER_PAGE: usize = 100;
 const MAX_WORKFLOW_PAGES: usize = 100;
+const WORKFLOW_RUNS_PER_PAGE: usize = 100;
+const MAX_WORKFLOW_RUN_PAGES: usize = 2;
 
 #[derive(Clone, Debug)]
 pub struct GitHubClient {
@@ -64,6 +69,24 @@ impl GitHubClient {
     ) -> reqwest::RequestBuilder {
         let url = format!(
             "https://api.github.com/repos/{}/{}/actions/workflows?per_page={WORKFLOWS_PER_PAGE}&page={page}",
+            repository.owner, repository.name
+        );
+        self.client
+            .get(url)
+            .bearer_auth(token.expose())
+            .header(ACCEPT, ACCEPT_VALUE)
+            .header(USER_AGENT_HEADER, USER_AGENT)
+            .header("X-GitHub-Api-Version", API_VERSION)
+    }
+
+    fn workflow_runs_request(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+        page: usize,
+    ) -> reqwest::RequestBuilder {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/actions/runs?per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
             repository.owner, repository.name
         );
         self.client
@@ -141,6 +164,76 @@ impl From<GitHubWorkflow> for Workflow {
                 WorkflowState::Disabled
             },
             web_url: workflow.html_url,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct GitHubWorkflowRunPage {
+    workflow_runs: Vec<GitHubWorkflowRun>,
+}
+
+#[derive(Deserialize)]
+struct GitHubWorkflowRunActor {
+    login: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubWorkflowRun {
+    id: u64,
+    workflow_id: u64,
+    run_number: u64,
+    run_attempt: u64,
+    display_title: String,
+    status: String,
+    conclusion: Option<String>,
+    head_branch: Option<String>,
+    head_sha: String,
+    actor: Option<GitHubWorkflowRunActor>,
+    event: String,
+    created_at: String,
+    run_started_at: Option<String>,
+    updated_at: String,
+    html_url: String,
+}
+
+impl From<GitHubWorkflowRun> for WorkflowRun {
+    fn from(run: GitHubWorkflowRun) -> Self {
+        let lifecycle = match run.status.as_str() {
+            "queued" | "requested" | "waiting" | "pending" => RunLifecycle::Queued,
+            "in_progress" => RunLifecycle::Running,
+            "completed" => RunLifecycle::Completed,
+            _ => RunLifecycle::Unknown,
+        };
+        let outcome = match run.conclusion.as_deref() {
+            Some("success") => RunOutcome::Success,
+            Some("neutral") => RunOutcome::Warning,
+            Some("failure" | "timed_out" | "startup_failure" | "action_required") => {
+                RunOutcome::Failure
+            }
+            Some("cancelled") => RunOutcome::Cancelled,
+            Some("skipped") => RunOutcome::Skipped,
+            _ => RunOutcome::Unknown,
+        };
+
+        Self {
+            id: run.id.to_string(),
+            workflow_id: run.workflow_id.to_string(),
+            run_number: run.run_number,
+            attempt: run.run_attempt,
+            title: run.display_title,
+            lifecycle,
+            outcome,
+            branch: run.head_branch,
+            commit_sha: run.head_sha,
+            actor: run.actor.map(|actor| actor.login),
+            trigger: run.event,
+            created_at: run.created_at,
+            started_at: run.run_started_at,
+            updated_at: run.updated_at,
+            web_url: run.html_url,
+            provider_status: run.status,
+            provider_conclusion: run.conclusion,
         }
     }
 }
@@ -271,109 +364,42 @@ impl SourceModule for GitHubClient {
         }
         Err(ConnectionValidationFailure::UnexpectedResponse)
     }
+
+    async fn list_workflow_runs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
+        let mut runs = Vec::new();
+        for page in 1..=MAX_WORKFLOW_RUN_PAGES {
+            let response = self
+                .workflow_runs_request(token, repository, page)
+                .send()
+                .await
+                .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
+            if matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ) {
+                return Err(ConnectionValidationFailure::PermissionDenied);
+            }
+            if response.status() != StatusCode::OK {
+                return Err(response_failure(&response));
+            }
+
+            let page = response
+                .json::<GitHubWorkflowRunPage>()
+                .await
+                .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
+            let page_size = page.workflow_runs.len();
+            runs.extend(page.workflow_runs.into_iter().map(WorkflowRun::from));
+            if page_size < WORKFLOW_RUNS_PER_PAGE {
+                return Ok(runs);
+            }
+        }
+        Ok(runs)
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use reqwest::header::AUTHORIZATION;
-
-    #[test]
-    fn validation_request_targets_only_github_with_required_headers()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let client = GitHubClient::new()?;
-        let token = ProviderToken::new("github_pat_test".to_owned());
-        let request = client.validation_request(&token).build()?;
-
-        assert_eq!(request.method(), reqwest::Method::GET);
-        assert_eq!(request.url().as_str(), USER_API_URL);
-        assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
-        assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
-        assert_eq!(request.headers()[USER_AGENT_HEADER], USER_AGENT);
-        assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
-        Ok(())
-    }
-
-    #[test]
-    fn github_response_maps_to_a_non_secret_identity() -> Result<(), Box<dyn std::error::Error>> {
-        let user: GitHubUser = serde_json::from_str(
-            r#"{"id":42,"login":"octocat","name":"The Octocat","html_url":"https://github.com/octocat"}"#,
-        )?;
-
-        let validated = ValidatedAccount {
-            external_id: user.id.to_string(),
-            name: user.name.expect("fixture name"),
-            handle: Some(user.login),
-            profile_url: Some(user.html_url),
-        };
-        assert_eq!(validated.external_id, "42");
-        assert_eq!(validated.handle.as_deref(), Some("octocat"));
-        Ok(())
-    }
-
-    #[test]
-    fn repository_request_is_authenticated_and_paginated() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let client = GitHubClient::new()?;
-        let token = ProviderToken::new("github_pat_test".to_owned());
-        let request = client.repositories_request(&token, 2).build()?;
-
-        assert_eq!(request.method(), reqwest::Method::GET);
-        assert_eq!(request.url().path(), "/user/repos");
-        assert_eq!(request.url().query(), Some("per_page=100&page=2"));
-        assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
-        Ok(())
-    }
-
-    #[test]
-    fn github_repository_maps_to_provider_independent_domain()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let repository: GitHubRepository = serde_json::from_str(
-            r#"{"id":1296269,"owner":{"login":"octocat"},"name":"Hello-World","description":"A sample","private":false,"html_url":"https://github.com/octocat/Hello-World"}"#,
-        )?;
-
-        let mapped = Repository::from(repository);
-        assert_eq!(mapped.id, "1296269");
-        assert_eq!(mapped.owner, "octocat");
-        assert_eq!(mapped.visibility, RepositoryVisibility::Public);
-        Ok(())
-    }
-
-    #[test]
-    fn workflow_request_targets_selected_repository_with_required_headers()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let client = GitHubClient::new()?;
-        let token = ProviderToken::new("github_pat_test".to_owned());
-        let repository = Repository {
-            id: "1296269".to_owned(),
-            owner: "octocat".to_owned(),
-            name: "Hello-World".to_owned(),
-            description: None,
-            visibility: RepositoryVisibility::Public,
-            web_url: "https://github.com/octocat/Hello-World".to_owned(),
-        };
-        let request = client.workflows_request(&token, &repository, 2).build()?;
-
-        assert_eq!(
-            request.url().path(),
-            "/repos/octocat/Hello-World/actions/workflows"
-        );
-        assert_eq!(request.url().query(), Some("per_page=100&page=2"));
-        assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
-        Ok(())
-    }
-
-    #[test]
-    fn github_workflow_maps_to_provider_independent_domain()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let workflow: GitHubWorkflow = serde_json::from_str(
-            r#"{"id":161335,"name":"CI","path":".github/workflows/ci.yml","state":"active","html_url":"https://github.com/octocat/Hello-World/actions/workflows/ci.yml"}"#,
-        )?;
-
-        let mapped = Workflow::from(workflow);
-        assert_eq!(mapped.id, "161335");
-        assert_eq!(mapped.name, "CI");
-        assert_eq!(mapped.state, WorkflowState::Active);
-        Ok(())
-    }
-}
+mod tests;

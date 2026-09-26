@@ -5,6 +5,7 @@ import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { groupWorkflows, ProjectGroup } from "../../components/ProjectGroup.tsx";
 import type { ListWorkflowsResponse } from "../../generated/contracts.ts";
+import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
 import "./OverviewPage.css";
 
 export function OverviewPage() {
@@ -31,15 +32,45 @@ export function OverviewPage() {
 
   const workflows = inventory?.workflows ?? [];
   const projects = groupWorkflows(workflows);
-  const active = workflows.filter((workflow) => workflow.state === "active").length;
-  const disabled = workflows.length - active;
+  const latestRuns = workflows.flatMap((workflow) => workflow.runs.slice(0, 1));
+  const running = latestRuns.filter(
+    (run) => run.lifecycle === "queued" || run.lifecycle === "running",
+  ).length;
+  const failing = latestRuns.filter(
+    (run) => run.lifecycle === "completed" && run.outcome === "failure",
+  ).length;
   const heading = error
-    ? "Unable to discover workflows"
-    : workflows.length > 0
-      ? `${active} active workflow${active === 1 ? "" : "s"} discovered`
-      : (inventory?.selectedRepositoryCount ?? 0) > 0
-        ? "No workflows discovered"
-        : "Select repositories to begin";
+    ? "Unable to load workflow activity"
+    : inventory?.stale
+      ? "Showing cached workflow activity"
+      : failing > 0
+        ? `${failing} workflow${failing === 1 ? " is" : "s are"} failing`
+        : running > 0
+          ? `${running} workflow${running === 1 ? " is" : "s are"} in progress`
+          : latestRuns.length > 0
+            ? "Latest workflow runs are healthy"
+            : workflows.length > 0
+              ? "Workflows are ready for their first run"
+              : (inventory?.selectedRepositoryCount ?? 0) > 0
+                ? "No workflows discovered"
+                : "Select repositories to begin";
+  const statusTone = error || failing > 0
+    ? "failing"
+    : running > 0
+      ? "running"
+      : workflows.length > 0
+        ? "passing"
+        : "idle";
+  const statusIcon = statusTone === "failing"
+    ? "!"
+    : statusTone === "running"
+      ? "↻"
+      : statusTone === "passing"
+        ? "✓"
+        : "·";
+  const updated = inventory?.lastSuccessfulAt
+    ? `Last synchronized ${formatRelativeUnix(inventory.lastSuccessfulAt)}`
+    : "No run activity synchronized yet";
 
   return (
     <section className="page-view" aria-labelledby="overview-title">
@@ -63,10 +94,10 @@ export function OverviewPage() {
       <section className="health-summary" aria-labelledby="health-heading" aria-busy={loading}>
         <div className="health-heading">
           <span
-            className={`health-icon ${error ? "health-icon-failing" : workflows.length > 0 ? "health-icon-passing" : "health-icon-idle"}`}
+            className={`health-icon health-icon-${statusTone}`}
             aria-hidden="true"
           >
-            {error ? "!" : workflows.length > 0 ? "✓" : "·"}
+            {statusIcon}
           </span>
           <div>
             <p className="section-label">Workflow inventory</p>
@@ -75,17 +106,24 @@ export function OverviewPage() {
               {error
                 ? "Check that the application service is running"
                 : inventory
-                  ? `Updated just now · ${inventory.selectedRepositoryCount} selected repositor${inventory.selectedRepositoryCount === 1 ? "y" : "ies"}`
+                  ? `${updated} · ${inventory.selectedRepositoryCount} selected repositor${inventory.selectedRepositoryCount === 1 ? "y" : "ies"}`
                   : "Waiting for the application core"}
             </p>
           </div>
         </div>
         <dl className="health-stats">
-          <div><dt>Total</dt><dd>{error ? "—" : workflows.length}</dd></div>
-          <div><dt>Active</dt><dd>{error ? "—" : active}</dd></div>
-          <div><dt>Disabled</dt><dd>{error ? "—" : disabled}</dd></div>
+          <div><dt>Workflows</dt><dd>{error ? "—" : workflows.length}</dd></div>
+          <div><dt>Running</dt><dd>{error ? "—" : running}</dd></div>
+          <div><dt>Failing</dt><dd>{error ? "—" : failing}</dd></div>
         </dl>
       </section>
+
+      {inventory?.stale ? (
+        <div className="sync-warning" role="status">
+          <strong>Live refresh failed.</strong> Cached workflow activity is still available.
+          {inventory.syncError ? ` ${inventory.syncError}` : ""}
+        </div>
+      ) : null}
 
       <div className="overview-content">
         <section className="panel workflows-panel" aria-labelledby="workflows-heading">

@@ -1,8 +1,78 @@
 use super::SqliteDatabase;
-use crate::application::PersistenceFailure;
-use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowState};
-use crate::source_data::{RepositorySnapshot, SourceDataCache, WorkflowSnapshot};
+use crate::application::{ConnectionValidationFailure, PersistenceFailure};
+use crate::domain::{
+    Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
+    WorkflowState,
+};
+use crate::source_data::{
+    RepositorySnapshot, SourceDataCache, WorkflowRunSnapshot, WorkflowSnapshot,
+};
 use rusqlite::{OptionalExtension, params};
+
+fn validation_failure_name(failure: ConnectionValidationFailure) -> &'static str {
+    match failure {
+        ConnectionValidationFailure::InvalidCredentials => "invalid_credentials",
+        ConnectionValidationFailure::PermissionDenied => "permission_denied",
+        ConnectionValidationFailure::RateLimited => "rate_limited",
+        ConnectionValidationFailure::ProviderUnavailable => "provider_unavailable",
+        ConnectionValidationFailure::UnexpectedResponse => "unexpected_response",
+    }
+}
+
+fn parse_validation_failure(
+    value: &str,
+) -> Result<ConnectionValidationFailure, PersistenceFailure> {
+    match value {
+        "invalid_credentials" => Ok(ConnectionValidationFailure::InvalidCredentials),
+        "permission_denied" => Ok(ConnectionValidationFailure::PermissionDenied),
+        "rate_limited" => Ok(ConnectionValidationFailure::RateLimited),
+        "provider_unavailable" => Ok(ConnectionValidationFailure::ProviderUnavailable),
+        "unexpected_response" => Ok(ConnectionValidationFailure::UnexpectedResponse),
+        _ => Err(PersistenceFailure),
+    }
+}
+
+fn lifecycle_name(lifecycle: RunLifecycle) -> &'static str {
+    match lifecycle {
+        RunLifecycle::Queued => "queued",
+        RunLifecycle::Running => "running",
+        RunLifecycle::Completed => "completed",
+        RunLifecycle::Unknown => "unknown",
+    }
+}
+
+fn parse_lifecycle(value: &str) -> Result<RunLifecycle, rusqlite::Error> {
+    match value {
+        "queued" => Ok(RunLifecycle::Queued),
+        "running" => Ok(RunLifecycle::Running),
+        "completed" => Ok(RunLifecycle::Completed),
+        "unknown" => Ok(RunLifecycle::Unknown),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn outcome_name(outcome: RunOutcome) -> &'static str {
+    match outcome {
+        RunOutcome::Success => "success",
+        RunOutcome::Warning => "warning",
+        RunOutcome::Failure => "failure",
+        RunOutcome::Cancelled => "cancelled",
+        RunOutcome::Skipped => "skipped",
+        RunOutcome::Unknown => "unknown",
+    }
+}
+
+fn parse_outcome(value: &str) -> Result<RunOutcome, rusqlite::Error> {
+    match value {
+        "success" => Ok(RunOutcome::Success),
+        "warning" => Ok(RunOutcome::Warning),
+        "failure" => Ok(RunOutcome::Failure),
+        "cancelled" => Ok(RunOutcome::Cancelled),
+        "skipped" => Ok(RunOutcome::Skipped),
+        "unknown" => Ok(RunOutcome::Unknown),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
 
 impl SourceDataCache for SqliteDatabase {
     fn repositories(
@@ -84,6 +154,19 @@ impl SourceDataCache for SqliteDatabase {
         transaction
             .execute(
                 "DELETE FROM workflow_cache_sync WHERE source_id = ?1 AND account_id <> ?2",
+                params![source_id, account_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM workflow_runs WHERE source_id = ?1 AND account_id <> ?2",
+                params![source_id, account_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM workflow_run_cache_sync
+                 WHERE source_id = ?1 AND account_id <> ?2",
                 params![source_id, account_id],
             )
             .map_err(|_| PersistenceFailure)?;
@@ -231,6 +314,173 @@ impl SourceDataCache for SqliteDatabase {
             .map_err(|_| PersistenceFailure)?;
         transaction.commit().map_err(|_| PersistenceFailure)
     }
+
+    fn workflow_runs(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<WorkflowRunSnapshot>, PersistenceFailure> {
+        let database = self.lock()?;
+        let sync = database
+            .query_row(
+                "SELECT last_attempted_at, last_successful_at, last_error
+                 FROM workflow_run_cache_sync
+                 WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3",
+                params![source_id, account_id, repository_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)?;
+        let Some((last_attempted_at, last_successful_at, last_error)) = sync else {
+            return Ok(None);
+        };
+        let mut statement = database
+            .prepare(
+                "SELECT run_id, workflow_id, run_number, attempt, title, lifecycle, outcome,
+                        branch, commit_sha, actor, trigger, created_at, started_at, updated_at,
+                        web_url, provider_status, provider_conclusion
+                 FROM workflow_runs
+                 WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3
+                 ORDER BY created_at DESC, run_number DESC, attempt DESC",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map(params![source_id, account_id, repository_id], |row| {
+                let run_number = u64::try_from(row.get::<_, i64>(2)?)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+                let attempt = u64::try_from(row.get::<_, i64>(3)?)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+                Ok(WorkflowRun {
+                    id: row.get(0)?,
+                    workflow_id: row.get(1)?,
+                    run_number,
+                    attempt,
+                    title: row.get(4)?,
+                    lifecycle: parse_lifecycle(&row.get::<_, String>(5)?)?,
+                    outcome: parse_outcome(&row.get::<_, String>(6)?)?,
+                    branch: row.get(7)?,
+                    commit_sha: row.get(8)?,
+                    actor: row.get(9)?,
+                    trigger: row.get(10)?,
+                    created_at: row.get(11)?,
+                    started_at: row.get(12)?,
+                    updated_at: row.get(13)?,
+                    web_url: row.get(14)?,
+                    provider_status: row.get(15)?,
+                    provider_conclusion: row.get(16)?,
+                })
+            })
+            .map_err(|_| PersistenceFailure)?;
+        let runs = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| PersistenceFailure)?;
+        Ok(Some(WorkflowRunSnapshot {
+            last_attempted_at: last_attempted_at
+                .try_into()
+                .map_err(|_| PersistenceFailure)?,
+            last_successful_at: last_successful_at
+                .map(u64::try_from)
+                .transpose()
+                .map_err(|_| PersistenceFailure)?,
+            last_error: last_error
+                .as_deref()
+                .map(parse_validation_failure)
+                .transpose()?,
+            runs,
+        }))
+    }
+
+    fn replace_workflow_runs(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        snapshot: &WorkflowRunSnapshot,
+    ) -> Result<(), PersistenceFailure> {
+        let last_attempted_at =
+            i64::try_from(snapshot.last_attempted_at).map_err(|_| PersistenceFailure)?;
+        let last_successful_at = snapshot
+            .last_successful_at
+            .map(i64::try_from)
+            .transpose()
+            .map_err(|_| PersistenceFailure)?;
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM workflow_runs
+                 WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3",
+                params![source_id, account_id, repository_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        for run in &snapshot.runs {
+            let run_number = i64::try_from(run.run_number).map_err(|_| PersistenceFailure)?;
+            let attempt = i64::try_from(run.attempt).map_err(|_| PersistenceFailure)?;
+            transaction
+                .execute(
+                    "INSERT INTO workflow_runs (
+                       source_id, account_id, repository_id, run_id, workflow_id, run_number,
+                       attempt, title, lifecycle, outcome, branch, commit_sha, actor, trigger,
+                       created_at, started_at, updated_at, web_url, provider_status,
+                       provider_conclusion
+                     ) VALUES (
+                       ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                       ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
+                     )",
+                    params![
+                        source_id,
+                        account_id,
+                        repository_id,
+                        run.id,
+                        run.workflow_id,
+                        run_number,
+                        attempt,
+                        run.title,
+                        lifecycle_name(run.lifecycle),
+                        outcome_name(run.outcome),
+                        run.branch,
+                        run.commit_sha,
+                        run.actor,
+                        run.trigger,
+                        run.created_at,
+                        run.started_at,
+                        run.updated_at,
+                        run.web_url,
+                        run.provider_status,
+                        run.provider_conclusion,
+                    ],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
+        transaction
+            .execute(
+                "INSERT INTO workflow_run_cache_sync (
+                   source_id, account_id, repository_id, last_attempted_at,
+                   last_successful_at, last_error
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(source_id, account_id, repository_id) DO UPDATE SET
+                   last_attempted_at = excluded.last_attempted_at,
+                   last_successful_at = excluded.last_successful_at,
+                   last_error = excluded.last_error",
+                params![
+                    source_id,
+                    account_id,
+                    repository_id,
+                    last_attempted_at,
+                    last_successful_at,
+                    snapshot.last_error.map(validation_failure_name),
+                ],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
 }
 
 #[cfg(test)]
@@ -273,12 +523,37 @@ mod tests {
             refreshed_at: 124,
             workflows: Vec::new(),
         };
+        let runs = WorkflowRunSnapshot {
+            last_attempted_at: 125,
+            last_successful_at: Some(125),
+            last_error: None,
+            runs: vec![WorkflowRun {
+                id: "run-1".to_owned(),
+                workflow_id: "workflow-1".to_owned(),
+                run_number: 7,
+                attempt: 2,
+                title: "Build main".to_owned(),
+                lifecycle: RunLifecycle::Completed,
+                outcome: RunOutcome::Success,
+                branch: Some("main".to_owned()),
+                commit_sha: "abcdef123456".to_owned(),
+                actor: Some("octocat".to_owned()),
+                trigger: "push".to_owned(),
+                created_at: "2026-09-26T18:00:00Z".to_owned(),
+                started_at: Some("2026-09-26T18:00:02Z".to_owned()),
+                updated_at: "2026-09-26T18:03:00Z".to_owned(),
+                web_url: "https://example.com/runs/1".to_owned(),
+                provider_status: "completed".to_owned(),
+                provider_conclusion: Some("success".to_owned()),
+            }],
+        };
 
         {
             let database = SqliteDatabase::open(&database_path)?;
             database.save(&test_connection())?;
             database.replace_repositories("example", "42", &repositories)?;
             database.replace_workflows("example", "42", "repository-1", &workflows)?;
+            database.replace_workflow_runs("example", "42", "repository-1", &runs)?;
         }
 
         let database = SqliteDatabase::open(&database_path)?;
@@ -292,11 +567,20 @@ mod tests {
             database.workflows("example", "42", "repository-1")?,
             Some(workflows)
         );
+        assert_eq!(
+            database.workflow_runs("example", "42", "repository-1")?,
+            Some(runs)
+        );
         database.delete("example")?;
         assert!(database.repositories("example", "42")?.is_none());
         assert!(
             database
                 .workflows("example", "42", "repository-1")?
+                .is_none()
+        );
+        assert!(
+            database
+                .workflow_runs("example", "42", "repository-1")?
                 .is_none()
         );
         Ok(())

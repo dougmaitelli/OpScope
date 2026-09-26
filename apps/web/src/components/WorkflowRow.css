@@ -1,12 +1,7 @@
 .workflow-row {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 54px;
-  padding: 6px 2px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #252d38;
+  background: #10151c;
 }
 
 .workflow-row:last-child {
@@ -15,11 +10,25 @@
 
 .workflow-row::before {
   position: absolute;
-  top: 50%;
+  top: 25px;
   left: -11px;
-  width: 11px;
-  border-top: 1px solid #303948;
+  width: 10px;
+  height: 1px;
+  background: #303948;
   content: "";
+}
+
+.workflow-row-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 8px 10px;
+  gap: 14px;
+}
+
+.workflow-row:hover {
+  background: #131a23;
 }
 
 .workflow-identity {
@@ -32,67 +41,127 @@
 .workflow-mark {
   display: grid;
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
   place-items: center;
-  border: 1px solid #343d4a;
-  border-radius: 4px;
-  color: var(--muted);
-  background: #171c24;
+  border: 1px solid #384352;
+  border-radius: 3px;
+  color: #a5b1c2;
+  background: #202733;
   font-size: 8px;
   font-weight: 750;
 }
 
-.workflow-row h4 {
+.workflow-copy {
+  min-width: 0;
+}
+
+.workflow-identity h4 {
   overflow: hidden;
-  margin-bottom: 2px;
-  color: var(--text);
-  font-size: 12px;
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 680;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.workflow-link {
-  color: inherit;
+.workflow-link,
+.latest-run a,
+.run-history-row a {
+  color: var(--text);
   text-decoration: none;
 }
 
-.workflow-link:hover {
+.workflow-link:hover,
+.latest-run a:hover,
+.run-history-row a:hover {
   color: var(--accent-strong);
   text-decoration: underline;
 }
 
-.workflow-row p {
-  margin-bottom: 0;
+.workflow-identity p {
+  overflow: hidden;
+  margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.workflow-state {
-  display: inline-flex;
+.latest-run {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  min-width: 0;
+  gap: 7px;
+}
+
+.latest-run a {
+  overflow: hidden;
+  color: #aeb9c8;
+  text-overflow: ellipsis;
+}
+
+.latest-run span,
+.run-history-row span {
+  color: var(--subtle);
+  white-space: nowrap;
+}
+
+.run-history {
+  border-top: 1px solid #252d38;
+  background: #0d1218;
+}
+
+.run-history > summary {
+  padding: 6px 10px 6px 44px;
   color: var(--muted);
-  font-size: 10px;
+  cursor: pointer;
+  font-size: 9px;
   font-weight: 650;
 }
 
-.workflow-state::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--subtle);
-  content: "";
+.run-history > summary:hover {
+  color: var(--text);
 }
 
-.workflow-state-active {
-  color: var(--success);
+.run-history-list {
+  padding: 0 10px 5px 44px;
 }
 
-.workflow-state-active::before {
-  background: var(--success);
+.run-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 5px 0;
+  border-top: 1px solid #202731;
+  gap: 12px;
+  font-size: 9px;
 }
 
-.workflow-state-disabled {
-  color: var(--muted);
+.run-history-row > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.run-history-row a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 580px) {
+  .workflow-row-summary {
+    align-items: flex-start;
+  }
+
+  .latest-run span {
+    display: none;
+  }
+
+  .run-history-list,
+  .run-history > summary {
+    padding-left: 10px;
+  }
 }

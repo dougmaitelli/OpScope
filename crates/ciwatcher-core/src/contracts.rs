@@ -6,12 +6,14 @@ use crate::application::{
     SourceRepositorySelection, SourceState, ValidatedAccount, WorkflowInventory,
 };
 use crate::domain::{
-    RepositoryVisibility as DomainRepositoryVisibility, WorkflowState as DomainWorkflowState,
+    RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
+    RunOutcome as DomainRunOutcome, WorkflowRun as DomainWorkflowRun,
+    WorkflowState as DomainWorkflowState,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 4;
+pub const CONTRACT_VERSION: u8 = 5;
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
@@ -265,6 +267,92 @@ pub enum WorkflowState {
     Disabled,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum RunLifecycle {
+    Queued,
+    Running,
+    Completed,
+    Unknown,
+}
+
+impl From<DomainRunLifecycle> for RunLifecycle {
+    fn from(lifecycle: DomainRunLifecycle) -> Self {
+        match lifecycle {
+            DomainRunLifecycle::Queued => Self::Queued,
+            DomainRunLifecycle::Running => Self::Running,
+            DomainRunLifecycle::Completed => Self::Completed,
+            DomainRunLifecycle::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum RunOutcome {
+    Success,
+    Warning,
+    Failure,
+    Cancelled,
+    Skipped,
+    Unknown,
+}
+
+impl From<DomainRunOutcome> for RunOutcome {
+    fn from(outcome: DomainRunOutcome) -> Self {
+        match outcome {
+            DomainRunOutcome::Success => Self::Success,
+            DomainRunOutcome::Warning => Self::Warning,
+            DomainRunOutcome::Failure => Self::Failure,
+            DomainRunOutcome::Cancelled => Self::Cancelled,
+            DomainRunOutcome::Skipped => Self::Skipped,
+            DomainRunOutcome::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunSummary {
+    pub id: String,
+    #[ts(type = "number")]
+    pub run_number: u64,
+    #[ts(type = "number")]
+    pub attempt: u64,
+    pub title: String,
+    pub lifecycle: RunLifecycle,
+    pub outcome: RunOutcome,
+    pub branch: Option<String>,
+    pub commit_sha: String,
+    pub actor: Option<String>,
+    pub trigger: String,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub updated_at: String,
+    pub web_url: String,
+}
+
+impl From<DomainWorkflowRun> for WorkflowRunSummary {
+    fn from(run: DomainWorkflowRun) -> Self {
+        Self {
+            id: run.id,
+            run_number: run.run_number,
+            attempt: run.attempt,
+            title: run.title,
+            lifecycle: run.lifecycle.into(),
+            outcome: run.outcome.into(),
+            branch: run.branch,
+            commit_sha: run.commit_sha,
+            actor: run.actor,
+            trigger: run.trigger,
+            created_at: run.created_at,
+            started_at: run.started_at,
+            updated_at: run.updated_at,
+            web_url: run.web_url,
+        }
+    }
+}
+
 impl From<DomainWorkflowState> for WorkflowState {
     fn from(state: DomainWorkflowState) -> Self {
         match state {
@@ -288,6 +376,7 @@ pub struct WorkflowSummary {
     pub repository_id: String,
     pub repository_owner: String,
     pub repository_name: String,
+    pub runs: Vec<WorkflowRunSummary>,
 }
 
 impl From<DiscoveredWorkflow> for WorkflowSummary {
@@ -304,6 +393,11 @@ impl From<DiscoveredWorkflow> for WorkflowSummary {
             repository_id: discovered.repository.id,
             repository_owner: discovered.repository.owner,
             repository_name: discovered.repository.name,
+            runs: discovered
+                .runs
+                .into_iter()
+                .map(WorkflowRunSummary::from)
+                .collect(),
         }
     }
 }
@@ -313,6 +407,12 @@ impl From<DiscoveredWorkflow> for WorkflowSummary {
 pub struct ListWorkflowsResponse {
     pub selected_repository_count: usize,
     pub workflows: Vec<WorkflowSummary>,
+    #[ts(type = "number | null")]
+    pub last_attempted_at: Option<u64>,
+    #[ts(type = "number | null")]
+    pub last_successful_at: Option<u64>,
+    pub stale: bool,
+    pub sync_error: Option<String>,
 }
 
 impl ListWorkflowsResponse {
@@ -320,6 +420,10 @@ impl ListWorkflowsResponse {
     pub fn from_domain(inventory: WorkflowInventory) -> Self {
         Self {
             selected_repository_count: inventory.selected_repository_count,
+            last_attempted_at: inventory.last_attempted_at,
+            last_successful_at: inventory.last_successful_at,
+            stale: inventory.stale,
+            sync_error: inventory.sync_error.map(|failure| failure.to_string()),
             workflows: inventory
                 .workflows
                 .into_iter()
@@ -465,6 +569,9 @@ pub fn render_typescript_contract() -> String {
         RepositorySourceSummary::decl(&config),
         ListRepositoriesResponse::decl(&config),
         WorkflowState::decl(&config),
+        RunLifecycle::decl(&config),
+        RunOutcome::decl(&config),
+        WorkflowRunSummary::decl(&config),
         WorkflowSummary::decl(&config),
         ListWorkflowsResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),
@@ -512,6 +619,7 @@ mod tests {
                 state: DomainWorkflowState::Active,
                 web_url: "https://example.com/owner/project/workflows/build".to_owned(),
             },
+            runs: Vec::new(),
         });
 
         assert_eq!(response.source_id, "source");

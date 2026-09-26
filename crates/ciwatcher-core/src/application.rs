@@ -1,6 +1,6 @@
 //! Application use cases and the ports they require.
 
-use crate::domain::{Repository, Workflow};
+use crate::domain::{Repository, Workflow, WorkflowRun};
 use crate::source_data::{SourceData, SourceDataFailure};
 use async_trait::async_trait;
 use std::collections::HashSet;
@@ -8,6 +8,12 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use zeroize::Zeroize;
+
+/// Default number of recent activities returned for each workflow.
+///
+/// This is the single application-level default until workspace settings make
+/// the value configurable.
+pub const RECENT_RUNS_PER_WORKFLOW: usize = 10;
 
 /// A provider credential whose contents are cleared when it leaves scope.
 ///
@@ -99,6 +105,12 @@ pub trait SourceModule: Send + Sync {
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<Workflow>, ConnectionValidationFailure>;
+
+    async fn list_workflow_runs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure>;
 }
 
 #[derive(Clone)]
@@ -510,12 +522,17 @@ pub struct DiscoveredWorkflow {
     pub source: SourceDescriptor,
     pub repository: Repository,
     pub workflow: Workflow,
+    pub runs: Vec<WorkflowRun>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkflowInventory {
     pub selected_repository_count: usize,
     pub workflows: Vec<DiscoveredWorkflow>,
+    pub last_attempted_at: Option<u64>,
+    pub last_successful_at: Option<u64>,
+    pub stale: bool,
+    pub sync_error: Option<ConnectionValidationFailure>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -562,6 +579,10 @@ impl ListWorkflows {
             .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?;
         let selected_repository_count = selections.len();
         let mut workflows = Vec::new();
+        let mut last_attempted_at = None;
+        let mut last_successful_at = None;
+        let mut stale = false;
+        let mut sync_error = None;
 
         for source in self.source_data.sources() {
             let selected_ids = selections
@@ -589,11 +610,37 @@ impl ListWorkflows {
                     .workflows(&source.id, &repository)
                     .await
                     .map_err(list_workflows_failure)?;
+                let repository_runs = self
+                    .source_data
+                    .workflow_runs(&source.id, &repository)
+                    .await
+                    .map_err(list_workflows_failure)?;
+                last_attempted_at = Some(
+                    last_attempted_at.map_or(repository_runs.last_attempted_at, |current: u64| {
+                        current.max(repository_runs.last_attempted_at)
+                    }),
+                );
+                last_successful_at = Some(
+                    last_successful_at
+                        .map_or(repository_runs.last_successful_at, |current: u64| {
+                            current.min(repository_runs.last_successful_at)
+                        }),
+                );
+                stale |= repository_runs.stale;
+                sync_error = sync_error.or(repository_runs.error);
                 workflows.extend(repository_workflows.into_iter().map(|workflow| {
+                    let runs = repository_runs
+                        .runs
+                        .iter()
+                        .filter(|run| run.workflow_id == workflow.id)
+                        .take(RECENT_RUNS_PER_WORKFLOW)
+                        .cloned()
+                        .collect();
                     DiscoveredWorkflow {
                         source: source.clone(),
                         repository: repository.clone(),
                         workflow,
+                        runs,
                     }
                 }));
             }
@@ -602,6 +649,10 @@ impl ListWorkflows {
         Ok(WorkflowInventory {
             selected_repository_count,
             workflows,
+            last_attempted_at,
+            last_successful_at,
+            stale,
+            sync_error,
         })
     }
 }

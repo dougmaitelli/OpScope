@@ -1,0 +1,53 @@
+.run-state-block {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.run-state {
+  padding: 3px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #181f29;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.run-state-block time {
+  color: var(--subtle);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.run-state-success {
+  border-color: #2e7551;
+  color: var(--success);
+  background: #122a20;
+}
+
+.run-state-warning,
+.run-state-running,
+.run-state-queued {
+  border-color: #7b6232;
+  color: var(--warning);
+  background: #2d2516;
+}
+
+.run-state-failure,
+.run-state-cancelled {
+  border-color: #7c3e43;
+  color: var(--danger);
+  background: #30191d;
+}
+
+.run-state-skipped,
+.run-state-unknown,
+.run-state-idle {
+  color: var(--muted);
+}

@@ -3,14 +3,16 @@ use crate::application::{
     CredentialField, ProviderToken, SecretReference, SourceModule, StoredConnection,
     ValidatedAccount,
 };
-use crate::domain::{RepositoryVisibility, WorkflowState};
+use crate::domain::{RepositoryVisibility, RunLifecycle, RunOutcome, WorkflowRun, WorkflowState};
 use crate::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[derive(Clone)]
 struct CountingSourceModule {
     repository_requests: Arc<AtomicUsize>,
     workflow_requests: Arc<AtomicUsize>,
+    workflow_run_requests: Arc<AtomicUsize>,
+    fail_workflow_runs: Arc<AtomicBool>,
 }
 
 #[async_trait]
@@ -58,6 +60,41 @@ impl SourceModule for CountingSourceModule {
             web_url: "https://example.com/workflows/1".to_owned(),
         }])
     }
+
+    async fn list_workflow_runs(
+        &self,
+        _token: &ProviderToken,
+        _repository: &Repository,
+    ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
+        self.workflow_run_requests.fetch_add(1, Ordering::SeqCst);
+        if self.fail_workflow_runs.load(Ordering::SeqCst) {
+            Err(ConnectionValidationFailure::ProviderUnavailable)
+        } else {
+            Ok(vec![test_run()])
+        }
+    }
+}
+
+fn test_run() -> WorkflowRun {
+    WorkflowRun {
+        id: "run-1".to_owned(),
+        workflow_id: "workflow-1".to_owned(),
+        run_number: 12,
+        attempt: 1,
+        title: "Build main".to_owned(),
+        lifecycle: RunLifecycle::Completed,
+        outcome: RunOutcome::Success,
+        branch: Some("main".to_owned()),
+        commit_sha: "abcdef123456".to_owned(),
+        actor: Some("octocat".to_owned()),
+        trigger: "push".to_owned(),
+        created_at: "2026-09-26T18:00:00Z".to_owned(),
+        started_at: Some("2026-09-26T18:00:02Z".to_owned()),
+        updated_at: "2026-09-26T18:03:00Z".to_owned(),
+        web_url: "https://example.com/runs/1".to_owned(),
+        provider_status: "completed".to_owned(),
+        provider_conclusion: Some("success".to_owned()),
+    }
 }
 
 fn test_repository() -> Repository {
@@ -77,14 +114,20 @@ struct TestDependencies {
     secrets: EncryptedSecretStore,
     repository_requests: Arc<AtomicUsize>,
     workflow_requests: Arc<AtomicUsize>,
+    workflow_run_requests: Arc<AtomicUsize>,
+    fail_workflow_runs: Arc<AtomicBool>,
 }
 
 fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
     let repository_requests = Arc::new(AtomicUsize::new(0));
     let workflow_requests = Arc::new(AtomicUsize::new(0));
+    let workflow_run_requests = Arc::new(AtomicUsize::new(0));
+    let fail_workflow_runs = Arc::new(AtomicBool::new(false));
     let registry = SourceRegistry::new(vec![Arc::new(CountingSourceModule {
         repository_requests: repository_requests.clone(),
         workflow_requests: workflow_requests.clone(),
+        workflow_run_requests: workflow_run_requests.clone(),
+        fail_workflow_runs: fail_workflow_runs.clone(),
     })]);
     let database = SqliteDatabase::in_memory()?;
     let reference = SecretReference::for_source("example", "42");
@@ -106,6 +149,8 @@ fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
         secrets,
         repository_requests,
         workflow_requests,
+        workflow_run_requests,
+        fail_workflow_runs,
     })
 }
 
@@ -118,7 +163,7 @@ async fn cached_source_data_hides_cache_hits_from_its_caller()
         Arc::new(dependencies.database.clone()),
         Arc::new(dependencies.secrets),
         Arc::new(dependencies.database),
-        Duration::MAX,
+        SourceDataCachePolicy::uniform(Duration::MAX),
     );
 
     let first_repositories = source_data
@@ -137,6 +182,46 @@ async fn cached_source_data_hides_cache_hits_from_its_caller()
     let second_workflows = source_data.workflows("example", repository).await?;
     assert_eq!(first_workflows, second_workflows);
     assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 1);
+
+    let first_runs = source_data.workflow_runs("example", repository).await?;
+    let second_runs = source_data.workflow_runs("example", repository).await?;
+    assert_eq!(first_runs.runs, second_runs.runs);
+    assert!(!second_runs.stale);
+    assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn cache_policy_applies_a_separate_ttl_to_each_resource_kind()
+-> Result<(), Box<dyn std::error::Error>> {
+    let dependencies = dependencies()?;
+    let source_data = ReadThroughSourceData::cached(
+        dependencies.registry,
+        Arc::new(dependencies.database.clone()),
+        Arc::new(dependencies.secrets),
+        Arc::new(dependencies.database),
+        SourceDataCachePolicy {
+            repositories: Duration::MAX,
+            workflows: Duration::ZERO,
+            workflow_runs: Duration::ZERO,
+        },
+    );
+
+    let repositories = source_data
+        .repositories("example")
+        .await?
+        .expect("connected source");
+    source_data.repositories("example").await?;
+    assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 1);
+
+    let repository = &repositories[0];
+    source_data.workflows("example", repository).await?;
+    source_data.workflows("example", repository).await?;
+    assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 2);
+
+    source_data.workflow_runs("example", repository).await?;
+    source_data.workflow_runs("example", repository).await?;
+    assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 2);
     Ok(())
 }
 
@@ -163,11 +248,40 @@ async fn zero_max_age_refreshes_provider_data() -> Result<(), Box<dyn std::error
         Arc::new(dependencies.database.clone()),
         Arc::new(dependencies.secrets),
         Arc::new(dependencies.database),
-        Duration::ZERO,
+        SourceDataCachePolicy::uniform(Duration::ZERO),
     );
 
     source_data.repositories("example").await?;
     source_data.repositories("example").await?;
     assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_failure_returns_the_last_successful_run_snapshot()
+-> Result<(), Box<dyn std::error::Error>> {
+    let dependencies = dependencies()?;
+    let source_data = ReadThroughSourceData::cached(
+        dependencies.registry,
+        Arc::new(dependencies.database.clone()),
+        Arc::new(dependencies.secrets),
+        Arc::new(dependencies.database),
+        SourceDataCachePolicy::uniform(Duration::ZERO),
+    );
+    let repository = test_repository();
+
+    let fresh = source_data.workflow_runs("example", &repository).await?;
+    dependencies
+        .fail_workflow_runs
+        .store(true, Ordering::SeqCst);
+    let stale = source_data.workflow_runs("example", &repository).await?;
+
+    assert_eq!(stale.runs, fresh.runs);
+    assert!(stale.stale);
+    assert_eq!(
+        stale.error,
+        Some(ConnectionValidationFailure::ProviderUnavailable)
+    );
+    assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 2);
     Ok(())
 }

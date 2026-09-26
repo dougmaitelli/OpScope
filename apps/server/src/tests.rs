@@ -11,7 +11,10 @@ use ciwatcher_core::contracts::{
     ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
     SOURCES_HTTP_PATH, WORKFLOWS_HTTP_PATH,
 };
-use ciwatcher_core::domain::{Repository, RepositoryVisibility, Workflow, WorkflowState};
+use ciwatcher_core::domain::{
+    Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
+    WorkflowState,
+};
 use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use http_body_util::BodyExt;
 use std::sync::Arc;
@@ -78,6 +81,34 @@ impl SourceModule for TestSourceModule {
             state: WorkflowState::Active,
             web_url: "https://example.com/example-user/example-project/actions/workflows/build.yml"
                 .to_owned(),
+        }])
+    }
+
+    async fn list_workflow_runs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        Ok(vec![WorkflowRun {
+            id: "run-1".to_owned(),
+            workflow_id: "workflow-1".to_owned(),
+            run_number: 12,
+            attempt: 1,
+            title: "Build main".to_owned(),
+            lifecycle: RunLifecycle::Completed,
+            outcome: RunOutcome::Success,
+            branch: Some("main".to_owned()),
+            commit_sha: "abcdef123456".to_owned(),
+            actor: Some("example-user".to_owned()),
+            trigger: "push".to_owned(),
+            created_at: "2026-09-26T18:00:00Z".to_owned(),
+            started_at: Some("2026-09-26T18:00:02Z".to_owned()),
+            updated_at: "2026-09-26T18:03:00Z".to_owned(),
+            web_url: "https://example.com/runs/1".to_owned(),
+            provider_status: "completed".to_owned(),
+            provider_conclusion: Some("success".to_owned()),
         }])
     }
 }
@@ -204,6 +235,11 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.workflows.len(), 1);
     assert_eq!(decoded.workflows[0].name, "Build");
     assert_eq!(decoded.workflows[0].repository_name, "example-project");
+    assert_eq!(decoded.workflows[0].runs.len(), 1);
+    assert_eq!(
+        decoded.workflows[0].runs[0].outcome,
+        ciwatcher_core::contracts::RunOutcome::Success
+    );
 
     let disconnected = app
         .clone()

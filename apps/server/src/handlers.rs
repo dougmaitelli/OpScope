@@ -13,9 +13,7 @@ use ciwatcher_core::contracts::{
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
 };
-use ciwatcher_core::source_data::{
-    DEFAULT_SOURCE_DATA_MAX_AGE, ReadThroughSourceData, SourceDataCache,
-};
+use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -41,7 +39,7 @@ impl AppState {
             connections.clone(),
             secrets.clone(),
             source_data_cache,
-            DEFAULT_SOURCE_DATA_MAX_AGE,
+            SourceDataCachePolicy::default(),
         ));
         Self {
             list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),

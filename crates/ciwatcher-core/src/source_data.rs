@@ -4,14 +4,46 @@ use crate::application::{
     ConnectionRepository, ConnectionValidationFailure, PersistenceFailure, SecretStore,
     SourceDescriptor, SourceRegistry,
 };
-use crate::domain::{Repository, Workflow};
+use crate::domain::{Repository, Workflow, WorkflowRun};
 use async_trait::async_trait;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub const DEFAULT_SOURCE_DATA_MAX_AGE: Duration = Duration::from_secs(60);
+pub const DEFAULT_REPOSITORY_CACHE_MAX_AGE: Duration = Duration::from_secs(15 * 60);
+pub const DEFAULT_WORKFLOW_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+pub const DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SourceDataCachePolicy {
+    pub repositories: Duration,
+    pub workflows: Duration,
+    pub workflow_runs: Duration,
+}
+
+impl SourceDataCachePolicy {
+    pub const DEFAULT: Self = Self {
+        repositories: DEFAULT_REPOSITORY_CACHE_MAX_AGE,
+        workflows: DEFAULT_WORKFLOW_CACHE_MAX_AGE,
+        workflow_runs: DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE,
+    };
+
+    #[must_use]
+    pub const fn uniform(max_age: Duration) -> Self {
+        Self {
+            repositories: max_age,
+            workflows: max_age,
+            workflow_runs: max_age,
+        }
+    }
+}
+
+impl Default for SourceDataCachePolicy {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RepositorySnapshot {
@@ -23,6 +55,23 @@ pub struct RepositorySnapshot {
 pub struct WorkflowSnapshot {
     pub refreshed_at: u64,
     pub workflows: Vec<Workflow>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowRunSnapshot {
+    pub last_attempted_at: u64,
+    pub last_successful_at: Option<u64>,
+    pub last_error: Option<ConnectionValidationFailure>,
+    pub runs: Vec<WorkflowRun>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowRunCollection {
+    pub runs: Vec<WorkflowRun>,
+    pub last_attempted_at: u64,
+    pub last_successful_at: u64,
+    pub stale: bool,
+    pub error: Option<ConnectionValidationFailure>,
 }
 
 pub trait SourceDataCache: Send + Sync {
@@ -52,6 +101,21 @@ pub trait SourceDataCache: Send + Sync {
         account_id: &str,
         repository_id: &str,
         snapshot: &WorkflowSnapshot,
+    ) -> Result<(), PersistenceFailure>;
+
+    fn workflow_runs(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<WorkflowRunSnapshot>, PersistenceFailure>;
+
+    fn replace_workflow_runs(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        snapshot: &WorkflowRunSnapshot,
     ) -> Result<(), PersistenceFailure>;
 }
 
@@ -86,6 +150,12 @@ pub trait SourceData: Send + Sync {
         source_id: &str,
         repository: &Repository,
     ) -> Result<Vec<Workflow>, SourceDataFailure>;
+
+    async fn workflow_runs(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+    ) -> Result<WorkflowRunCollection, SourceDataFailure>;
 }
 
 #[derive(Clone)]
@@ -94,7 +164,7 @@ pub struct ReadThroughSourceData {
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
     cache: Option<Arc<dyn SourceDataCache>>,
-    max_age: Duration,
+    cache_policy: SourceDataCachePolicy,
 }
 
 impl ReadThroughSourceData {
@@ -104,14 +174,14 @@ impl ReadThroughSourceData {
         connections: Arc<dyn ConnectionRepository>,
         secrets: Arc<dyn SecretStore>,
         cache: Arc<dyn SourceDataCache>,
-        max_age: Duration,
+        cache_policy: SourceDataCachePolicy,
     ) -> Self {
         Self {
             registry,
             connections,
             secrets,
             cache: Some(cache),
-            max_age,
+            cache_policy,
         }
     }
 
@@ -126,7 +196,7 @@ impl ReadThroughSourceData {
             connections,
             secrets,
             cache: None,
-            max_age: Duration::ZERO,
+            cache_policy: SourceDataCachePolicy::uniform(Duration::ZERO),
         }
     }
 
@@ -137,8 +207,8 @@ impl ReadThroughSourceData {
             .as_secs()
     }
 
-    fn is_fresh(&self, refreshed_at: u64, now: u64) -> bool {
-        now.saturating_sub(refreshed_at) < self.max_age.as_secs()
+    fn is_fresh(refreshed_at: u64, now: u64, max_age: Duration) -> bool {
+        now.saturating_sub(refreshed_at) < max_age.as_secs()
     }
 }
 
@@ -170,7 +240,7 @@ impl SourceData for ReadThroughSourceData {
         if let Some(cache) = &self.cache
             && let Ok(Some(snapshot)) =
                 cache.repositories(source_id, &connection.account.external_id)
-            && self.is_fresh(snapshot.refreshed_at, now)
+            && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.repositories)
         {
             return Ok(Some(snapshot.repositories));
         }
@@ -219,7 +289,7 @@ impl SourceData for ReadThroughSourceData {
         if let Some(cache) = &self.cache
             && let Ok(Some(snapshot)) =
                 cache.workflows(source_id, &connection.account.external_id, &repository.id)
-            && self.is_fresh(snapshot.refreshed_at, now)
+            && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.workflows)
         {
             return Ok(snapshot.workflows);
         }
@@ -246,6 +316,107 @@ impl SourceData for ReadThroughSourceData {
         }
 
         Ok(workflows)
+    }
+
+    async fn workflow_runs(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+    ) -> Result<WorkflowRunCollection, SourceDataFailure> {
+        let module = self
+            .registry
+            .get(source_id)
+            .ok_or(SourceDataFailure::Source(
+                ConnectionValidationFailure::UnexpectedResponse,
+            ))?;
+        let connection = self
+            .connections
+            .get(source_id)
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?
+            .ok_or(SourceDataFailure::StorageUnavailable)?;
+        let now = Self::now();
+        let cached = self.cache.as_ref().and_then(|cache| {
+            cache
+                .workflow_runs(source_id, &connection.account.external_id, &repository.id)
+                .ok()
+                .flatten()
+        });
+
+        if let Some(snapshot) = &cached
+            && snapshot.last_error.is_none()
+            && let Some(last_successful_at) = snapshot.last_successful_at
+            && Self::is_fresh(last_successful_at, now, self.cache_policy.workflow_runs)
+        {
+            return Ok(WorkflowRunCollection {
+                runs: snapshot.runs.clone(),
+                last_attempted_at: snapshot.last_attempted_at,
+                last_successful_at,
+                stale: false,
+                error: None,
+            });
+        }
+
+        let token = self
+            .secrets
+            .retrieve(&connection.secret_reference)
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?;
+        match module.list_workflow_runs(&token, repository).await {
+            Ok(runs) => {
+                let completed_at = Self::now();
+                if let Some(cache) = &self.cache {
+                    _ = cache.replace_workflow_runs(
+                        source_id,
+                        &connection.account.external_id,
+                        &repository.id,
+                        &WorkflowRunSnapshot {
+                            last_attempted_at: completed_at,
+                            last_successful_at: Some(completed_at),
+                            last_error: None,
+                            runs: runs.clone(),
+                        },
+                    );
+                }
+                Ok(WorkflowRunCollection {
+                    runs,
+                    last_attempted_at: completed_at,
+                    last_successful_at: completed_at,
+                    stale: false,
+                    error: None,
+                })
+            }
+            Err(failure) => {
+                let attempted_at = Self::now();
+                if let Some(cache) = &self.cache {
+                    _ = cache.replace_workflow_runs(
+                        source_id,
+                        &connection.account.external_id,
+                        &repository.id,
+                        &WorkflowRunSnapshot {
+                            last_attempted_at: attempted_at,
+                            last_successful_at: cached
+                                .as_ref()
+                                .and_then(|snapshot| snapshot.last_successful_at),
+                            last_error: Some(failure),
+                            runs: cached
+                                .as_ref()
+                                .map_or_else(Vec::new, |snapshot| snapshot.runs.clone()),
+                        },
+                    );
+                }
+                if let Some(snapshot) = cached
+                    && let Some(last_successful_at) = snapshot.last_successful_at
+                {
+                    return Ok(WorkflowRunCollection {
+                        runs: snapshot.runs,
+                        last_attempted_at: attempted_at,
+                        last_successful_at,
+                        stale: true,
+                        error: Some(failure),
+                    });
+                }
+                Err(SourceDataFailure::Source(failure))
+            }
+        }
     }
 }
 
