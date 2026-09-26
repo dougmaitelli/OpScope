@@ -74,6 +74,12 @@ pub struct WorkflowRunCollection {
     pub error: Option<ConnectionValidationFailure>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RefreshMode {
+    IfStale,
+    Force,
+}
+
 pub trait SourceDataCache: Send + Sync {
     fn repositories(
         &self,
@@ -143,18 +149,21 @@ pub trait SourceData: Send + Sync {
     async fn repositories(
         &self,
         source_id: &str,
+        refresh: RefreshMode,
     ) -> Result<Option<Vec<Repository>>, SourceDataFailure>;
 
     async fn workflows(
         &self,
         source_id: &str,
         repository: &Repository,
+        refresh: RefreshMode,
     ) -> Result<Vec<Workflow>, SourceDataFailure>;
 
     async fn workflow_runs(
         &self,
         source_id: &str,
         repository: &Repository,
+        refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure>;
 }
 
@@ -221,6 +230,7 @@ impl SourceData for ReadThroughSourceData {
     async fn repositories(
         &self,
         source_id: &str,
+        refresh: RefreshMode,
     ) -> Result<Option<Vec<Repository>>, SourceDataFailure> {
         let module = self
             .registry
@@ -237,22 +247,30 @@ impl SourceData for ReadThroughSourceData {
         };
         let now = Self::now();
 
-        if let Some(cache) = &self.cache
-            && let Ok(Some(snapshot)) =
-                cache.repositories(source_id, &connection.account.external_id)
+        let cached = self.cache.as_ref().and_then(|cache| {
+            cache
+                .repositories(source_id, &connection.account.external_id)
+                .ok()
+                .flatten()
+        });
+        if refresh == RefreshMode::IfStale
+            && let Some(snapshot) = &cached
             && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.repositories)
         {
-            return Ok(Some(snapshot.repositories));
+            return Ok(Some(snapshot.repositories.clone()));
         }
 
         let token = self
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let repositories = module
-            .list_repositories(&token)
-            .await
-            .map_err(SourceDataFailure::Source)?;
+        let repositories = match module.list_repositories(&token).await {
+            Ok(repositories) => repositories,
+            Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
+                return Ok(cached.map(|snapshot| snapshot.repositories));
+            }
+            Err(failure) => return Err(SourceDataFailure::Source(failure)),
+        };
 
         if let Some(cache) = &self.cache {
             _ = cache.replace_repositories(
@@ -272,6 +290,7 @@ impl SourceData for ReadThroughSourceData {
         &self,
         source_id: &str,
         repository: &Repository,
+        refresh: RefreshMode,
     ) -> Result<Vec<Workflow>, SourceDataFailure> {
         let module = self
             .registry
@@ -286,22 +305,30 @@ impl SourceData for ReadThroughSourceData {
             .ok_or(SourceDataFailure::StorageUnavailable)?;
         let now = Self::now();
 
-        if let Some(cache) = &self.cache
-            && let Ok(Some(snapshot)) =
-                cache.workflows(source_id, &connection.account.external_id, &repository.id)
+        let cached = self.cache.as_ref().and_then(|cache| {
+            cache
+                .workflows(source_id, &connection.account.external_id, &repository.id)
+                .ok()
+                .flatten()
+        });
+        if refresh == RefreshMode::IfStale
+            && let Some(snapshot) = &cached
             && Self::is_fresh(snapshot.refreshed_at, now, self.cache_policy.workflows)
         {
-            return Ok(snapshot.workflows);
+            return Ok(snapshot.workflows.clone());
         }
 
         let token = self
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let workflows = module
-            .list_workflows(&token, repository)
-            .await
-            .map_err(SourceDataFailure::Source)?;
+        let workflows = match module.list_workflows(&token, repository).await {
+            Ok(workflows) => workflows,
+            Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
+                return Ok(cached.map_or_else(Vec::new, |snapshot| snapshot.workflows));
+            }
+            Err(failure) => return Err(SourceDataFailure::Source(failure)),
+        };
 
         if let Some(cache) = &self.cache {
             _ = cache.replace_workflows(
@@ -322,6 +349,7 @@ impl SourceData for ReadThroughSourceData {
         &self,
         source_id: &str,
         repository: &Repository,
+        refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure> {
         let module = self
             .registry
@@ -342,17 +370,21 @@ impl SourceData for ReadThroughSourceData {
                 .flatten()
         });
 
-        if let Some(snapshot) = &cached
-            && snapshot.last_error.is_none()
+        if refresh == RefreshMode::IfStale
+            && let Some(snapshot) = &cached
             && let Some(last_successful_at) = snapshot.last_successful_at
-            && Self::is_fresh(last_successful_at, now, self.cache_policy.workflow_runs)
+            && Self::is_fresh(
+                snapshot.last_attempted_at,
+                now,
+                self.cache_policy.workflow_runs,
+            )
         {
             return Ok(WorkflowRunCollection {
                 runs: snapshot.runs.clone(),
                 last_attempted_at: snapshot.last_attempted_at,
                 last_successful_at,
-                stale: false,
-                error: None,
+                stale: snapshot.last_error.is_some(),
+                error: snapshot.last_error,
             });
         }
 

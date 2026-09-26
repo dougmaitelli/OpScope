@@ -167,24 +167,32 @@ async fn cached_source_data_hides_cache_hits_from_its_caller()
     );
 
     let first_repositories = source_data
-        .repositories("example")
+        .repositories("example", RefreshMode::IfStale)
         .await?
         .expect("connected source");
     let second_repositories = source_data
-        .repositories("example")
+        .repositories("example", RefreshMode::IfStale)
         .await?
         .expect("connected source");
     assert_eq!(first_repositories, second_repositories);
     assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 1);
 
     let repository = &first_repositories[0];
-    let first_workflows = source_data.workflows("example", repository).await?;
-    let second_workflows = source_data.workflows("example", repository).await?;
+    let first_workflows = source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
+    let second_workflows = source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
     assert_eq!(first_workflows, second_workflows);
     assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 1);
 
-    let first_runs = source_data.workflow_runs("example", repository).await?;
-    let second_runs = source_data.workflow_runs("example", repository).await?;
+    let first_runs = source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
+    let second_runs = source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
     assert_eq!(first_runs.runs, second_runs.runs);
     assert!(!second_runs.stale);
     assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 1);
@@ -208,19 +216,68 @@ async fn cache_policy_applies_a_separate_ttl_to_each_resource_kind()
     );
 
     let repositories = source_data
-        .repositories("example")
+        .repositories("example", RefreshMode::IfStale)
         .await?
         .expect("connected source");
-    source_data.repositories("example").await?;
+    source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?;
     assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 1);
 
     let repository = &repositories[0];
-    source_data.workflows("example", repository).await?;
-    source_data.workflows("example", repository).await?;
+    source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
+    source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
     assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 2);
 
-    source_data.workflow_runs("example", repository).await?;
-    source_data.workflow_runs("example", repository).await?;
+    source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
+    source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
+    assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn forced_refresh_bypasses_fresh_cache_entries() -> Result<(), Box<dyn std::error::Error>> {
+    let dependencies = dependencies()?;
+    let source_data = ReadThroughSourceData::cached(
+        dependencies.registry,
+        Arc::new(dependencies.database.clone()),
+        Arc::new(dependencies.secrets),
+        Arc::new(dependencies.database),
+        SourceDataCachePolicy::uniform(Duration::MAX),
+    );
+
+    let repositories = source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?
+        .expect("connected source");
+    source_data
+        .repositories("example", RefreshMode::Force)
+        .await?;
+    assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 2);
+
+    let repository = &repositories[0];
+    source_data
+        .workflows("example", repository, RefreshMode::IfStale)
+        .await?;
+    source_data
+        .workflows("example", repository, RefreshMode::Force)
+        .await?;
+    assert_eq!(dependencies.workflow_requests.load(Ordering::SeqCst), 2);
+
+    source_data
+        .workflow_runs("example", repository, RefreshMode::IfStale)
+        .await?;
+    source_data
+        .workflow_runs("example", repository, RefreshMode::Force)
+        .await?;
     assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 2);
     Ok(())
 }
@@ -234,8 +291,12 @@ async fn uncached_source_data_uses_the_same_interface() -> Result<(), Box<dyn st
         Arc::new(dependencies.secrets),
     );
 
-    source_data.repositories("example").await?;
-    source_data.repositories("example").await?;
+    source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?;
+    source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?;
     assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 2);
     Ok(())
 }
@@ -251,8 +312,12 @@ async fn zero_max_age_refreshes_provider_data() -> Result<(), Box<dyn std::error
         SourceDataCachePolicy::uniform(Duration::ZERO),
     );
 
-    source_data.repositories("example").await?;
-    source_data.repositories("example").await?;
+    source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?;
+    source_data
+        .repositories("example", RefreshMode::IfStale)
+        .await?;
     assert_eq!(dependencies.repository_requests.load(Ordering::SeqCst), 2);
     Ok(())
 }
@@ -266,18 +331,26 @@ async fn provider_failure_returns_the_last_successful_run_snapshot()
         Arc::new(dependencies.database.clone()),
         Arc::new(dependencies.secrets),
         Arc::new(dependencies.database),
-        SourceDataCachePolicy::uniform(Duration::ZERO),
+        SourceDataCachePolicy::uniform(Duration::MAX),
     );
     let repository = test_repository();
 
-    let fresh = source_data.workflow_runs("example", &repository).await?;
+    let fresh = source_data
+        .workflow_runs("example", &repository, RefreshMode::IfStale)
+        .await?;
     dependencies
         .fail_workflow_runs
         .store(true, Ordering::SeqCst);
-    let stale = source_data.workflow_runs("example", &repository).await?;
+    let stale = source_data
+        .workflow_runs("example", &repository, RefreshMode::Force)
+        .await?;
+    let cached_failure = source_data
+        .workflow_runs("example", &repository, RefreshMode::IfStale)
+        .await?;
 
     assert_eq!(stale.runs, fresh.runs);
     assert!(stale.stale);
+    assert_eq!(cached_failure, stale);
     assert_eq!(
         stale.error,
         Some(ConnectionValidationFailure::ProviderUnavailable)

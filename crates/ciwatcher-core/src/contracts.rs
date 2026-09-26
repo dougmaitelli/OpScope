@@ -3,7 +3,8 @@
 use crate::application::{
     ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
     ListWorkflowsFailure, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
-    SourceRepositorySelection, SourceState, ValidatedAccount, WorkflowInventory,
+    SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationSummary,
+    ValidatedAccount, WorkflowInventory,
 };
 use crate::domain::{
     RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
@@ -13,13 +14,14 @@ use crate::domain::{
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 5;
+pub const CONTRACT_VERSION: u8 = 6;
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
 pub const REPOSITORIES_HTTP_PATH: &str = "/api/repositories";
 pub const REPOSITORY_SELECTIONS_HTTP_PATH: &str = "/api/repository-selections";
+pub const SYNCHRONIZATION_HTTP_PATH: &str = "/api/sync";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
@@ -27,6 +29,7 @@ pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
 pub const DISCONNECT_SOURCE_DESKTOP_COMMAND: &str = "disconnect_source";
 pub const LIST_REPOSITORIES_DESKTOP_COMMAND: &str = "list_repositories";
 pub const SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND: &str = "save_repository_selection";
+pub const SYNCHRONIZE_SOURCES_DESKTOP_COMMAND: &str = "synchronize_sources";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -433,6 +436,28 @@ impl ListWorkflowsResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SynchronizationResponse {
+    pub selected_repository_count: usize,
+    pub synchronized_repository_count: usize,
+    pub failed_repository_count: usize,
+    pub skipped_repository_count: usize,
+    pub already_running: bool,
+}
+
+impl From<SynchronizationSummary> for SynchronizationResponse {
+    fn from(summary: SynchronizationSummary) -> Self {
+        Self {
+            selected_repository_count: summary.selected_repository_count,
+            synchronized_repository_count: summary.synchronized_repository_count,
+            failed_repository_count: summary.failed_repository_count,
+            skipped_repository_count: summary.skipped_repository_count,
+            already_running: summary.already_running(),
+        }
+    }
+}
+
 impl ListRepositoriesResponse {
     #[must_use]
     pub fn from_domain(catalogs: Vec<RepositoryCatalog>) -> Self {
@@ -550,6 +575,15 @@ impl From<ListWorkflowsFailure> for ConnectionValidationErrorResponse {
     }
 }
 
+impl From<SynchronizationFailure> for ConnectionValidationErrorResponse {
+    fn from(_failure: SynchronizationFailure) -> Self {
+        Self {
+            code: ConnectionValidationErrorCode::StorageUnavailable,
+            message: "The selected repositories could not be read for synchronization.".to_owned(),
+        }
+    }
+}
+
 #[must_use]
 pub fn render_typescript_contract() -> String {
     let config = Config::default();
@@ -574,6 +608,7 @@ pub fn render_typescript_contract() -> String {
         WorkflowRunSummary::decl(&config),
         WorkflowSummary::decl(&config),
         ListWorkflowsResponse::decl(&config),
+        SynchronizationResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),
         SaveRepositorySelectionRequest::decl(&config),
         SaveRepositorySelectionResponse::decl(&config),
@@ -581,7 +616,7 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

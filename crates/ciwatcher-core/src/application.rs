@@ -1,7 +1,13 @@
 //! Application use cases and the ports they require.
 
+mod sync;
+
+pub use sync::{
+    SynchronizationFailure, SynchronizationStatus, SynchronizationSummary, SynchronizeSources,
+};
+
 use crate::domain::{Repository, Workflow, WorkflowRun};
-use crate::source_data::{SourceData, SourceDataFailure};
+use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
 use async_trait::async_trait;
 use std::collections::HashSet;
 use std::error::Error;
@@ -404,7 +410,7 @@ impl ListRepositories {
         for source in self.source_data.sources() {
             let Some(repositories) = self
                 .source_data
-                .repositories(&source.id)
+                .repositories(&source.id, RefreshMode::IfStale)
                 .await
                 .map_err(list_repositories_failure)?
             else {
@@ -596,7 +602,7 @@ impl ListWorkflows {
 
             let repositories = self
                 .source_data
-                .repositories(&source.id)
+                .repositories(&source.id, RefreshMode::IfStale)
                 .await
                 .map_err(list_workflows_failure)?
                 .ok_or(ListWorkflowsFailure::StorageUnavailable)?;
@@ -607,12 +613,12 @@ impl ListWorkflows {
             {
                 let repository_workflows = self
                     .source_data
-                    .workflows(&source.id, &repository)
+                    .workflows(&source.id, &repository, RefreshMode::IfStale)
                     .await
                     .map_err(list_workflows_failure)?;
                 let repository_runs = self
                     .source_data
-                    .workflow_runs(&source.id, &repository)
+                    .workflow_runs(&source.id, &repository, RefreshMode::IfStale)
                     .await
                     .map_err(list_workflows_failure)?;
                 last_attempted_at = Some(

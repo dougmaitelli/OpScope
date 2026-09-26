@@ -1,7 +1,7 @@
 use ciwatcher_core::application::{
     ConnectSource, ConnectionRepository, DisconnectSource, ListRepositories, ListSources,
     ListWorkflows, RepositorySelectionRepository, SaveRepositorySelection, SecretStore,
-    SourceRegistry,
+    SourceRegistry, SynchronizeSources,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -13,6 +13,7 @@ pub(crate) struct DesktopState {
     pub(crate) list_repositories: ListRepositories,
     pub(crate) save_repository_selection: SaveRepositorySelection,
     pub(crate) disconnect_source: DisconnectSource,
+    pub(crate) synchronize_sources: SynchronizeSources,
 }
 
 impl DesktopState {
@@ -38,7 +39,14 @@ impl DesktopState {
                 secrets.clone(),
             ),
             list_sources: ListSources::new(sources.clone(), connections.clone()),
-            list_repositories: ListRepositories::new(source_data, repository_selections.clone()),
+            list_repositories: ListRepositories::new(
+                source_data.clone(),
+                repository_selections.clone(),
+            ),
+            synchronize_sources: SynchronizeSources::new(
+                source_data,
+                repository_selections.clone(),
+            ),
             save_repository_selection: SaveRepositorySelection::new(
                 sources.clone(),
                 connections.clone(),

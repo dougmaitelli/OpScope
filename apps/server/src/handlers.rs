@@ -5,13 +5,13 @@ use ciwatcher_core::application::{
     ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource, ListRepositories,
     ListRepositoriesFailure, ListSources, ListWorkflows, ListWorkflowsFailure,
     RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
-    SecretStore, SourceRegistry,
+    SecretStore, SourceRegistry, SynchronizeSources,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
+    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -24,6 +24,7 @@ pub(crate) struct AppState {
     list_repositories: ListRepositories,
     save_repository_selection: SaveRepositorySelection,
     disconnect_source: DisconnectSource,
+    synchronize_sources: SynchronizeSources,
 }
 
 impl AppState {
@@ -49,7 +50,14 @@ impl AppState {
                 secrets.clone(),
             ),
             list_sources: ListSources::new(registry.clone(), connections.clone()),
-            list_repositories: ListRepositories::new(source_data, repository_selections.clone()),
+            list_repositories: ListRepositories::new(
+                source_data.clone(),
+                repository_selections.clone(),
+            ),
+            synchronize_sources: SynchronizeSources::new(
+                source_data,
+                repository_selections.clone(),
+            ),
             save_repository_selection: SaveRepositorySelection::new(
                 registry.clone(),
                 connections.clone(),
@@ -58,6 +66,23 @@ impl AppState {
             disconnect_source: DisconnectSource::new(registry, connections, secrets),
         }
     }
+}
+
+pub(crate) async fn synchronize_sources(
+    State(state): State<AppState>,
+) -> Result<Json<SynchronizationResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
+    state
+        .synchronize_sources
+        .execute()
+        .await
+        .map(SynchronizationResponse::from)
+        .map(Json)
+        .map_err(|failure| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ConnectionValidationErrorResponse::from(failure)),
+            )
+        })
 }
 
 pub(crate) async fn health() -> Json<HealthResponse> {

@@ -70,9 +70,11 @@ workflow discovery, and recent workflow-run monitoring are implemented. Run
 activity and synchronization freshness are cached in SQLite, with the last
 successful snapshot retained during transient provider failures. Desktop
 credentials use the operating-system keychain. The server encrypts credentials
-stored in SQLite. Connections and discovery are driven through the source-module
-registry in both editions. The unauthenticated development server binds only to
-`127.0.0.1`.
+stored in SQLite. Manual refresh uses a shared synchronization coordinator that
+bypasses cache TTLs, prevents overlapping work per source, and continues when an
+individual repository fails. Connections and discovery are driven through the
+source-module registry in both editions. The unauthenticated development server
+binds only to `127.0.0.1`.
 
 ```sh
 npm install

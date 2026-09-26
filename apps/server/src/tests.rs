@@ -9,7 +9,7 @@ use ciwatcher_core::application::{
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
     ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
-    SOURCES_HTTP_PATH, WORKFLOWS_HTTP_PATH,
+    SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, WORKFLOWS_HTTP_PATH,
 };
 use ciwatcher_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
@@ -215,6 +215,18 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         )
         .await?;
     assert_eq!(selection.status(), StatusCode::OK);
+
+    let synchronization = app
+        .clone()
+        .oneshot(Request::post(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    assert_eq!(synchronization.status(), StatusCode::OK);
+    let body = synchronization.into_body().collect().await?.to_bytes();
+    let decoded: SynchronizationResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.selected_repository_count, 1);
+    assert_eq!(decoded.synchronized_repository_count, 1);
+    assert_eq!(decoded.failed_repository_count, 0);
+    assert!(!decoded.already_running);
 
     let repositories = app
         .clone()

@@ -13,6 +13,8 @@ export function OverviewPage() {
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,6 +31,34 @@ export function OverviewPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setRefreshing(true);
+    setError(false);
+    setRefreshNotice(null);
+    try {
+      const summary = await client.synchronizeSources();
+      setInventory(await client.listWorkflows());
+      if (summary.failedRepositoryCount > 0) {
+        setRefreshNotice(
+          `${summary.failedRepositoryCount} repositor${summary.failedRepositoryCount === 1 ? "y" : "ies"} could not be refreshed. Cached data remains available where possible.`,
+        );
+      } else if (summary.alreadyRunning) {
+        setRefreshNotice("A synchronization is already running for the selected source.");
+      }
+    } catch {
+      try {
+        setInventory(await client.listWorkflows());
+        setRefreshNotice("Synchronization failed. The last available data is still displayed.");
+      } catch {
+        setError(true);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [client]);
 
   const workflows = inventory?.workflows ?? [];
   const projects = groupWorkflows(workflows);
@@ -83,10 +113,10 @@ export function OverviewPage() {
             className={`secondary-button${loading ? " button-busy" : ""}`}
             type="button"
             disabled={loading}
-            onClick={() => void load()}
+            onClick={() => void refresh()}
           >
             <span aria-hidden="true">↻</span>
-            Refresh
+            {refreshing ? "Synchronizing…" : "Refresh"}
           </button>
         }
       />
@@ -122,6 +152,12 @@ export function OverviewPage() {
         <div className="sync-warning" role="status">
           <strong>Live refresh failed.</strong> Cached workflow activity is still available.
           {inventory.syncError ? ` ${inventory.syncError}` : ""}
+        </div>
+      ) : null}
+
+      {refreshNotice ? (
+        <div className="sync-warning" role="status">
+          {refreshNotice}
         </div>
       ) : null}
 

@@ -6,7 +6,7 @@ mod state;
 
 use crate::commands::{
     connect_source, disconnect_source, health, list_repositories, list_sources, list_workflows,
-    save_repository_selection,
+    save_repository_selection, synchronize_sources,
 };
 use crate::keyring::KeyringSecretStore;
 use crate::state::DesktopState;
@@ -36,6 +36,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             health,
             list_workflows,
+            synchronize_sources,
             connect_source,
             list_sources,
             list_repositories,
