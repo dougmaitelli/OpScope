@@ -159,7 +159,7 @@ The selected implementation stack is:
 - Tauri 2 for the native desktop shell using an operating-system WebView.
 - Axum, Tokio, and Tower for the self-hosted HTTP composition.
 - A Rust application core reused by desktop and server compositions.
-- A TypeScript-capable web frontend; its UI framework is not yet selected.
+- React with TypeScript and Vite for the shared component-based frontend.
 - SQLite as the version-one database.
 - TypeScript DTOs, route names, command names, and the frontend client interface
   generated from Rust with `ts-rs`, with a CI drift check covering desktop IPC
