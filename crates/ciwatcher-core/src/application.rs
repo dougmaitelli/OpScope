@@ -1,7 +1,8 @@
 //! Application use cases and the ports they require.
 
-use crate::domain::Monitor;
+use crate::domain::{Monitor, Repository};
 use async_trait::async_trait;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -107,6 +108,11 @@ pub trait SourceModule: Send + Sync {
         &self,
         token: &ProviderToken,
     ) -> Result<ValidatedAccount, ConnectionValidationFailure>;
+
+    async fn list_repositories(
+        &self,
+        token: &ProviderToken,
+    ) -> Result<Vec<Repository>, ConnectionValidationFailure>;
 }
 
 #[derive(Clone)]
@@ -170,6 +176,26 @@ pub trait ConnectionRepository: Send + Sync {
     fn save(&self, connection: &StoredConnection) -> Result<(), PersistenceFailure>;
     fn get(&self, source_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure>;
     fn delete(&self, source_id: &str) -> Result<(), PersistenceFailure>;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct RepositorySelection {
+    pub source_id: String,
+    pub repository_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceRepositorySelection {
+    pub source_id: String,
+    pub repository_ids: Vec<String>,
+}
+
+pub trait RepositorySelectionRepository: Send + Sync {
+    fn list(&self) -> Result<Vec<RepositorySelection>, PersistenceFailure>;
+    fn replace_for_sources(
+        &self,
+        selections: &[SourceRepositorySelection],
+    ) -> Result<(), PersistenceFailure>;
 }
 
 pub trait SecretStore: Send + Sync {
@@ -312,6 +338,183 @@ impl ListSources {
                     })
             })
             .collect()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RepositoryCatalog {
+    pub source: SourceDescriptor,
+    pub repositories: Vec<RepositoryState>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RepositoryState {
+    pub repository: Repository,
+    pub selected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ListRepositoriesFailure {
+    Source(ConnectionValidationFailure),
+    StorageUnavailable,
+}
+
+impl Display for ListRepositoriesFailure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Source(failure) => Display::fmt(failure, formatter),
+            Self::StorageUnavailable => formatter.write_str("connection storage unavailable"),
+        }
+    }
+}
+
+impl Error for ListRepositoriesFailure {}
+
+#[derive(Clone)]
+pub struct ListRepositories {
+    registry: SourceRegistry,
+    connections: Arc<dyn ConnectionRepository>,
+    secrets: Arc<dyn SecretStore>,
+    selections: Arc<dyn RepositorySelectionRepository>,
+}
+
+impl ListRepositories {
+    #[must_use]
+    pub fn new(
+        registry: SourceRegistry,
+        connections: Arc<dyn ConnectionRepository>,
+        secrets: Arc<dyn SecretStore>,
+        selections: Arc<dyn RepositorySelectionRepository>,
+    ) -> Self {
+        Self {
+            registry,
+            connections,
+            secrets,
+            selections,
+        }
+    }
+
+    pub async fn execute(&self) -> Result<Vec<RepositoryCatalog>, ListRepositoriesFailure> {
+        let mut catalogs = Vec::new();
+        let selected = self
+            .selections
+            .list()
+            .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?
+            .into_iter()
+            .collect::<HashSet<_>>();
+        for module in &self.registry.modules {
+            let source = module.descriptor();
+            let Some(connection) = self
+                .connections
+                .get(&source.id)
+                .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?
+            else {
+                continue;
+            };
+            let token = self
+                .secrets
+                .retrieve(&connection.secret_reference)
+                .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?;
+            let repositories = module
+                .list_repositories(&token)
+                .await
+                .map_err(ListRepositoriesFailure::Source)?;
+            catalogs.push(RepositoryCatalog {
+                source,
+                repositories: repositories
+                    .into_iter()
+                    .map(|repository| {
+                        let is_selected = selected.contains(&RepositorySelection {
+                            source_id: connection.source_id.clone(),
+                            repository_id: repository.id.clone(),
+                        });
+                        RepositoryState {
+                            repository,
+                            selected: is_selected,
+                        }
+                    })
+                    .collect(),
+            });
+        }
+        Ok(catalogs)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SaveRepositorySelectionFailure {
+    InvalidSelection,
+    SourceNotConnected,
+    StorageUnavailable,
+}
+
+impl Display for SaveRepositorySelectionFailure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidSelection => "repository selection is invalid",
+            Self::SourceNotConnected => "source is not connected",
+            Self::StorageUnavailable => "repository selection storage unavailable",
+        })
+    }
+}
+
+impl Error for SaveRepositorySelectionFailure {}
+
+#[derive(Clone)]
+pub struct SaveRepositorySelection {
+    registry: SourceRegistry,
+    connections: Arc<dyn ConnectionRepository>,
+    selections: Arc<dyn RepositorySelectionRepository>,
+}
+
+impl SaveRepositorySelection {
+    #[must_use]
+    pub fn new(
+        registry: SourceRegistry,
+        connections: Arc<dyn ConnectionRepository>,
+        selections: Arc<dyn RepositorySelectionRepository>,
+    ) -> Self {
+        Self {
+            registry,
+            connections,
+            selections,
+        }
+    }
+
+    pub fn execute(
+        &self,
+        selections: &[SourceRepositorySelection],
+    ) -> Result<usize, SaveRepositorySelectionFailure> {
+        let mut source_ids = HashSet::new();
+        for selection in selections {
+            if !source_ids.insert(&selection.source_id)
+                || self.registry.get(&selection.source_id).is_none()
+                || selection.repository_ids.iter().any(String::is_empty)
+                || selection
+                    .repository_ids
+                    .iter()
+                    .collect::<HashSet<_>>()
+                    .len()
+                    != selection.repository_ids.len()
+            {
+                return Err(SaveRepositorySelectionFailure::InvalidSelection);
+            }
+            if self
+                .connections
+                .get(&selection.source_id)
+                .map_err(|_| SaveRepositorySelectionFailure::StorageUnavailable)?
+                .is_none()
+            {
+                return Err(SaveRepositorySelectionFailure::SourceNotConnected);
+            }
+        }
+
+        self.selections
+            .replace_for_sources(selections)
+            .map_err(|_| SaveRepositorySelectionFailure::StorageUnavailable)?;
+        Ok(selections
+            .iter()
+            .map(|selection| selection.repository_ids.len())
+            .sum())
     }
 }
 

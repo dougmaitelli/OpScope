@@ -5,6 +5,8 @@ import type {
   ListMonitorsResponse,
   MonitorStatus,
   MonitorSummary,
+  RepositorySourceSummary,
+  RepositorySummary,
   SourceSummary,
 } from "./generated/contracts.ts";
 import "./styles.css";
@@ -39,9 +41,20 @@ const refreshButton = requiredElement<HTMLButtonElement>("#refresh-button");
 const serviceDot = requiredElement<HTMLSpanElement>("#service-dot");
 const serviceState = requiredElement<HTMLSpanElement>("#service-state");
 const overviewNav = requiredElement<HTMLAnchorElement>("#overview-nav");
+const repositoriesNav = requiredElement<HTMLAnchorElement>("#repositories-nav");
 const connectionsNav = requiredElement<HTMLAnchorElement>("#connections-nav");
 const overviewView = requiredElement<HTMLElement>("#overview-view");
+const repositoriesView = requiredElement<HTMLElement>("#repositories-view");
 const connectionsView = requiredElement<HTMLElement>("#connections-view");
+const repositorySearch = requiredElement<HTMLInputElement>("#repository-search");
+const repositoryList = requiredElement<HTMLDivElement>("#repository-list");
+const repositoryCount = requiredElement<HTMLSpanElement>("#repository-count");
+const repositoryNote = requiredElement<HTMLParagraphElement>("#repository-note");
+const refreshRepositories = requiredElement<HTMLButtonElement>("#refresh-repositories");
+const selectVisible = requiredElement<HTMLButtonElement>("#select-visible");
+const clearSelection = requiredElement<HTMLButtonElement>("#clear-selection");
+const resetSelection = requiredElement<HTMLButtonElement>("#reset-selection");
+const applySelection = requiredElement<HTMLButtonElement>("#apply-selection");
 const sourceList = requiredElement<HTMLDivElement>("#source-list");
 const sourceCount = requiredElement<HTMLSpanElement>("#source-count");
 const connectionEditor = requiredElement<HTMLElement>("#connection-editor");
@@ -57,6 +70,20 @@ const connectionNote = requiredElement<HTMLParagraphElement>("#connection-note")
 let sources: SourceSummary[] = [];
 let activeSourceId: string | null = null;
 let pendingDisconnectId: string | null = null;
+
+interface RepositoryListItem {
+  selectionId: string;
+  source: RepositorySourceSummary;
+  repository: RepositorySummary;
+}
+
+type RepositoryLoadState = "loading" | "ready" | "error";
+
+let repositorySources: RepositorySourceSummary[] = [];
+let repositoryLoadState: RepositoryLoadState = "loading";
+let repositoryLoadError = "";
+let selectedRepositoryIds = new Set<string>();
+let appliedRepositoryIds = new Set(selectedRepositoryIds);
 
 const statusLabels: Record<MonitorStatus, string> = {
   unknown: "Unknown",
@@ -187,17 +214,27 @@ async function loadDashboard(): Promise<void> {
 
 refreshButton.addEventListener("click", () => void loadDashboard());
 
-type AppView = "overview" | "connections";
+type AppView = "overview" | "repositories" | "connections";
 
 const viewPaths: Record<AppView, string> = {
   overview: "/",
+  repositories: "/repositories",
   connections: "/connections",
+};
+
+const viewTitles: Record<AppView, string> = {
+  overview: "Overview",
+  repositories: "Repositories",
+  connections: "Connections",
 };
 
 function viewFromPath(pathname: string): AppView | null {
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
   if (normalizedPath === viewPaths.overview) {
     return "overview";
+  }
+  if (normalizedPath === viewPaths.repositories) {
+    return "repositories";
   }
   if (normalizedPath === viewPaths.connections) {
     return "connections";
@@ -206,19 +243,28 @@ function viewFromPath(pathname: string): AppView | null {
 }
 
 function showView(view: AppView): void {
-  const showOverview = view === "overview";
-  overviewView.hidden = !showOverview;
-  connectionsView.hidden = showOverview;
-  overviewNav.classList.toggle("nav-item-active", showOverview);
-  connectionsNav.classList.toggle("nav-item-active", !showOverview);
-  if (showOverview) {
-    overviewNav.setAttribute("aria-current", "page");
-    connectionsNav.removeAttribute("aria-current");
-  } else {
-    overviewNav.removeAttribute("aria-current");
-    connectionsNav.setAttribute("aria-current", "page");
+  const views: Record<AppView, HTMLElement> = {
+    overview: overviewView,
+    repositories: repositoriesView,
+    connections: connectionsView,
+  };
+  const links: Record<AppView, HTMLAnchorElement> = {
+    overview: overviewNav,
+    repositories: repositoriesNav,
+    connections: connectionsNav,
+  };
+
+  for (const candidate of Object.keys(views) as AppView[]) {
+    const active = candidate === view;
+    views[candidate].hidden = !active;
+    links[candidate].classList.toggle("nav-item-active", active);
+    if (active) {
+      links[candidate].setAttribute("aria-current", "page");
+    } else {
+      links[candidate].removeAttribute("aria-current");
+    }
   }
-  document.title = `${showOverview ? "Overview" : "Connections"} · CI Watcher`;
+  document.title = `${viewTitles[view]} · CI Watcher`;
 }
 
 function navigateTo(view: AppView): void {
@@ -249,9 +295,221 @@ function showCurrentRoute(): void {
 }
 
 bindNavigation(overviewNav, "overview");
+bindNavigation(repositoriesNav, "repositories");
 bindNavigation(connectionsNav, "connections");
 window.addEventListener("popstate", showCurrentRoute);
 showCurrentRoute();
+
+function allRepositories(): RepositoryListItem[] {
+  return repositorySources.flatMap((source) =>
+    source.repositories.map((repository) => ({
+      selectionId: `${source.id}:${repository.id}`,
+      source,
+      repository,
+    })),
+  );
+}
+
+function visibleRepositories(): RepositoryListItem[] {
+  const query = repositorySearch.value.trim().toLocaleLowerCase();
+  const repositories = allRepositories();
+  if (query.length === 0) {
+    return repositories;
+  }
+  return repositories.filter(({ repository, source }) =>
+    `${repository.owner}/${repository.name} ${repository.description ?? ""} ${source.name}`
+      .toLocaleLowerCase()
+      .includes(query),
+  );
+}
+
+function selectionsMatch(left: Set<string>, right: Set<string>): boolean {
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
+function updateRepositoryControls(visibleCount: number): void {
+  const selectedCount = selectedRepositoryIds.size;
+  repositoryCount.textContent = `${visibleCount} shown · ${selectedCount} selected`;
+  const unavailable = repositoryLoadState !== "ready";
+  repositorySearch.disabled = unavailable;
+  clearSelection.disabled = unavailable || selectedCount === 0;
+  selectVisible.disabled =
+    unavailable ||
+    visibleCount === 0 ||
+    visibleRepositories().every(({ selectionId }) =>
+      selectedRepositoryIds.has(selectionId),
+    );
+  const unchanged = selectionsMatch(selectedRepositoryIds, appliedRepositoryIds);
+  resetSelection.disabled = unavailable || unchanged;
+  applySelection.disabled = unavailable || unchanged;
+}
+
+function renderRepository(item: RepositoryListItem): HTMLElement {
+  const { repository, source, selectionId } = item;
+  const row = document.createElement("label");
+  row.className = "repository-row";
+  row.classList.toggle("repository-row-selected", selectedRepositoryIds.has(selectionId));
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = selectedRepositoryIds.has(selectionId);
+  checkbox.setAttribute("aria-label", `Monitor ${repository.owner}/${repository.name}`);
+
+  const mark = document.createElement("span");
+  mark.className = "repository-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = repository.name.slice(0, 2).toUpperCase();
+
+  const identity = document.createElement("span");
+  identity.className = "repository-identity";
+  const name = document.createElement("strong");
+  name.textContent = `${repository.owner}/${repository.name}`;
+  const description = document.createElement("span");
+  description.textContent = repository.description ?? "No description";
+  identity.append(name, description);
+
+  const metadata = document.createElement("span");
+  metadata.className = "repository-metadata";
+  const visibility = document.createElement("span");
+  visibility.className = "repository-visibility";
+  visibility.textContent =
+    repository.visibility === "private" ? "Private" : "Public";
+  const sourceLabel = document.createElement("span");
+  sourceLabel.className = "repository-source";
+  sourceLabel.textContent = `${source.abbreviation} · ${source.name}`;
+  metadata.append(visibility, sourceLabel);
+
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) {
+      selectedRepositoryIds.add(selectionId);
+    } else {
+      selectedRepositoryIds.delete(selectionId);
+    }
+    row.classList.toggle("repository-row-selected", checkbox.checked);
+    repositoryNote.textContent = "Selection changed. Apply it for this session.";
+    updateRepositoryControls(visibleRepositories().length);
+  });
+
+  row.append(checkbox, mark, identity, metadata);
+  return row;
+}
+
+function renderRepositories(): void {
+  const visible = visibleRepositories();
+  repositoryList.replaceChildren();
+
+  if (repositoryLoadState === "loading") {
+    const loading = document.createElement("p");
+    loading.className = "empty-state";
+    loading.textContent = "Loading repositories…";
+    repositoryList.append(loading);
+  } else if (repositoryLoadState === "error") {
+    const error = document.createElement("p");
+    error.className = "empty-state empty-state-error";
+    error.textContent = repositoryLoadError;
+    repositoryList.append(error);
+  } else if (repositorySources.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Connect a source to discover repositories.";
+    repositoryList.append(empty);
+  } else if (allRepositories().length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No repositories are available to the connected account.";
+    repositoryList.append(empty);
+  } else if (visible.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No repositories match this search.";
+    repositoryList.append(empty);
+  } else {
+    for (const repository of visible) {
+      repositoryList.append(renderRepository(repository));
+    }
+  }
+  updateRepositoryControls(visible.length);
+}
+
+async function loadRepositories(): Promise<void> {
+  refreshRepositories.disabled = true;
+  refreshRepositories.classList.add("button-busy");
+  repositoryLoadState = "loading";
+  repositoryLoadError = "";
+  renderRepositories();
+  try {
+    const response = await client.listRepositories();
+    repositorySources = response.sources;
+    selectedRepositoryIds = new Set(
+      allRepositories()
+        .filter(({ repository }) => repository.selected)
+        .map(({ selectionId }) => selectionId),
+    );
+    appliedRepositoryIds = new Set(selectedRepositoryIds);
+    repositoryLoadState = "ready";
+    repositoryNote.textContent = "Repository selections are stored locally.";
+  } catch (error: unknown) {
+    repositorySources = [];
+    repositoryLoadState = "error";
+    repositoryLoadError = connectionErrorMessage(error);
+    repositoryNote.textContent = "Repository discovery failed.";
+  } finally {
+    refreshRepositories.disabled = false;
+    refreshRepositories.classList.remove("button-busy");
+  }
+  renderRepositories();
+}
+
+refreshRepositories.addEventListener("click", () => void loadRepositories());
+repositorySearch.addEventListener("input", renderRepositories);
+selectVisible.addEventListener("click", () => {
+  for (const { selectionId } of visibleRepositories()) {
+    selectedRepositoryIds.add(selectionId);
+  }
+  repositoryNote.textContent = "Visible repositories selected. Apply for this session.";
+  renderRepositories();
+});
+clearSelection.addEventListener("click", () => {
+  selectedRepositoryIds.clear();
+  repositoryNote.textContent = "Selection cleared. Apply for this session.";
+  renderRepositories();
+});
+resetSelection.addEventListener("click", () => {
+  selectedRepositoryIds = new Set(appliedRepositoryIds);
+  repositoryNote.textContent = "Selection reset to the last applied state.";
+  renderRepositories();
+});
+applySelection.addEventListener("click", async () => {
+  applySelection.disabled = true;
+  applySelection.textContent = "Saving…";
+  repositoryNote.textContent = "Saving repository selection…";
+  try {
+    const response = await client.saveRepositorySelection({
+      sources: repositorySources.map((source) => ({
+        sourceId: source.id,
+        repositoryIds: source.repositories
+          .filter((repository) =>
+            selectedRepositoryIds.has(`${source.id}:${repository.id}`),
+          )
+          .map((repository) => repository.id),
+      })),
+    });
+    appliedRepositoryIds = new Set(selectedRepositoryIds);
+    for (const source of repositorySources) {
+      for (const repository of source.repositories) {
+        repository.selected = selectedRepositoryIds.has(
+          `${source.id}:${repository.id}`,
+        );
+      }
+    }
+    repositoryNote.textContent = `${response.selectedCount} repositories saved for monitoring.`;
+  } catch (error: unknown) {
+    repositoryNote.textContent = connectionErrorMessage(error);
+  } finally {
+    applySelection.textContent = "Apply selection";
+    updateRepositoryControls(visibleRepositories().length);
+  }
+});
 
 function openSourceEditor(source: SourceSummary): void {
   activeSourceId = source.id;
@@ -421,7 +679,7 @@ function connectionErrorMessage(error: unknown): string {
       return message;
     }
   }
-  return "The connection could not be validated. Try again.";
+  return "The request could not be completed. Try again.";
 }
 
 connectionForm.addEventListener("submit", async (event) => {
@@ -447,7 +705,8 @@ connectionForm.addEventListener("submit", async (event) => {
     source.connection = connection;
     connectionEditor.hidden = true;
     renderSources();
-    connectionNote.textContent = `${source.name} connected. Repository selection is the next step.`;
+    await loadRepositories();
+    connectionNote.textContent = `${source.name} connected.`;
   } catch (error: unknown) {
     connectionNote.classList.add("connection-note-error");
     connectionNote.textContent = connectionErrorMessage(error);
@@ -480,6 +739,7 @@ async function disconnectSource(
     source.connection = null;
     pendingDisconnectId = null;
     renderSources();
+    await loadRepositories();
     connectionNote.textContent = `${source.name} disconnected and its credential removed.`;
   } catch (error: unknown) {
     button.disabled = false;
@@ -489,4 +749,4 @@ async function disconnectSource(
   }
 }
 
-await Promise.all([loadDashboard(), loadSources()]);
+await Promise.all([loadDashboard(), loadSources(), loadRepositories()]);

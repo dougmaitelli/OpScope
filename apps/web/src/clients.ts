@@ -10,7 +10,10 @@ import {
   type DisconnectSourceResponse,
   type HealthResponse,
   type ListMonitorsResponse,
+  type ListRepositoriesResponse,
   type ListSourcesResponse,
+  type SaveRepositorySelectionRequest,
+  type SaveRepositorySelectionResponse,
 } from "./generated/contracts.ts";
 
 export class DesktopClient implements ApplicationClient {
@@ -24,6 +27,19 @@ export class DesktopClient implements ApplicationClient {
 
   listSources(): Promise<ListSourcesResponse> {
     return invoke<ListSourcesResponse>(desktopCommands.listSources);
+  }
+
+  listRepositories(): Promise<ListRepositoriesResponse> {
+    return invoke<ListRepositoriesResponse>(desktopCommands.listRepositories);
+  }
+
+  saveRepositorySelection(
+    request: SaveRepositorySelectionRequest,
+  ): Promise<SaveRepositorySelectionResponse> {
+    return invoke<SaveRepositorySelectionResponse>(
+      desktopCommands.saveRepositorySelection,
+      { request },
+    );
   }
 
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {
@@ -53,6 +69,19 @@ export class HttpClient implements ApplicationClient {
     return this.get<ListSourcesResponse>(httpRoutes.sources);
   }
 
+  listRepositories(): Promise<ListRepositoriesResponse> {
+    return this.get<ListRepositoriesResponse>(httpRoutes.repositories);
+  }
+
+  saveRepositorySelection(
+    request: SaveRepositorySelectionRequest,
+  ): Promise<SaveRepositorySelectionResponse> {
+    return this.put<SaveRepositorySelectionResponse>(
+      httpRoutes.repositorySelections,
+      request,
+    );
+  }
+
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {
     return this.post<ConnectionSummary>(httpRoutes.connections, request);
   }
@@ -67,7 +96,7 @@ export class HttpClient implements ApplicationClient {
       credentials: "same-origin",
     });
     if (!response.ok) {
-      throw new Error(`request failed with status ${response.status}`);
+      throw await this.responseError(response);
     }
     return this.readJson<T>(response);
   }
@@ -104,10 +133,26 @@ export class HttpClient implements ApplicationClient {
     return this.readJson<T>(response);
   }
 
+  private async put<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetcher(path, {
+      method: "PUT",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw await this.responseError(response);
+    }
+    return this.readJson<T>(response);
+  }
+
   private async responseError(response: Response): Promise<Error> {
     const fallback =
       response.status === 404
-        ? "The connection endpoint is unavailable. Restart the application service."
+        ? "The application endpoint is unavailable. Restart the application service."
         : `The application service returned status ${response.status}.`;
     const text = await response.text();
     if (text.length === 0) {

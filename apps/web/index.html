@@ -23,10 +23,10 @@
             <span class="nav-symbol" aria-hidden="true">A</span>
             Activity
           </button>
-          <button class="nav-item" type="button" disabled>
+          <a class="nav-item" id="repositories-nav" href="/repositories">
             <span class="nav-symbol" aria-hidden="true">R</span>
             Repositories
-          </button>
+          </a>
           <a class="nav-item" id="connections-nav" href="/connections">
             <span class="nav-symbol" aria-hidden="true">C</span>
             Connections
@@ -95,6 +95,74 @@
             </div>
           </section>
         </div>
+        </section>
+
+        <section class="page-view" id="repositories-view" aria-labelledby="repositories-title" hidden>
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Monitoring scope</p>
+              <h1 id="repositories-title">Repositories</h1>
+              <p class="page-description">
+                Choose which repositories CI Watcher should monitor.
+              </p>
+            </div>
+            <button class="secondary-button" id="refresh-repositories" type="button">
+              <span aria-hidden="true">↻</span>
+              Refresh
+            </button>
+          </header>
+
+          <section class="panel repositories-panel" aria-labelledby="repository-list-heading">
+            <div class="panel-header">
+              <div>
+                <p class="section-label">Available repositories</p>
+                <h2 id="repository-list-heading">Repository selection</h2>
+              </div>
+              <span class="demo-badge">Live discovery</span>
+            </div>
+
+            <div class="repository-toolbar">
+              <label class="repository-search" for="repository-search">
+                <span>Search repositories</span>
+                <input
+                  id="repository-search"
+                  type="search"
+                  placeholder="Search by owner or repository"
+                  autocomplete="off"
+                />
+              </label>
+              <div class="repository-selection-controls">
+                <button class="secondary-button compact-button" id="select-visible" type="button">
+                  Select visible
+                </button>
+                <button class="secondary-button compact-button" id="clear-selection" type="button">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div class="repository-list-heading">
+              <span id="repository-count">0 repositories</span>
+              <span>Monitor</span>
+            </div>
+            <div class="repository-list" id="repository-list" aria-live="polite">
+              <p class="empty-state">Loading repositories…</p>
+            </div>
+
+            <div class="repository-footer">
+              <p id="repository-note" role="status" aria-live="polite">
+                Repository selections are stored locally.
+              </p>
+              <div class="repository-footer-actions">
+                <button class="secondary-button" id="reset-selection" type="button" disabled>
+                  Reset
+                </button>
+                <button class="primary-button" id="apply-selection" type="button" disabled>
+                  Apply selection
+                </button>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="page-view" id="connections-view" aria-labelledby="connections-title" hidden>

@@ -23,14 +23,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| data_dir.join("master.key"));
     let master_key = ServerMasterKey::load_or_create(master_key_path)?;
     let secrets = EncryptedSecretStore::new(database.clone(), master_key);
+    let database = Arc::new(database);
     println!("CI Watcher development server listening on http://127.0.0.1:4317");
     axum::serve(
         listener,
         ciwatcher_server::router(
             FakeMonitorSource,
             sources,
-            Arc::new(database),
+            database.clone(),
             Arc::new(secrets),
+            database,
         ),
     )
     .with_graceful_shutdown(shutdown_signal())

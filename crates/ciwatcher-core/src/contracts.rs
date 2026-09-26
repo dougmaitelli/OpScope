@@ -1,22 +1,31 @@
 //! Data transfer objects shared by HTTP and desktop IPC.
 
 use crate::application::{
-    ConnectSourceFailure, ConnectionValidationFailure, SourceState, ValidatedAccount,
+    ConnectSourceFailure, ConnectionValidationFailure, ListRepositoriesFailure, RepositoryCatalog,
+    RepositoryState, SaveRepositorySelectionFailure, SourceRepositorySelection, SourceState,
+    ValidatedAccount,
 };
-use crate::domain::{Monitor, MonitorStatus as DomainMonitorStatus};
+use crate::domain::{
+    Monitor, MonitorStatus as DomainMonitorStatus,
+    RepositoryVisibility as DomainRepositoryVisibility,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 1;
+pub const CONTRACT_VERSION: u8 = 3;
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const LIST_MONITORS_HTTP_PATH: &str = "/api/monitors";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
+pub const REPOSITORIES_HTTP_PATH: &str = "/api/repositories";
+pub const REPOSITORY_SELECTIONS_HTTP_PATH: &str = "/api/repository-selections";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const LIST_MONITORS_DESKTOP_COMMAND: &str = "list_monitors";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
 pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
 pub const DISCONNECT_SOURCE_DESKTOP_COMMAND: &str = "disconnect_source";
+pub const LIST_REPOSITORIES_DESKTOP_COMMAND: &str = "list_repositories";
+pub const SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND: &str = "save_repository_selection";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -173,6 +182,148 @@ impl ListSourcesResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum RepositoryVisibility {
+    Public,
+    Private,
+}
+
+impl From<DomainRepositoryVisibility> for RepositoryVisibility {
+    fn from(visibility: DomainRepositoryVisibility) -> Self {
+        match visibility {
+            DomainRepositoryVisibility::Public => Self::Public,
+            DomainRepositoryVisibility::Private => Self::Private,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySummary {
+    pub id: String,
+    pub owner: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub visibility: RepositoryVisibility,
+    pub web_url: String,
+    pub selected: bool,
+}
+
+impl From<RepositoryState> for RepositorySummary {
+    fn from(state: RepositoryState) -> Self {
+        let repository = state.repository;
+        Self {
+            id: repository.id,
+            owner: repository.owner,
+            name: repository.name,
+            description: repository.description,
+            visibility: repository.visibility.into(),
+            web_url: repository.web_url,
+            selected: state.selected,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySelectionSourceRequest {
+    pub source_id: String,
+    pub repository_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveRepositorySelectionRequest {
+    pub sources: Vec<RepositorySelectionSourceRequest>,
+}
+
+impl SaveRepositorySelectionRequest {
+    #[must_use]
+    pub fn into_domain(self) -> Vec<SourceRepositorySelection> {
+        self.sources
+            .into_iter()
+            .map(|source| SourceRepositorySelection {
+                source_id: source.source_id,
+                repository_ids: source.repository_ids,
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveRepositorySelectionResponse {
+    pub selected_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySelectionErrorResponse {
+    pub message: String,
+}
+
+impl From<SaveRepositorySelectionFailure> for RepositorySelectionErrorResponse {
+    fn from(failure: SaveRepositorySelectionFailure) -> Self {
+        let message = match failure {
+            SaveRepositorySelectionFailure::InvalidSelection => {
+                "The repository selection is invalid. Refresh and try again."
+            }
+            SaveRepositorySelectionFailure::SourceNotConnected => {
+                "A selected source is no longer connected. Refresh and try again."
+            }
+            SaveRepositorySelectionFailure::StorageUnavailable => {
+                "The repository selection could not be stored."
+            }
+        };
+        Self {
+            message: message.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySourceSummary {
+    pub id: String,
+    pub name: String,
+    pub abbreviation: String,
+    pub repositories: Vec<RepositorySummary>,
+}
+
+impl From<RepositoryCatalog> for RepositorySourceSummary {
+    fn from(catalog: RepositoryCatalog) -> Self {
+        Self {
+            id: catalog.source.id,
+            name: catalog.source.name,
+            abbreviation: catalog.source.abbreviation,
+            repositories: catalog
+                .repositories
+                .into_iter()
+                .map(RepositorySummary::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ListRepositoriesResponse {
+    pub sources: Vec<RepositorySourceSummary>,
+}
+
+impl ListRepositoriesResponse {
+    #[must_use]
+    pub fn from_domain(catalogs: Vec<RepositoryCatalog>) -> Self {
+        Self {
+            sources: catalogs
+                .into_iter()
+                .map(RepositorySourceSummary::from)
+                .collect(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DisconnectSourceRequest {
@@ -248,11 +399,22 @@ impl From<ConnectSourceFailure> for ConnectionValidationErrorResponse {
     }
 }
 
+impl From<ListRepositoriesFailure> for ConnectionValidationErrorResponse {
+    fn from(failure: ListRepositoriesFailure) -> Self {
+        match failure {
+            ListRepositoriesFailure::Source(failure) => failure.into(),
+            ListRepositoriesFailure::StorageUnavailable => Self {
+                code: ConnectionValidationErrorCode::StorageUnavailable,
+                message: "The stored connection credential could not be read securely.".to_owned(),
+            },
+        }
+    }
+}
+
 #[must_use]
 pub fn render_typescript_contract() -> String {
     let config = Config::default();
-    format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  listMonitors: \"{LIST_MONITORS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listMonitors: \"{LIST_MONITORS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listMonitors(): Promise<ListMonitorsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n}}\n",
+    let declarations = [
         HealthResponse::decl(&config),
         MonitorStatus::decl(&config),
         MonitorSummary::decl(&config),
@@ -266,6 +428,18 @@ pub fn render_typescript_contract() -> String {
         DisconnectSourceResponse::decl(&config),
         ConnectionValidationErrorCode::decl(&config),
         ConnectionValidationErrorResponse::decl(&config),
+        RepositoryVisibility::decl(&config),
+        RepositorySummary::decl(&config),
+        RepositorySourceSummary::decl(&config),
+        ListRepositoriesResponse::decl(&config),
+        RepositorySelectionSourceRequest::decl(&config),
+        SaveRepositorySelectionRequest::decl(&config),
+        SaveRepositorySelectionResponse::decl(&config),
+        RepositorySelectionErrorResponse::decl(&config),
+    ]
+    .join("\n\nexport ");
+    format!(
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  listMonitors: \"{LIST_MONITORS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listMonitors: \"{LIST_MONITORS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listMonitors(): Promise<ListMonitorsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

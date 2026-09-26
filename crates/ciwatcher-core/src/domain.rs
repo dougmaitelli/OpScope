@@ -16,3 +16,20 @@ pub struct Monitor {
     pub name: String,
     pub status: MonitorStatus,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RepositoryVisibility {
+    Public,
+    Private,
+}
+
+/// A provider-independent repository available to a connected account.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Repository {
+    pub id: String,
+    pub owner: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub visibility: RepositoryVisibility,
+    pub web_url: String,
+}

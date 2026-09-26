@@ -65,12 +65,12 @@ Provider-native values are retained alongside normalized values.
 
 The workspace currently provides the shared Rust core, Axum server, Tauri
 desktop shell, generated TypeScript contracts, and a small synthetic
-integration. GitHub account validation and credential persistence are
-implemented; repository discovery is not implemented yet. Desktop credentials
-use the operating-system keychain. The server encrypts credentials stored in
-SQLite. Connections are managed through a source-module registry and a
-dedicated Connections view. The unauthenticated development server binds only
-to `127.0.0.1`.
+integration. GitHub account validation, credential persistence, repository
+discovery, and monitored-repository selection are implemented. Desktop
+credentials use the operating-system keychain. The server encrypts credentials
+stored in SQLite. Connections and repository discovery are driven through the
+source-module registry in both editions. The unauthenticated development server
+binds only to `127.0.0.1`.
 
 ```sh
 npm install

@@ -497,6 +497,181 @@ h2 {
   padding: 6px 10px;
 }
 
+.repositories-panel {
+  overflow: hidden;
+}
+
+.repository-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 26px;
+  border-bottom: 1px solid var(--border);
+  background: #10151d;
+}
+
+.repository-search {
+  display: grid;
+  flex: 1 1 420px;
+  max-width: 540px;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.repository-search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: #0c1118;
+}
+
+.repository-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(135 169 255 / 16%);
+}
+
+.repository-search input::placeholder {
+  color: var(--subtle);
+}
+
+.repository-selection-controls,
+.repository-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.repository-list-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 26px;
+  border-bottom: 1px solid var(--border);
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.repository-row {
+  display: grid;
+  grid-template-columns: auto 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  min-height: 78px;
+  padding: 15px 26px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.repository-row:hover {
+  background: #151b24;
+}
+
+.repository-row:focus-within {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.repository-row-selected {
+  background: #141c29;
+}
+
+.repository-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.repository-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #3a4c6b;
+  border-radius: 8px;
+  color: var(--accent-strong);
+  background: #172238;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.repository-identity {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.repository-identity strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-identity > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-metadata {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.repository-visibility {
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #171d27;
+}
+
+.repository-source {
+  min-width: 94px;
+  text-align: right;
+}
+
+.repository-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 26px;
+  background: #10151d;
+}
+
+.repository-footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.repository-footer .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
+.repository-selection-controls .secondary-button:disabled,
+.repository-footer .secondary-button:disabled {
+  cursor: not-allowed;
+}
+
 .status-dot-muted {
   background: var(--subtle);
 }
@@ -866,6 +1041,35 @@ h2 {
     grid-template-columns: 1fr;
     gap: 24px;
   }
+
+  .repository-toolbar,
+  .repository-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repository-search {
+    flex-basis: auto;
+    max-width: none;
+  }
+
+  .repository-row {
+    grid-template-columns: auto 38px minmax(0, 1fr);
+  }
+
+  .repository-metadata {
+    grid-column: 2 / 4;
+    justify-content: flex-start;
+  }
+
+  .repository-source {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .repository-footer-actions {
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 480px) {
@@ -881,7 +1085,10 @@ h2 {
   .health-summary,
   .panel-header,
   .connection-editor,
-  .source-row {
+  .source-row,
+  .repository-toolbar,
+  .repository-row,
+  .repository-footer {
     padding: 21px;
   }
 
@@ -897,5 +1104,11 @@ h2 {
 
   .secure-label {
     display: none;
+  }
+
+  .repository-selection-controls,
+  .repository-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }

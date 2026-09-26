@@ -63,11 +63,12 @@ Initial ports are expected to cover:
 - Application event publication.
 
 Source integrations implement the `SourceModule` interface. A module supplies
-its stable identifier, display metadata, credential-field description, and
-credential validation behavior. A central compiled catalog registers modules in
-`SourceRegistry` for both editions; generic list, connect, and disconnect use
-cases drive both transports and the Connections UI. Adding a source must not
-require a provider-specific route, IPC command, DTO, or frontend screen.
+its stable identifier, display metadata, credential-field description,
+credential validation behavior, and resource discovery. A central compiled
+catalog registers modules in `SourceRegistry` for both editions; generic list,
+connect, disconnect, and repository-discovery use cases drive both transports
+and the UI. Adding a source must not require a provider-specific route, IPC
+command, DTO, or frontend screen.
 
 Provider credentials are represented by opaque references outside the secret
 adapter. DTOs returned to a transport contain credential status and metadata,

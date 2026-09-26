@@ -1,13 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use ciwatcher_core::application::{
-    ConnectSource, DisconnectSource, ListMonitors, ListSources, PersistenceFailure, ProviderToken,
-    SecretReference, SecretStore,
+    ConnectSource, DisconnectSource, ListMonitors, ListRepositories, ListSources,
+    PersistenceFailure, ProviderToken, SaveRepositorySelection, SecretReference, SecretStore,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListMonitorsResponse,
-    ListSourcesResponse,
+    ListRepositoriesResponse, ListSourcesResponse, RepositorySelectionErrorResponse,
+    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse,
 };
 use ciwatcher_core::integrations::fake::FakeMonitorSource;
 use ciwatcher_core::integrations::registered_sources;
@@ -20,6 +21,8 @@ struct DesktopState {
     list_monitors: ListMonitors<FakeMonitorSource>,
     connect_source: ConnectSource,
     list_sources: ListSources,
+    list_repositories: ListRepositories,
+    save_repository_selection: SaveRepositorySelection,
     disconnect_source: DisconnectSource,
 }
 
@@ -98,6 +101,30 @@ fn list_sources(state: State<'_, DesktopState>) -> Result<ListSourcesResponse, S
 }
 
 #[tauri::command]
+async fn list_repositories(
+    state: State<'_, DesktopState>,
+) -> Result<ListRepositoriesResponse, ConnectionValidationErrorResponse> {
+    state
+        .list_repositories
+        .execute()
+        .await
+        .map(ListRepositoriesResponse::from_domain)
+        .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
+fn save_repository_selection(
+    state: State<'_, DesktopState>,
+    request: SaveRepositorySelectionRequest,
+) -> Result<SaveRepositorySelectionResponse, RepositorySelectionErrorResponse> {
+    state
+        .save_repository_selection
+        .execute(&request.into_domain())
+        .map(|selected_count| SaveRepositorySelectionResponse { selected_count })
+        .map_err(RepositorySelectionErrorResponse::from)
+}
+
+#[tauri::command]
 fn disconnect_source(
     state: State<'_, DesktopState>,
     request: DisconnectSourceRequest,
@@ -114,8 +141,8 @@ fn main() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
-            let database = SqliteDatabase::open(data_dir.join("ciwatcher.sqlite3"))?;
-            let connections = Arc::new(database);
+            let database = Arc::new(SqliteDatabase::open(data_dir.join("ciwatcher.sqlite3"))?);
+            let connections = database.clone();
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
             app.manage(DesktopState {
@@ -126,6 +153,17 @@ fn main() {
                     secrets.clone(),
                 ),
                 list_sources: ListSources::new(sources.clone(), connections.clone()),
+                list_repositories: ListRepositories::new(
+                    sources.clone(),
+                    connections.clone(),
+                    secrets.clone(),
+                    database.clone(),
+                ),
+                save_repository_selection: SaveRepositorySelection::new(
+                    sources.clone(),
+                    connections.clone(),
+                    database,
+                ),
                 disconnect_source: DisconnectSource::new(sources, connections, secrets),
             });
             Ok(())
@@ -135,6 +173,8 @@ fn main() {
             list_monitors,
             connect_source,
             list_sources,
+            list_repositories,
+            save_repository_selection,
             disconnect_source
         ])
         .run(tauri::generate_context!())

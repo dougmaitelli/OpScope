@@ -26,11 +26,29 @@ export type ConnectionValidationErrorCode = "invalidCredentials" | "rateLimited"
 
 export type ConnectionValidationErrorResponse = { code: ConnectionValidationErrorCode, message: string, };
 
+export type RepositoryVisibility = "public" | "private";
+
+export type RepositorySummary = { id: string, owner: string, name: string, description: string | null, visibility: RepositoryVisibility, webUrl: string, selected: boolean, };
+
+export type RepositorySourceSummary = { id: string, name: string, abbreviation: string, repositories: Array<RepositorySummary>, };
+
+export type ListRepositoriesResponse = { sources: Array<RepositorySourceSummary>, };
+
+export type RepositorySelectionSourceRequest = { sourceId: string, repositoryIds: Array<string>, };
+
+export type SaveRepositorySelectionRequest = { sources: Array<RepositorySelectionSourceRequest>, };
+
+export type SaveRepositorySelectionResponse = { selectedCount: number, };
+
+export type RepositorySelectionErrorResponse = { message: string, };
+
 export const httpRoutes = {
   health: "/api/health",
   listMonitors: "/api/monitors",
   sources: "/api/sources",
   connections: "/api/connections",
+  repositories: "/api/repositories",
+  repositorySelections: "/api/repository-selections",
 } as const;
 
 export const desktopCommands = {
@@ -39,6 +57,8 @@ export const desktopCommands = {
   listSources: "list_sources",
   connectSource: "connect_source",
   disconnectSource: "disconnect_source",
+  listRepositories: "list_repositories",
+  saveRepositorySelection: "save_repository_selection",
 } as const;
 
 export interface ApplicationClient {
@@ -47,4 +67,6 @@ export interface ApplicationClient {
   listSources(): Promise<ListSourcesResponse>;
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;
   disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;
+  listRepositories(): Promise<ListRepositoriesResponse>;
+  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;
 }

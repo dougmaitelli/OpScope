@@ -1,7 +1,8 @@
 //! SQLite metadata persistence and encrypted server-side credential storage.
 
 use crate::application::{
-    ConnectionRepository, PersistenceFailure, ProviderToken, SecretReference, SecretStore,
+    ConnectionRepository, PersistenceFailure, ProviderToken, RepositorySelection,
+    RepositorySelectionRepository, SecretReference, SecretStore, SourceRepositorySelection,
     StoredConnection, ValidatedAccount,
 };
 use chacha20poly1305::aead::{Aead, Generate, KeyInit, Payload};
@@ -52,6 +53,13 @@ impl SqliteDatabase {
                    value_nonce BLOB NOT NULL,
                    ciphertext BLOB NOT NULL,
                    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+                 );
+                 CREATE TABLE IF NOT EXISTS repository_selections (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   selected_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                   PRIMARY KEY (source_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,6 +231,62 @@ impl ConnectionRepository for SqliteDatabase {
                 [source_id],
             )
             .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
+}
+
+impl RepositorySelectionRepository for SqliteDatabase {
+    fn list(&self) -> Result<Vec<RepositorySelection>, PersistenceFailure> {
+        let database = self.lock()?;
+        let mut statement = database
+            .prepare(
+                "SELECT source_id, repository_id
+                 FROM repository_selections
+                 ORDER BY source_id, repository_id",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(RepositorySelection {
+                    source_id: row.get(0)?,
+                    repository_id: row.get(1)?,
+                })
+            })
+            .map_err(|_| PersistenceFailure)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn replace_for_sources(
+        &self,
+        selections: &[SourceRepositorySelection],
+    ) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        for selection in selections {
+            transaction
+                .execute(
+                    "DELETE FROM repository_selections WHERE source_id = ?1",
+                    [&selection.source_id],
+                )
+                .map_err(|_| PersistenceFailure)?;
+            for repository_id in &selection.repository_ids {
+                transaction
+                    .execute(
+                        "INSERT INTO repository_selections (source_id, repository_id)
+                         VALUES (?1, ?2)",
+                        params![selection.source_id, repository_id],
+                    )
+                    .map_err(|_| PersistenceFailure)?;
+            }
+            transaction
+                .execute(
+                    "INSERT INTO audit_events (event_type, connection_id)
+                     VALUES ('repository_selection_saved', ?1)",
+                    [&selection.source_id],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
         transaction.commit().map_err(|_| PersistenceFailure)
     }
 }
@@ -490,6 +554,27 @@ mod tests {
             store.retrieve(&reference)?.expose(),
             "github_pat_restart_test"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn repository_selection_round_trips_and_is_removed_with_connection()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempdir()?;
+        let database_path = directory.path().join("ciwatcher.sqlite3");
+        {
+            let database = SqliteDatabase::open(&database_path)?;
+            database.save(&test_connection())?;
+            database.replace_for_sources(&[SourceRepositorySelection {
+                source_id: "example".to_owned(),
+                repository_ids: vec!["repository-1".to_owned(), "repository-2".to_owned()],
+            }])?;
+        }
+
+        let database = SqliteDatabase::open(&database_path)?;
+        assert_eq!(database.list()?.len(), 2);
+        database.delete("example")?;
+        assert!(database.list()?.is_empty());
         Ok(())
     }
 }
