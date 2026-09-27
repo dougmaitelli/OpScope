@@ -1,5 +1,5 @@
 use crate::state::DesktopState;
-use ciwatcher_core::contracts::{
+use opsscope_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,

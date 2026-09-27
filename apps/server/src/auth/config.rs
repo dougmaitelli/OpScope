@@ -35,11 +35,11 @@ impl Error for AuthenticationConfigurationError {}
 
 pub(super) async fn from_environment()
 -> Result<Option<AuthenticationConfiguration>, AuthenticationConfigurationError> {
-    let issuer = optional_environment("CIWATCHER_OIDC_ISSUER");
-    let client_id = optional_environment("CIWATCHER_OIDC_CLIENT_ID");
-    let client_secret = optional_environment("CIWATCHER_OIDC_CLIENT_SECRET");
-    let public_url = optional_environment("CIWATCHER_PUBLIC_URL");
-    let allowed_subjects = optional_environment("CIWATCHER_OIDC_ALLOWED_SUBJECTS");
+    let issuer = optional_environment("OPSSCOPE_OIDC_ISSUER");
+    let client_id = optional_environment("OPSSCOPE_OIDC_CLIENT_ID");
+    let client_secret = optional_environment("OPSSCOPE_OIDC_CLIENT_SECRET");
+    let public_url = optional_environment("OPSSCOPE_PUBLIC_URL");
+    let allowed_subjects = optional_environment("OPSSCOPE_OIDC_ALLOWED_SUBJECTS");
     if authentication_is_unconfigured(&[
         issuer.as_deref(),
         client_id.as_deref(),
@@ -48,10 +48,10 @@ pub(super) async fn from_environment()
         return Ok(None);
     }
 
-    let issuer = validate_issuer_url(&required_value("CIWATCHER_OIDC_ISSUER", issuer)?)?;
-    let client_id = required_value("CIWATCHER_OIDC_CLIENT_ID", client_id)?;
-    let client_secret = required_value("CIWATCHER_OIDC_CLIENT_SECRET", client_secret)?;
-    let public_url = validate_public_url(&required_value("CIWATCHER_PUBLIC_URL", public_url)?)?;
+    let issuer = validate_issuer_url(&required_value("OPSSCOPE_OIDC_ISSUER", issuer)?)?;
+    let client_id = required_value("OPSSCOPE_OIDC_CLIENT_ID", client_id)?;
+    let client_secret = required_value("OPSSCOPE_OIDC_CLIENT_SECRET", client_secret)?;
+    let public_url = validate_public_url(&required_value("OPSSCOPE_PUBLIC_URL", public_url)?)?;
     let secure_cookies = public_url.starts_with("https://");
     let redirect_url = format!("{public_url}{AUTH_CALLBACK_PATH}");
     let http_client = openidconnect::reqwest::ClientBuilder::new()
@@ -103,20 +103,20 @@ fn required_value(
     value: Option<String>,
 ) -> Result<String, AuthenticationConfigurationError> {
     value.ok_or(AuthenticationConfigurationError(match name {
-        "CIWATCHER_OIDC_ISSUER" => "CIWATCHER_OIDC_ISSUER is required",
-        "CIWATCHER_OIDC_CLIENT_ID" => "CIWATCHER_OIDC_CLIENT_ID is required",
-        "CIWATCHER_OIDC_CLIENT_SECRET" => "CIWATCHER_OIDC_CLIENT_SECRET is required",
-        "CIWATCHER_PUBLIC_URL" => "CIWATCHER_PUBLIC_URL is required",
+        "OPSSCOPE_OIDC_ISSUER" => "OPSSCOPE_OIDC_ISSUER is required",
+        "OPSSCOPE_OIDC_CLIENT_ID" => "OPSSCOPE_OIDC_CLIENT_ID is required",
+        "OPSSCOPE_OIDC_CLIENT_SECRET" => "OPSSCOPE_OIDC_CLIENT_SECRET is required",
+        "OPSSCOPE_PUBLIC_URL" => "OPSSCOPE_PUBLIC_URL is required",
         _ => "required authentication environment variable is missing",
     }))
 }
 
 fn validate_public_url(value: &str) -> Result<String, AuthenticationConfigurationError> {
     let url = reqwest::Url::parse(value)
-        .map_err(|_| AuthenticationConfigurationError("CIWATCHER_PUBLIC_URL is invalid"))?;
+        .map_err(|_| AuthenticationConfigurationError("OPSSCOPE_PUBLIC_URL is invalid"))?;
     if !uses_secure_transport(&url) {
         return Err(AuthenticationConfigurationError(
-            "CIWATCHER_PUBLIC_URL must use HTTPS except on loopback",
+            "OPSSCOPE_PUBLIC_URL must use HTTPS except on loopback",
         ));
     }
     if url.cannot_be_a_base()
@@ -127,7 +127,7 @@ fn validate_public_url(value: &str) -> Result<String, AuthenticationConfiguratio
         || !matches!(url.path(), "" | "/")
     {
         return Err(AuthenticationConfigurationError(
-            "CIWATCHER_PUBLIC_URL must contain only an origin",
+            "OPSSCOPE_PUBLIC_URL must contain only an origin",
         ));
     }
     Ok(value.trim_end_matches('/').to_owned())
@@ -135,10 +135,10 @@ fn validate_public_url(value: &str) -> Result<String, AuthenticationConfiguratio
 
 fn validate_issuer_url(value: &str) -> Result<String, AuthenticationConfigurationError> {
     let url = reqwest::Url::parse(value)
-        .map_err(|_| AuthenticationConfigurationError("CIWATCHER_OIDC_ISSUER is invalid"))?;
+        .map_err(|_| AuthenticationConfigurationError("OPSSCOPE_OIDC_ISSUER is invalid"))?;
     if !uses_secure_transport(&url) {
         return Err(AuthenticationConfigurationError(
-            "CIWATCHER_OIDC_ISSUER must use HTTPS except on loopback",
+            "OPSSCOPE_OIDC_ISSUER must use HTTPS except on loopback",
         ));
     }
     if url.username() != ""
@@ -147,7 +147,7 @@ fn validate_issuer_url(value: &str) -> Result<String, AuthenticationConfiguratio
         || url.fragment().is_some()
     {
         return Err(AuthenticationConfigurationError(
-            "CIWATCHER_OIDC_ISSUER must not contain credentials, a query, or a fragment",
+            "OPSSCOPE_OIDC_ISSUER must not contain credentials, a query, or a fragment",
         ));
     }
     Ok(value.trim_end_matches('/').to_owned())

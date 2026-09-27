@@ -9,28 +9,28 @@ use axum::Router;
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::routing::{any, get, post, put};
-use ciwatcher_core::application::{
-    ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
-    RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
-};
-use ciwatcher_core::contracts::{
-    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
-    REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
-    SYNCHRONIZATION_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
-};
-use ciwatcher_core::source_data::SourceDataCache;
 use handlers::{
     AppState, connect_source, disconnect_source, get_settings, health, list_repositories,
     list_sources, list_workflows, save_repository_selection, synchronization_status,
     synchronize_sources, update_settings, workflow_run_logs,
 };
+use opsscope_core::application::{
+    ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
+    RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
+};
+use opsscope_core::contracts::{
+    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
+    REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
+    SYNCHRONIZATION_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
+};
+use opsscope_core::source_data::SourceDataCache;
 use std::path::Path;
 use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
 
 pub struct ServerApplication {
     pub router: Router,
-    pub synchronizer: ciwatcher_core::application::SynchronizeSources,
+    pub synchronizer: opsscope_core::application::SynchronizeSources,
     pub settings: GetMonitoringSettings,
 }
 

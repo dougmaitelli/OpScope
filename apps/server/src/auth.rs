@@ -117,17 +117,17 @@ impl WebAuthentication {
 
     fn session_cookie_name(&self) -> &'static str {
         if self.secure_cookies {
-            "__Host-ciwatcher-session"
+            "__Host-opsscope-session"
         } else {
-            "ciwatcher-session"
+            "opsscope-session"
         }
     }
 
     fn login_cookie_name(&self) -> &'static str {
         if self.secure_cookies {
-            "__Host-ciwatcher-oidc"
+            "__Host-opsscope-oidc"
         } else {
-            "ciwatcher-oidc"
+            "opsscope-oidc"
         }
     }
 

@@ -170,8 +170,8 @@ mod tests {
 
     #[test]
     fn production_cookie_has_host_prefix_and_security_attributes() {
-        let cookie = build_cookie("__Host-ciwatcher-session", "token", 60, true, "Strict");
-        assert!(cookie.starts_with("__Host-ciwatcher-session=token; Path=/;"));
+        let cookie = build_cookie("__Host-opsscope-session", "token", 60, true, "Strict");
+        assert!(cookie.starts_with("__Host-opsscope-session=token; Path=/;"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Strict"));
         assert!(cookie.ends_with("; Secure"));

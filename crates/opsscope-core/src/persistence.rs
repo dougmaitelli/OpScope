@@ -965,7 +965,7 @@ mod tests {
     fn encrypted_secret_survives_database_and_key_reload() -> Result<(), Box<dyn std::error::Error>>
     {
         let directory = tempdir()?;
-        let database_path = directory.path().join("ciwatcher.sqlite3");
+        let database_path = directory.path().join("opsscope.sqlite3");
         let key_path = directory.path().join("master.key");
         let reference = SecretReference::for_connection("example", "test");
 
@@ -993,7 +993,7 @@ mod tests {
     fn repository_selection_round_trips_and_is_removed_with_connection()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempdir()?;
-        let database_path = directory.path().join("ciwatcher.sqlite3");
+        let database_path = directory.path().join("opsscope.sqlite3");
         {
             let database = SqliteDatabase::open(&database_path)?;
             database.save(&test_connection())?;

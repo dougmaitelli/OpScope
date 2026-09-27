@@ -7,4 +7,4 @@ dist/
 apps/desktop/gen/
 .env
 *.local
-.ciwatcher-data/
+.opsscope-data/

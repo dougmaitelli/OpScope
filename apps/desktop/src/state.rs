@@ -1,10 +1,10 @@
-use ciwatcher_core::application::{
+use opsscope_core::application::{
     ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
     GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows, NotifyRepositoryFailures,
     RepositorySelectionRepository, SaveRepositorySelection, SecretStore, SettingsRepository,
     SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
 };
-use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
+use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 pub(crate) struct DesktopState {

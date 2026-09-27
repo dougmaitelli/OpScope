@@ -2,7 +2,7 @@
 
 ## Security objectives
 
-CI Watcher handles credentials capable of reading private repository metadata.
+OpsScope handles credentials capable of reading private repository metadata.
 Future versions may hold credentials with write permissions. Its design must:
 
 - Accept new provider credentials only through intentional input, never return

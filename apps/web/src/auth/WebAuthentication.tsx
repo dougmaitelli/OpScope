@@ -68,8 +68,8 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
           : { enabled: true, authenticated: false, user: null, csrfToken: null },
       );
     };
-    globalThis.addEventListener("ciwatcher:unauthorized", unauthorized);
-    return () => globalThis.removeEventListener("ciwatcher:unauthorized", unauthorized);
+    globalThis.addEventListener("opsscope:unauthorized", unauthorized);
+    return () => globalThis.removeEventListener("opsscope:unauthorized", unauthorized);
   }, [loadSession]);
 
   const logout = useCallback(async () => {
@@ -109,7 +109,7 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     return (
       <AuthenticationScreen>
         <h1>Checking session</h1>
-        <p>Contacting the CI Watcher server.</p>
+        <p>Contacting the OpsScope server.</p>
       </AuthenticationScreen>
     );
   }
@@ -145,9 +145,9 @@ function AuthenticationScreen({ children }: { children: ReactNode }) {
       <section className="auth-panel" aria-live="polite">
         <div className="auth-brand">
           <span className="auth-mark" aria-hidden="true">
-            CI
+            OPS
           </span>
-          <span>CI Watcher</span>
+          <span>OpsScope</span>
         </div>
         {children}
       </section>

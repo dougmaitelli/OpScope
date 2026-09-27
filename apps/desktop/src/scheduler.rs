@@ -1,4 +1,4 @@
-use ciwatcher_core::application::{
+use opsscope_core::application::{
     DEFAULT_SYNCHRONIZATION_INTERVAL, GetMonitoringSettings, SynchronizeSources,
 };
 use std::sync::Mutex;

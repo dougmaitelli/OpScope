@@ -1,6 +1,6 @@
 .git
 .github
-.ciwatcher-data
+.opsscope-data
 .env
 *.local
 node_modules

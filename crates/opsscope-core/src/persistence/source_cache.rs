@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempdir()?;
-        let database_path = directory.path().join("ciwatcher.sqlite3");
+        let database_path = directory.path().join("opsscope.sqlite3");
         let repositories = RepositorySnapshot {
             refreshed_at: 123,
             repositories: vec![Repository {

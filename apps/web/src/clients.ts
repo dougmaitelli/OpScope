@@ -201,7 +201,7 @@ export class HttpClient implements ApplicationClient {
 
   private async responseError(response: Response): Promise<Error> {
     if (response.status === 401) {
-      globalThis.dispatchEvent(new Event("ciwatcher:unauthorized"));
+      globalThis.dispatchEvent(new Event("opsscope:unauthorized"));
     }
     const fallback =
       response.status === 404

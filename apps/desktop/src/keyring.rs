@@ -1,13 +1,11 @@
-use ciwatcher_core::application::{
-    PersistenceFailure, ProviderToken, SecretReference, SecretStore,
-};
+use opsscope_core::application::{PersistenceFailure, ProviderToken, SecretReference, SecretStore};
 
 #[derive(Clone, Copy)]
 pub(crate) struct KeyringSecretStore;
 
 impl KeyringSecretStore {
     fn entry(reference: &SecretReference) -> Result<keyring::Entry, PersistenceFailure> {
-        keyring::Entry::new("dev.ciwatcher.desktop", reference.expose())
+        keyring::Entry::new("dev.opsscope.desktop", reference.expose())
             .map_err(|_| PersistenceFailure)
     }
 }

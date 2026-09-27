@@ -17,7 +17,7 @@ export function AppShell() {
   const authentication = useWebAuthentication();
 
   useEffect(() => {
-    document.title = `${pageTitles[location.pathname] ?? "Overview"} · CI Watcher`;
+    document.title = `${pageTitles[location.pathname] ?? "Overview"} · OpsScope`;
   }, [location.pathname]);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -28,9 +28,9 @@ export function AppShell() {
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            CI
+            OPS
           </span>
-          <span>CI Watcher</span>
+          <span>OpsScope</span>
         </div>
 
         <nav aria-label="Primary navigation">

@@ -131,7 +131,7 @@ export function ConnectionsPage() {
       <PageHeader
         eyebrow="Workspace settings"
         title="Connections"
-        description="Manage the services CI Watcher uses to discover monitoring data."
+        description="Manage the services OpsScope uses to discover monitoring data."
       />
 
       <section className="panel sources-panel" aria-labelledby="sources-heading">
@@ -188,7 +188,7 @@ export function ConnectionsPage() {
                 ? `Replace ${activeConnection?.label} credential`
                 : `Add ${activeSource.name} connection`}
             </h2>
-            <p>CI Watcher validates the account before storing the credential securely.</p>
+            <p>OpsScope validates the account before storing the credential securely.</p>
           </div>
           <form
             className="connection-form"

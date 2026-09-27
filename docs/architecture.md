@@ -2,7 +2,7 @@
 
 ## Context
 
-CI Watcher has one Rust application core and two delivery shells:
+OpsScope has one Rust application core and two delivery shells:
 
 - A native-WebView desktop application using narrow IPC commands and an
   operating-system secret store.
@@ -31,7 +31,7 @@ framework, database driver, UI framework, or GitHub response types.
 
 ```text
 crates/
-  ciwatcher-core/
+  opsscope-core/
     domain                Pure types, invariants, and state transitions
     application           Use cases and port interfaces
     contracts             Stable request and response DTOs

@@ -1,4 +1,4 @@
-// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.
+// Generated from crates/opsscope-core/src/contracts.rs. Do not edit.
 
 export type HealthResponse = { status: string, service: string, contractVersion: number, };
 

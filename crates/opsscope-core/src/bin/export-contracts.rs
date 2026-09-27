@@ -1,4 +1,4 @@
-use ciwatcher_core::contracts::render_typescript_contract;
+use opsscope_core::contracts::render_typescript_contract;
 use std::env;
 use std::error::Error;
 use std::fs;

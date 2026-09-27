@@ -3,24 +3,24 @@ use crate::auth::{AUTH_SESSION_PATH, CSRF_HEADER, TestSession, WebAuthentication
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use ciwatcher_core::application::{
+use http_body_util::BodyExt;
+use opsscope_core::application::{
     ConfiguredSource, ConnectionConfiguration, ConnectionValidationFailure, CredentialField,
     NoopNotificationSink, NotifyRepositoryFailures, ProviderToken, SourceDescriptor, SourceModule,
     SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
-use ciwatcher_core::contracts::{
+use opsscope_core::contracts::{
     CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
 };
-use ciwatcher_core::domain::{
+use opsscope_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
     WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
-use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
-use http_body_util::BodyExt;
+use opsscope_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use std::fs;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -237,10 +237,7 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
 async fn web_assets_use_spa_fallback_without_masking_unknown_api_routes()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    fs::write(
-        directory.path().join("index.html"),
-        "<main>CI Watcher</main>",
-    )?;
+    fs::write(directory.path().join("index.html"), "<main>OpsScope</main>")?;
     fs::write(directory.path().join("asset.txt"), "asset")?;
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
@@ -254,7 +251,7 @@ async fn web_assets_use_spa_fallback_without_masking_unknown_api_routes()
     );
 
     for (path, expected) in [
-        ("/settings", "<main>CI Watcher</main>"),
+        ("/settings", "<main>OpsScope</main>"),
         ("/asset.txt", "asset"),
     ] {
         let response = app
@@ -445,7 +442,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.workflows[0].runs.len(), 5);
     assert_eq!(
         decoded.workflows[0].runs[0].outcome,
-        ciwatcher_core::contracts::RunOutcome::Success
+        opsscope_core::contracts::RunOutcome::Success
     );
 
     let logs = app

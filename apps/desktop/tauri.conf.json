@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CI Watcher",
+  "productName": "OpsScope",
   "version": "0.1.0",
-  "identifier": "dev.ciwatcher.desktop",
+  "identifier": "dev.opsscope.desktop",
   "build": {
     "beforeBuildCommand": "npm --prefix web run build",
     "beforeDevCommand": "npm --prefix web run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CI Watcher",
+        "title": "OpsScope",
         "width": 960,
         "height": 640
       }

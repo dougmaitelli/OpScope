@@ -16,9 +16,9 @@ use crate::keyring::KeyringSecretStore;
 use crate::notifications::DesktopNotificationSink;
 use crate::scheduler::SynchronizationScheduler;
 use crate::state::DesktopState;
-use ciwatcher_core::application::NotifyRepositoryFailures;
-use ciwatcher_core::integrations::registered_sources;
-use ciwatcher_core::persistence::SqliteDatabase;
+use opsscope_core::application::NotifyRepositoryFailures;
+use opsscope_core::integrations::registered_sources;
+use opsscope_core::persistence::SqliteDatabase;
 use std::fs;
 use std::sync::Arc;
 use tauri::Manager;
@@ -30,7 +30,7 @@ fn main() {
             tray::setup(app)?;
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
-            let database = Arc::new(SqliteDatabase::open(data_dir.join("ciwatcher.sqlite3"))?);
+            let database = Arc::new(SqliteDatabase::open(data_dir.join("opsscope.sqlite3"))?);
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
             let failure_notifications = NotifyRepositoryFailures::new(

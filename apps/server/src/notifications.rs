@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ciwatcher_core::application::{
+use opsscope_core::application::{
     NoopNotificationSink, Notification, NotificationDeliveryFailure, NotificationSeverity,
     NotificationSink,
 };
@@ -11,7 +11,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub const APPRISE_URL_ENVIRONMENT_VARIABLE: &str = "CIWATCHER_APPRISE_URL";
+pub const APPRISE_URL_ENVIRONMENT_VARIABLE: &str = "OPSSCOPE_APPRISE_URL";
 
 #[derive(Debug)]
 pub struct AppriseConfigurationError;
@@ -19,7 +19,7 @@ pub struct AppriseConfigurationError;
 impl Display for AppriseConfigurationError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(
-            "CIWATCHER_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
+            "OPSSCOPE_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
         )
     }
 }
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn requires_an_http_endpoint() {
-        assert!(AppriseNotificationSink::new("https://apprise.test/notify/ciwatcher").is_ok());
+        assert!(AppriseNotificationSink::new("https://apprise.test/notify/opsscope").is_ok());
         assert!(AppriseNotificationSink::new("ftp://apprise.test/notify").is_err());
         assert!(AppriseNotificationSink::new("not a url").is_err());
     }

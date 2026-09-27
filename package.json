@@ -1,5 +1,5 @@
 {
-  "name": "ciwatcher-workspace",
+  "name": "opsscope-workspace",
   "private": true,
   "version": "0.1.0",
   "workspaces": ["apps/web"],
@@ -7,14 +7,14 @@
     "@tauri-apps/cli": "2.11.5"
   },
   "scripts": {
-    "build": "npm run contracts:check && cargo build --workspace && npm run build --workspace @ciwatcher/web",
-    "check": "npm run contracts:check && cargo fmt --all --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-targets && npm run check --workspace @ciwatcher/web",
-    "contracts:check": "cargo run --quiet -p ciwatcher-core --bin export-contracts -- check",
-    "contracts:generate": "cargo run --quiet -p ciwatcher-core --bin export-contracts -- generate",
+    "build": "npm run contracts:check && cargo build --workspace && npm run build --workspace @opsscope/web",
+    "check": "npm run contracts:check && cargo fmt --all --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-targets && npm run check --workspace @opsscope/web",
+    "contracts:check": "cargo run --quiet -p opsscope-core --bin export-contracts -- check",
+    "contracts:generate": "cargo run --quiet -p opsscope-core --bin export-contracts -- generate",
     "desktop:build": "cd apps/desktop && tauri build --no-bundle",
     "desktop:dev": "cd apps/desktop && tauri dev",
-    "server:dev": "cargo run -p ciwatcher-server",
-    "web:dev": "npm run dev --workspace @ciwatcher/web"
+    "server:dev": "cargo run -p opsscope-server",
+    "web:dev": "npm run dev --workspace @opsscope/web"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,

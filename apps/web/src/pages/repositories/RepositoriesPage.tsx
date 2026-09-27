@@ -120,7 +120,7 @@ export function RepositoriesPage() {
       <PageHeader
         eyebrow="Monitoring scope"
         title="Repositories"
-        description="Choose which repositories CI Watcher should monitor."
+        description="Choose which repositories OpsScope should monitor."
         actions={
           <button
             className={`secondary-button${loading ? " button-busy" : ""}`}

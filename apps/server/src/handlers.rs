@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use ciwatcher_core::application::{
+use opsscope_core::application::{
     ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
     GetMonitoringSettings, GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure,
     ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
@@ -9,7 +9,7 @@ use ciwatcher_core::application::{
     SecretStore, SettingsFailure, SettingsRepository, SourceRegistry, SynchronizeSources,
     UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
-use ciwatcher_core::contracts::{
+use opsscope_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
@@ -18,7 +18,7 @@ use ciwatcher_core::contracts::{
     UpdateMonitoringSettingsRequest, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
     WorkflowRunLogsResponse,
 };
-use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
+use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -230,20 +230,20 @@ fn http_validation_error(
         | ConnectSourceFailure::UnknownConnection
         | ConnectSourceFailure::DuplicateConnection
         | ConnectSourceFailure::Validation(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration,
+            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration,
         ) => StatusCode::BAD_REQUEST,
         ConnectSourceFailure::Validation(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ConnectSourceFailure::Validation(
-            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ConnectSourceFailure::Validation(
-            ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
+            opsscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ConnectSourceFailure::Validation(
-            ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ConnectSourceFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
@@ -278,18 +278,18 @@ fn http_repository_error(
 ) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
     let status = match failure {
         ListRepositoriesFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ListRepositoriesFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ListRepositoriesFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
+            opsscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListRepositoriesFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration
-            | ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListRepositoriesFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
@@ -301,18 +301,18 @@ fn http_workflow_error(
 ) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
     let status = match failure {
         ListWorkflowsFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ListWorkflowsFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::PermissionDenied,
+            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ListWorkflowsFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
+            opsscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListWorkflowsFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration
-            | ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListWorkflowsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
