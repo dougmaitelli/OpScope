@@ -300,6 +300,7 @@ struct GitHubRepository {
     name: String,
     description: Option<String>,
     private: bool,
+    archived: bool,
     html_url: String,
 }
 
@@ -318,6 +319,14 @@ impl From<GitHubRepository> for Repository {
             web_url: repository.html_url,
         }
     }
+}
+
+fn map_available_repositories(repositories: Vec<GitHubRepository>) -> Vec<Repository> {
+    repositories
+        .into_iter()
+        .filter(|repository| !repository.archived)
+        .map(Repository::from)
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -589,7 +598,7 @@ impl SourceModule for GitHubClient {
                 .await
                 .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
             let page_size = page_repositories.len();
-            repositories.extend(page_repositories.into_iter().map(Repository::from));
+            repositories.extend(map_available_repositories(page_repositories));
             if page_size < REPOSITORIES_PER_PAGE {
                 return Ok(repositories);
             }

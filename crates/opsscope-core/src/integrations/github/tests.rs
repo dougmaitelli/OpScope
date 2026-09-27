@@ -110,13 +110,29 @@ fn repository_request_is_authenticated_and_paginated() -> Result<(), Box<dyn std
 fn github_repository_maps_to_provider_independent_domain() -> Result<(), Box<dyn std::error::Error>>
 {
     let repository: GitHubRepository = serde_json::from_str(
-        r#"{"id":1296269,"owner":{"login":"octocat"},"name":"Hello-World","description":"A sample","private":false,"html_url":"https://github.com/octocat/Hello-World"}"#,
+        r#"{"id":1296269,"owner":{"login":"octocat"},"name":"Hello-World","description":"A sample","private":false,"archived":false,"html_url":"https://github.com/octocat/Hello-World"}"#,
     )?;
 
     let mapped = Repository::from(repository);
     assert_eq!(mapped.id, "1296269");
     assert_eq!(mapped.owner, "octocat");
     assert_eq!(mapped.visibility, RepositoryVisibility::Public);
+    Ok(())
+}
+
+#[test]
+fn archived_github_repositories_are_not_available() -> Result<(), Box<dyn std::error::Error>> {
+    let repositories: Vec<GitHubRepository> = serde_json::from_str(
+        r#"[
+            {"id":1,"owner":{"login":"octocat"},"name":"active","description":null,"private":false,"archived":false,"html_url":"https://github.com/octocat/active"},
+            {"id":2,"owner":{"login":"octocat"},"name":"archived","description":null,"private":false,"archived":true,"html_url":"https://github.com/octocat/archived"}
+        ]"#,
+    )?;
+
+    let mapped = map_available_repositories(repositories);
+
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(mapped[0].name, "active");
     Ok(())
 }
 
