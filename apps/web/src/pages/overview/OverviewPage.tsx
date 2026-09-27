@@ -1,17 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { groupWorkflows, ProjectGroup } from "../../components/ProjectGroup.tsx";
-import type { ListWorkflowsResponse } from "../../generated/contracts.ts";
+import {
+  WorkflowFilters,
+  type WorkflowStatusFilter,
+} from "../../components/WorkflowFilters.tsx";
+import type {
+  ListWorkflowsResponse,
+  WorkflowSummary,
+} from "../../generated/contracts.ts";
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
 import "./OverviewPage.css";
 
 const SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS = 10_000;
+const WORKFLOW_STATUS_FILTERS = new Set<WorkflowStatusFilter>([
+  "all",
+  "failing",
+  "running",
+  "successful",
+  "other",
+]);
+
+function workflowMatchesStatus(
+  workflow: WorkflowSummary,
+  status: WorkflowStatusFilter,
+): boolean {
+  if (status === "all") return true;
+  const latestRun = workflow.runs[0] ?? null;
+  const running =
+    latestRun?.lifecycle === "queued" || latestRun?.lifecycle === "running";
+  const failing =
+    latestRun?.lifecycle === "completed" && latestRun.outcome === "failure";
+  const successful =
+    latestRun?.lifecycle === "completed" && latestRun.outcome === "success";
+
+  if (status === "running") return running;
+  if (status === "failing") return failing;
+  if (status === "successful") return successful;
+  return !running && !failing && !successful;
+}
 
 export function OverviewPage() {
   const client = useApplicationClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -110,7 +145,19 @@ export function OverviewPage() {
   }, [client]);
 
   const workflows = inventory?.workflows ?? [];
-  const projects = groupWorkflows(workflows);
+  const query = searchParams.get("q") ?? "";
+  const requestedStatus = searchParams.get("status") ?? "all";
+  const status = WORKFLOW_STATUS_FILTERS.has(requestedStatus as WorkflowStatusFilter)
+    ? requestedStatus as WorkflowStatusFilter
+    : "all";
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredWorkflows = workflows.filter((workflow) => {
+    const searchable = `${workflow.repositoryOwner}/${workflow.repositoryName} ${workflow.name}`
+      .toLocaleLowerCase();
+    return searchable.includes(normalizedQuery) && workflowMatchesStatus(workflow, status);
+  });
+  const projects = groupWorkflows(filteredWorkflows);
+  const filtersActive = normalizedQuery.length > 0 || status !== "all";
   const latestRuns = workflows.flatMap((workflow) => workflow.runs.slice(0, 1));
   const running = latestRuns.filter(
     (run) => run.lifecycle === "queued" || run.lifecycle === "running",
@@ -150,6 +197,15 @@ export function OverviewPage() {
   const updated = inventory?.lastSuccessfulAt
     ? `Last synchronized ${formatRelativeUnix(inventory.lastSuccessfulAt)}`
     : "No run activity synchronized yet";
+
+  const updateFilters = (nextQuery: string, nextStatus: WorkflowStatusFilter) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextQuery.trim().length > 0) next.set("q", nextQuery);
+    else next.delete("q");
+    if (nextStatus !== "all") next.set("status", nextStatus);
+    else next.delete("status");
+    setSearchParams(next, { replace: true });
+  };
 
   return (
     <section className="page-view" aria-labelledby="overview-title">
@@ -221,8 +277,25 @@ export function OverviewPage() {
           <PanelHeader
             label="Workflows"
             title="Projects and workflows"
-            metadata={<span className="panel-badge">{error ? "Unavailable" : `${projects.length} project${projects.length === 1 ? "" : "s"}`}</span>}
+            metadata={
+              <span className="panel-badge">
+                {error
+                  ? "Unavailable"
+                  : filtersActive
+                    ? `${filteredWorkflows.length} of ${workflows.length} workflows`
+                    : `${projects.length} project${projects.length === 1 ? "" : "s"}`}
+              </span>
+            }
           />
+          {workflows.length > 0 ? (
+            <WorkflowFilters
+              query={query}
+              status={status}
+              onQueryChange={(nextQuery) => updateFilters(nextQuery, status)}
+              onStatusChange={(nextStatus) => updateFilters(query, nextStatus)}
+              onClear={() => updateFilters("", "all")}
+            />
+          ) : null}
           <div className="workflow-list" aria-live="polite">
             {loading && !inventory ? (
               <div className="loading-row">
@@ -235,6 +308,8 @@ export function OverviewPage() {
               <EmptyState message="Select repositories to discover workflows." />
             ) : workflows.length === 0 ? (
               <EmptyState message="No workflows were found in the selected repositories." />
+            ) : filteredWorkflows.length === 0 ? (
+              <EmptyState message="No workflows match the current filters." />
             ) : (
               projects.map((project) => <ProjectGroup key={project.id} project={project} />)
             )}

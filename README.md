@@ -24,6 +24,7 @@ Version one includes:
 - One GitHub connection using a fine-grained personal access token.
 - Repository and GitHub Actions workflow discovery.
 - Current and recent workflow-run state across selected repositories.
+- On-demand workflow-run logs with links back to the source provider.
 - Repository, workflow, branch, commit, actor, trigger, timing, outcome,
   freshness, and links back to GitHub.
 - Manual and scheduled refresh with cached state during transient failures.
@@ -31,7 +32,7 @@ Version one includes:
 - Configurable local history stored in SQLite.
 - Native desktop and single-administrator self-hosted editions.
 
-It does not include write actions, workflow logs or artifacts, notifications,
+It does not include write actions, artifacts, notifications,
 GitHub Enterprise Server, multiple GitHub connections, multiple users,
 PostgreSQL, other providers, runtime plugins, mobile applications, or a hosted
 service.
@@ -68,7 +69,8 @@ desktop shell, generated TypeScript contracts, and the GitHub source module.
 GitHub account validation, credential persistence, repository selection,
 workflow discovery, and recent workflow-run monitoring are implemented. Run
 activity and synchronization freshness are cached in SQLite, with the last
-successful snapshot retained during transient provider failures. Desktop
+successful snapshot retained during transient provider failures. Users can
+inspect workflow-run logs on demand without persisting them locally. Desktop
 credentials use the operating-system keychain. The server encrypts credentials
 stored in SQLite. Manual refresh uses a shared synchronization coordinator that
 bypasses cache TTLs, prevents overlapping work per source, and continues when an
