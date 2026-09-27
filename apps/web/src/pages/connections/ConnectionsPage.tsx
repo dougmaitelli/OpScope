@@ -248,7 +248,11 @@ export function ConnectionsPage() {
               >
                 Cancel
               </button>
-              <button className="primary-button" type="submit" disabled={connecting}>
+              <button
+                className={`primary-button${connecting ? " button-busy" : ""}`}
+                type="submit"
+                disabled={connecting}
+              >
                 {connecting
                   ? "Connecting…"
                   : activeConnection

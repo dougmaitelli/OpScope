@@ -24,8 +24,13 @@
 }
 
 .secondary-button:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.6;
+}
+
+.button-busy,
+.button-busy:disabled {
+  cursor: wait;
 }
 
 .button-busy span {
@@ -41,12 +46,12 @@
   background: var(--accent);
 }
 
-.primary-button:hover {
+.primary-button:hover:not(:disabled) {
   background: var(--accent-strong);
 }
 
 .primary-button:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.65;
 }
 
@@ -77,6 +82,6 @@
 }
 
 .danger-button:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.6;
 }

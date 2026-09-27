@@ -159,7 +159,7 @@ export function SettingsPage() {
               Revert
             </button>
             <button
-              className="primary-button"
+              className={`primary-button${saving ? " button-busy" : ""}`}
               type="submit"
               disabled={loading || saving || !valid || !changed}
             >

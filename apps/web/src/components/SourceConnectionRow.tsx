@@ -65,7 +65,7 @@ export function SourceConnectionRow({
               Cancel
             </button>
             <button
-              className="danger-button compact-button"
+              className={`danger-button compact-button${disconnecting ? " button-busy" : ""}`}
               type="button"
               disabled={disconnecting}
               onClick={() => void onDisconnect(connection)}

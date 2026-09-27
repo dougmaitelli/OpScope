@@ -230,7 +230,7 @@ export function RepositoriesPage() {
               Reset
             </button>
             <button
-              className="primary-button"
+              className={`primary-button${saving ? " button-busy" : ""}`}
               type="button"
               disabled={loading || unchanged || saving}
               onClick={() => void save()}
