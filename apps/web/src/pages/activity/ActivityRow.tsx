@@ -1,5 +1,9 @@
 import type { WorkflowRunSummary, WorkflowSummary } from "../../generated/contracts.ts";
-import { formatRelativeDate, runPresentation } from "../../shared/workflow-runs.ts";
+import {
+  formatRelativeDate,
+  formatRunDuration,
+  runPresentation,
+} from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
 
 export interface WorkflowActivity {
@@ -19,6 +23,7 @@ export function ActivityRow({
 }) {
   const { workflow, run } = activity;
   const presentation = runPresentation(run);
+  const duration = formatRunDuration(run);
   return (
     <button
       className="activity-row"
@@ -30,7 +35,10 @@ export function ActivityRow({
         <span className={`activity-state activity-state-${presentation.tone}`}>
           {presentation.label}
         </span>
-        <time dateTime={run.createdAt}>{formatRelativeDate(run.createdAt)}</time>
+        <span>
+          {duration ? `${duration}${run.lifecycle === "running" ? " elapsed" : ""} · ` : ""}
+          <time dateTime={run.createdAt}>{formatRelativeDate(run.createdAt)}</time>
+        </span>
       </span>
       <span className="activity-run-cell">
         <strong>

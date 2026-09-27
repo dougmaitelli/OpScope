@@ -19,7 +19,7 @@
   text-transform: uppercase;
 }
 
-.run-state-block time {
+.run-timing {
   color: var(--subtle);
   font-size: 9px;
   white-space: nowrap;

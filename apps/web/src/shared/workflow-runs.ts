@@ -49,6 +49,30 @@ export function formatRelativeUnix(value: number): string {
   return formatRelativeMilliseconds(value * 1000);
 }
 
+export function formatRunDuration(
+  run: WorkflowRunSummary,
+  currentTime = Date.now(),
+): string | null {
+  if (!run.startedAt || (run.lifecycle !== "completed" && run.lifecycle !== "running")) {
+    return null;
+  }
+  const startedAt = Date.parse(run.startedAt);
+  const finishedAt = run.lifecycle === "completed" ? Date.parse(run.updatedAt) : currentTime;
+  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt) || finishedAt < startedAt) return null;
+
+  const totalSeconds = Math.max(1, Math.floor((finishedAt - startedAt) / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds > 0 ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) return minutes > 0 ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+}
+
 function formatRelativeMilliseconds(timestamp: number): string {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (elapsedSeconds < 60) return "just now";
