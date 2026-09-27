@@ -1,7 +1,7 @@
 {
   "name": "opsscope-workspace",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "workspaces": ["apps/web"],
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5"
