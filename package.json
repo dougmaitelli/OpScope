@@ -13,6 +13,7 @@
     "contracts:generate": "cargo run --quiet -p opsscope-core --bin export-contracts -- generate",
     "desktop:build": "cd apps/desktop && tauri build --no-bundle",
     "desktop:dev": "cd apps/desktop && tauri dev",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "server:dev": "cargo run -p opsscope-server",
     "web:dev": "npm run dev --workspace @opsscope/web"
   },

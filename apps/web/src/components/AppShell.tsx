@@ -27,7 +27,7 @@ export function AppShell() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-mark" src="/opsscope-icon.png" alt="" />
+          <img className="brand-mark" src="/opsscope-logo.png" alt="" />
           <span>OpsScope</span>
         </div>
 

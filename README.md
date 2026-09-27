@@ -1,7 +1,7 @@
 # OpsScope
 
 <p align="center">
-  <img src="apps/web/public/opsscope-icon.png" alt="OpsScope logo" width="128" height="128">
+  <img src="assets/opsscope-logo.png" alt="OpsScope logo" width="128" height="128">
 </p>
 
 OpsScope is a local-first application for monitoring software-delivery
@@ -93,6 +93,9 @@ npm install
 npm run contracts:generate
 npm run check
 ```
+
+The canonical logo is `assets/opsscope-logo.png`. After changing it, run
+`npm run icons:generate` to regenerate the web, desktop, and packaging icons.
 
 For the browser UI, run `npm run server:dev` and `npm run web:dev` in separate
 terminals. Run the desktop shell with `npm run desktop:dev`; the Tauri CLI is
