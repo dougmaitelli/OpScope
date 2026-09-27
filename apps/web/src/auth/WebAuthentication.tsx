@@ -144,9 +144,7 @@ function AuthenticationScreen({ children }: { children: ReactNode }) {
     <main className="auth-screen">
       <section className="auth-panel" aria-live="polite">
         <div className="auth-brand">
-          <span className="auth-mark" aria-hidden="true">
-            OPS
-          </span>
+          <img className="auth-mark" src="/opsscope-icon.png" alt="" />
           <span>OpsScope</span>
         </div>
         {children}

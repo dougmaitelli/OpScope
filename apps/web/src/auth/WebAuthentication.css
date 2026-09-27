@@ -25,16 +25,9 @@
 }
 
 .auth-mark {
-  display: grid;
   width: 28px;
   height: 28px;
-  place-items: center;
-  border: 1px solid #49608f;
   border-radius: 5px;
-  color: var(--accent-strong);
-  background: #17233a;
-  font-size: 9px;
-  letter-spacing: 0.08em;
 }
 
 .auth-panel h1 {

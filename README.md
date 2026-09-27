@@ -1,5 +1,9 @@
 # OpsScope
 
+<p align="center">
+  <img src="apps/web/public/opsscope-icon.png" alt="OpsScope logo" width="128" height="128">
+</p>
+
 OpsScope is a local-first application for monitoring software-delivery
 systems. It begins with GitHub Actions across multiple repositories and runs as
 either a desktop application or a self-hosted web application.
