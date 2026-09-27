@@ -10,7 +10,7 @@ mod tray;
 use crate::commands::{
     connect_source, disconnect_source, get_settings, health, list_repositories, list_sources,
     list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
-    update_settings, workflow_run_logs,
+    update_settings, update_status, workflow_run_logs,
 };
 use crate::keyring::KeyringSecretStore;
 use crate::notifications::DesktopNotificationSink;
@@ -56,6 +56,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             health,
+            update_status,
             list_workflows,
             workflow_run_logs,
             synchronize_sources,

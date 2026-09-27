@@ -2,7 +2,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use opsscope_core::application::{
-    ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
+    CheckForUpdates, ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
     GetMonitoringSettings, GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure,
     ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
     RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
@@ -15,14 +15,15 @@ use opsscope_core::contracts::{
     ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
     MonitoringSettingsResponse, RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
     SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
-    WorkflowRunLogsResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
+    check_for_updates: CheckForUpdates,
     list_workflows: ListWorkflows,
     workflow_run_logs: GetWorkflowRunLogs,
     connect_source: ConnectSource,
@@ -53,6 +54,7 @@ impl AppState {
             SourceDataCachePolicy::default(),
         ));
         Self {
+            check_for_updates: CheckForUpdates::github(),
             list_workflows: ListWorkflows::new(
                 source_data.clone(),
                 repository_selections.clone(),
@@ -189,6 +191,18 @@ pub(crate) async fn synchronize_sources(
 
 pub(crate) async fn health() -> Json<HealthResponse> {
     Json(HealthResponse::ready())
+}
+
+pub(crate) async fn update_status(
+    State(state): State<AppState>,
+) -> Result<Json<UpdateStatusResponse>, StatusCode> {
+    state
+        .check_for_updates
+        .execute()
+        .await
+        .map(UpdateStatusResponse::from)
+        .map(Json)
+        .map_err(|_| StatusCode::BAD_GATEWAY)
 }
 
 pub(crate) async fn list_workflows(

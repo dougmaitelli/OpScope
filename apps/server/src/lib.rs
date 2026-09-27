@@ -12,7 +12,7 @@ use axum::routing::{any, get, post, put};
 use handlers::{
     AppState, connect_source, disconnect_source, get_settings, health, list_repositories,
     list_sources, list_workflows, save_repository_selection, synchronization_status,
-    synchronize_sources, update_settings, workflow_run_logs,
+    synchronize_sources, update_settings, update_status, workflow_run_logs,
 };
 use opsscope_core::application::{
     ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
@@ -21,7 +21,8 @@ use opsscope_core::application::{
 use opsscope_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
-    SYNCHRONIZATION_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
+    SYNCHRONIZATION_HTTP_PATH, UPDATE_STATUS_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH,
+    WORKFLOWS_HTTP_PATH,
 };
 use opsscope_core::source_data::SourceDataCache;
 use std::path::Path;
@@ -69,6 +70,7 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
     let settings = state.settings_reader();
 
     let protected = Router::new()
+        .route(UPDATE_STATUS_HTTP_PATH, get(update_status))
         .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
         .route(WORKFLOW_RUN_LOGS_HTTP_PATH, post(workflow_run_logs))
         .route(SETTINGS_HTTP_PATH, get(get_settings).put(update_settings))

@@ -4,6 +4,7 @@ mod notifications;
 mod run_logs;
 mod settings;
 mod sync;
+mod updates;
 
 pub use notifications::{
     LatestRunNotificationState, NoopNotificationSink, Notification, NotificationDeliveryFailure,
@@ -22,6 +23,7 @@ pub use sync::{
     DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationStatus,
     SynchronizationSummary, SynchronizeSources,
 };
+pub use updates::{CheckForUpdates, ReleaseUpdate, UpdateCheckFailure};
 
 use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};

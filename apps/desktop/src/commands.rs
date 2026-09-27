@@ -5,14 +5,26 @@ use opsscope_core::contracts::{
     ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
     MonitoringSettingsResponse, RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
     SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
-    WorkflowRunLogsResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
 
 #[tauri::command]
 pub(crate) fn health() -> HealthResponse {
     HealthResponse::ready()
+}
+
+#[tauri::command]
+pub(crate) async fn update_status(
+    state: State<'_, DesktopState>,
+) -> Result<UpdateStatusResponse, String> {
+    state
+        .check_for_updates
+        .execute()
+        .await
+        .map(UpdateStatusResponse::from)
+        .map_err(|failure| failure.to_string())
 }
 
 #[tauri::command]

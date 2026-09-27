@@ -1,5 +1,5 @@
 use opsscope_core::application::{
-    ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
+    CheckForUpdates, ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
     GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows, NotifyRepositoryFailures,
     RepositorySelectionRepository, SaveRepositorySelection, SecretStore, SettingsRepository,
     SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
@@ -8,6 +8,7 @@ use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceD
 use std::sync::Arc;
 
 pub(crate) struct DesktopState {
+    pub(crate) check_for_updates: CheckForUpdates,
     pub(crate) list_workflows: ListWorkflows,
     pub(crate) workflow_run_logs: GetWorkflowRunLogs,
     pub(crate) connect_source: ConnectSource,
@@ -38,6 +39,7 @@ impl DesktopState {
             SourceDataCachePolicy::default(),
         ));
         Self {
+            check_for_updates: CheckForUpdates::github(),
             list_workflows: ListWorkflows::new(
                 source_data.clone(),
                 repository_selections.clone(),

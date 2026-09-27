@@ -126,6 +126,23 @@
   color: var(--text);
 }
 
+.sidebar-version {
+  display: grid;
+  gap: 4px;
+}
+
+.sidebar-update {
+  width: fit-content;
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.sidebar-update:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
 .workspace {
   width: 100%;
   height: 100vh;
@@ -174,7 +191,7 @@
     margin-top: 10px;
   }
 
-  .sidebar-footer > span:last-child {
+  .sidebar-version:not(.sidebar-version-update) {
     display: none;
   }
 

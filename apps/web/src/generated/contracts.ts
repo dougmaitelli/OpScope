@@ -2,6 +2,8 @@
 
 export type HealthResponse = { status: string, service: string, contractVersion: number, };
 
+export type UpdateStatusResponse = { currentVersion: string, latestVersion: string, releaseUrl: string, updateAvailable: boolean, };
+
 export type ConnectSourceRequest = { sourceId: string, connectionId: string | null, configuration: { [key in string]: string }, credential: string, };
 
 export type ConnectionSummary = { id: string, label: string, configuration: { [key in string]: string }, externalId: string, name: string, handle: string | null, profileUrl: string | null, credentialStored: boolean, };
@@ -77,6 +79,7 @@ export const settingsLimits = {
 
 export const httpRoutes = {
   health: "/api/health",
+  updateStatus: "/api/update-status",
   workflows: "/api/workflows",
   workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
@@ -89,6 +92,7 @@ export const httpRoutes = {
 
 export const desktopCommands = {
   health: "health",
+  updateStatus: "update_status",
   listWorkflows: "list_workflows",
   workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
@@ -104,6 +108,7 @@ export const desktopCommands = {
 
 export interface ApplicationClient {
   health(): Promise<HealthResponse>;
+  updateStatus(): Promise<UpdateStatusResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;

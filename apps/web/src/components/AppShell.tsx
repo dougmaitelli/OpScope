@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { applicationVersion } from "../generated/contracts.ts";
+import { useApplicationClient } from "../api/application-client.tsx";
+import { applicationVersion, type UpdateStatusResponse } from "../generated/contracts.ts";
 import { useWebAuthentication } from "../auth/WebAuthentication.tsx";
 import "./AppShell.css";
 
@@ -15,10 +16,25 @@ const pageTitles: Record<string, string> = {
 export function AppShell() {
   const location = useLocation();
   const authentication = useWebAuthentication();
+  const client = useApplicationClient();
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatusResponse | null>(null);
 
   useEffect(() => {
     document.title = `${pageTitles[location.pathname] ?? "Overview"} · OpsScope`;
   }, [location.pathname]);
+
+  useEffect(() => {
+    let active = true;
+    void client
+      .updateStatus()
+      .then((status) => {
+        if (active) setUpdateStatus(status);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `nav-item${isActive ? " nav-item-active" : ""}`;
@@ -75,7 +91,21 @@ export function AppShell() {
               </button>
             </div>
           ) : null}
-          <span>Version {applicationVersion}</span>
+          <div
+            className={`sidebar-version${updateStatus?.updateAvailable ? " sidebar-version-update" : ""}`}
+          >
+            {updateStatus?.updateAvailable ? (
+              <a
+                className="sidebar-update"
+                href={updateStatus.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Update available · v{updateStatus.latestVersion}
+              </a>
+            ) : null}
+            <span>Version {applicationVersion}</span>
+          </div>
         </div>
       </aside>
 

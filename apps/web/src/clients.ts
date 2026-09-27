@@ -18,6 +18,7 @@ import {
   type SynchronizationResponse,
   type SynchronizationStatusResponse,
   type UpdateMonitoringSettingsRequest,
+  type UpdateStatusResponse,
   type WorkflowRunLogsRequest,
   type WorkflowRunLogsResponse,
 } from "./generated/contracts.ts";
@@ -25,6 +26,10 @@ import {
 export class DesktopClient implements ApplicationClient {
   health(): Promise<HealthResponse> {
     return invoke<HealthResponse>(desktopCommands.health);
+  }
+
+  updateStatus(): Promise<UpdateStatusResponse> {
+    return invoke<UpdateStatusResponse>(desktopCommands.updateStatus);
   }
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
@@ -89,6 +94,10 @@ export class HttpClient implements ApplicationClient {
 
   health(): Promise<HealthResponse> {
     return this.get<HealthResponse>(httpRoutes.health);
+  }
+
+  updateStatus(): Promise<UpdateStatusResponse> {
+    return this.get<UpdateStatusResponse>(httpRoutes.updateStatus);
   }
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
