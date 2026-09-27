@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 const LATEST_RELEASE_API_URL: &str =
     "https://api.github.com/repos/dougmaitelli/OpsScope/releases/latest";
-const UPDATE_CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+const UPDATE_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
