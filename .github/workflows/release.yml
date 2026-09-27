@@ -61,14 +61,14 @@ jobs:
       - name: Run checks and tests
         run: npm run check
 
-  create-release:
+  create_release:
     name: Create draft release
     needs: validate
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     outputs:
-      release-id: ${{ steps.release.outputs.release-id }}
+      release_id: ${{ steps.release.outputs.release_id }}
     steps:
       - name: Create or find GitHub release
         id: release
@@ -76,7 +76,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .id 2>/dev/null || true)"
+          release_id="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"${GITHUB_REF_NAME}\") | .id" |
+              head -n 1
+          )"
 
           if [[ -z "$release_id" ]]; then
             prerelease=false
@@ -94,13 +98,18 @@ jobs:
               --jq .id)"
           fi
 
-          echo "release-id=$release_id" >> "$GITHUB_OUTPUT"
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "Draft release ID is invalid: $release_id" >&2
+            exit 1
+          fi
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   desktop:
     name: Desktop (${{ matrix.name }})
     needs:
       - validate
-      - create-release
+      - create_release
     permissions:
       contents: write
     strategy:
@@ -141,6 +150,16 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Verify draft release handoff
+        shell: bash
+        env:
+          RELEASE_ID: ${{ needs.create_release.outputs.release_id }}
+        run: |
+          if [[ ! "$RELEASE_ID" =~ ^[0-9]+$ ]]; then
+            echo "Draft release ID was not propagated." >&2
+            exit 1
+          fi
+
       - name: Build and upload desktop bundles
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
@@ -149,7 +168,8 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: npx --no-install tauri
-          releaseId: ${{ needs.create-release.outputs.release-id }}
+          releaseId: ${{ needs.create_release.outputs.release_id }}
+          releaseDraft: true
           tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
           releaseAssetNamePattern: opsscope_[version]_[platform]_[arch]_[bundle][ext]
@@ -210,7 +230,7 @@ jobs:
   publish-release:
     name: Publish release
     needs:
-      - create-release
+      - create_release
       - desktop
       - container
     runs-on: ubuntu-22.04
@@ -220,5 +240,5 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.create-release.outputs.release-id }}
+          RELEASE_ID: ${{ needs.create_release.outputs.release_id }}
         run: gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --field draft=false
