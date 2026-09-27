@@ -27,6 +27,11 @@
   gap: 14px;
 }
 
+.workflow-row-summary-clickable,
+.run-history-row {
+  cursor: pointer;
+}
+
 .workflow-row:hover {
   background: #131a23;
 }
@@ -66,17 +71,28 @@
 }
 
 .workflow-link,
-.latest-run a,
-.run-history-row a {
+.run-link-button {
   color: var(--text);
   text-decoration: none;
 }
 
 .workflow-link:hover,
-.latest-run a:hover,
-.run-history-row a:hover {
+.run-link-button:hover {
   color: var(--accent-strong);
   text-decoration: underline;
+}
+
+.run-link-button {
+  overflow: hidden;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflow-identity p {
@@ -95,7 +111,7 @@
   gap: 7px;
 }
 
-.latest-run a {
+.latest-run .run-link-button {
   overflow: hidden;
   color: #aeb9c8;
   text-overflow: ellipsis;
@@ -139,13 +155,17 @@
   font-size: 9px;
 }
 
+.run-history-row:hover {
+  background: #131a23;
+}
+
 .run-history-row > div:first-child {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.run-history-row a {
+.run-history-row .run-link-button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

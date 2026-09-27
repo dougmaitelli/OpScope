@@ -4,20 +4,21 @@ use crate::application::{
     ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
     ListWorkflowsFailure, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
     SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationStatus,
-    SynchronizationSummary, ValidatedAccount, WorkflowInventory,
+    SynchronizationSummary, ValidatedAccount, WorkflowInventory, WorkflowRunLogsFailure,
 };
 use crate::domain::{
     RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
     RunOutcome as DomainRunOutcome, WorkflowRun as DomainWorkflowRun,
-    WorkflowState as DomainWorkflowState,
+    WorkflowRunLogs as DomainWorkflowRunLogs, WorkflowState as DomainWorkflowState,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 7;
+pub const CONTRACT_VERSION: u8 = 8;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
+pub const WORKFLOW_RUN_LOGS_HTTP_PATH: &str = "/api/workflow-run-logs";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
 pub const REPOSITORIES_HTTP_PATH: &str = "/api/repositories";
@@ -25,6 +26,7 @@ pub const REPOSITORY_SELECTIONS_HTTP_PATH: &str = "/api/repository-selections";
 pub const SYNCHRONIZATION_HTTP_PATH: &str = "/api/sync";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
+pub const WORKFLOW_RUN_LOGS_DESKTOP_COMMAND: &str = "workflow_run_logs";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
 pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
 pub const DISCONNECT_SOURCE_DESKTOP_COMMAND: &str = "disconnect_source";
@@ -358,6 +360,94 @@ impl From<DomainWorkflowRun> for WorkflowRunSummary {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunLogsRequest {
+    pub source_id: String,
+    pub repository_id: String,
+    pub run_id: String,
+    #[ts(type = "number")]
+    pub attempt: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunLogFile {
+    pub name: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunLogsResponse {
+    pub files: Vec<WorkflowRunLogFile>,
+    pub truncated: bool,
+}
+
+impl From<DomainWorkflowRunLogs> for WorkflowRunLogsResponse {
+    fn from(logs: DomainWorkflowRunLogs) -> Self {
+        Self {
+            files: logs
+                .files
+                .into_iter()
+                .map(|file| WorkflowRunLogFile {
+                    name: file.name,
+                    content: file.content,
+                })
+                .collect(),
+            truncated: logs.truncated,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunLogsErrorResponse {
+    pub message: String,
+}
+
+impl From<WorkflowRunLogsFailure> for WorkflowRunLogsErrorResponse {
+    fn from(failure: WorkflowRunLogsFailure) -> Self {
+        let message = match failure {
+            WorkflowRunLogsFailure::UnknownSource => "This source module is not registered.",
+            WorkflowRunLogsFailure::SourceNotConnected => "This source is no longer connected.",
+            WorkflowRunLogsFailure::RepositoryNotFound => {
+                "This repository is no longer available. Refresh the dashboard."
+            }
+            WorkflowRunLogsFailure::RunNotFound => {
+                "This workflow run is no longer available. Refresh the dashboard."
+            }
+            WorkflowRunLogsFailure::LogsUnavailable => {
+                "Logs are not available for this workflow run yet."
+            }
+            WorkflowRunLogsFailure::LogsTooLarge => {
+                "These logs are too large to display in the application."
+            }
+            WorkflowRunLogsFailure::InvalidCredentials => {
+                "The source rejected the stored credential."
+            }
+            WorkflowRunLogsFailure::PermissionDenied => {
+                "The source credential does not have permission to read workflow logs."
+            }
+            WorkflowRunLogsFailure::RateLimited => {
+                "The source rate limit was reached. Try again later."
+            }
+            WorkflowRunLogsFailure::ProviderUnavailable => {
+                "The source could not be reached. Try again."
+            }
+            WorkflowRunLogsFailure::UnexpectedResponse => {
+                "The source returned workflow logs in an unexpected format."
+            }
+            WorkflowRunLogsFailure::StorageUnavailable => {
+                "The stored connection credential could not be read securely."
+            }
+        };
+        Self {
+            message: message.to_owned(),
+        }
+    }
+}
+
 impl From<DomainWorkflowState> for WorkflowState {
     fn from(state: DomainWorkflowState) -> Self {
         match state {
@@ -629,6 +719,10 @@ pub fn render_typescript_contract() -> String {
         RunLifecycle::decl(&config),
         RunOutcome::decl(&config),
         WorkflowRunSummary::decl(&config),
+        WorkflowRunLogsRequest::decl(&config),
+        WorkflowRunLogFile::decl(&config),
+        WorkflowRunLogsResponse::decl(&config),
+        WorkflowRunLogsErrorResponse::decl(&config),
         WorkflowSummary::decl(&config),
         ListWorkflowsResponse::decl(&config),
         SynchronizationResponse::decl(&config),
@@ -640,7 +734,7 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

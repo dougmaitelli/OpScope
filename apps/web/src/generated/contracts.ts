@@ -36,6 +36,14 @@ export type RunOutcome = "success" | "warning" | "failure" | "cancelled" | "skip
 
 export type WorkflowRunSummary = { id: string, runNumber: number, attempt: number, title: string, lifecycle: RunLifecycle, outcome: RunOutcome, branch: string | null, commitSha: string, actor: string | null, trigger: string, createdAt: string, startedAt: string | null, updatedAt: string, webUrl: string, };
 
+export type WorkflowRunLogsRequest = { sourceId: string, repositoryId: string, runId: string, attempt: number, };
+
+export type WorkflowRunLogFile = { name: string, content: string, };
+
+export type WorkflowRunLogsResponse = { files: Array<WorkflowRunLogFile>, truncated: boolean, };
+
+export type WorkflowRunLogsErrorResponse = { message: string, };
+
 export type WorkflowSummary = { id: string, name: string, path: string, state: WorkflowState, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, runs: Array<WorkflowRunSummary>, };
 
 export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows: Array<WorkflowSummary>, lastAttemptedAt: number | null, lastSuccessfulAt: number | null, stale: boolean, syncError: string | null, };
@@ -57,6 +65,7 @@ export const applicationVersion = "0.1.0" as const;
 export const httpRoutes = {
   health: "/api/health",
   workflows: "/api/workflows",
+  workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
   sources: "/api/sources",
   connections: "/api/connections",
@@ -67,6 +76,7 @@ export const httpRoutes = {
 export const desktopCommands = {
   health: "health",
   listWorkflows: "list_workflows",
+  workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
   synchronizationStatus: "synchronization_status",
   listSources: "list_sources",
@@ -79,6 +89,7 @@ export const desktopCommands = {
 export interface ApplicationClient {
   health(): Promise<HealthResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
+  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;
   listSources(): Promise<ListSourcesResponse>;

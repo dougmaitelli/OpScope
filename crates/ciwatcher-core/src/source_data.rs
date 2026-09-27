@@ -2,9 +2,9 @@
 
 use crate::application::{
     ConnectionRepository, ConnectionValidationFailure, PersistenceFailure, SecretStore,
-    SourceDescriptor, SourceRegistry,
+    SourceDescriptor, SourceRegistry, WorkflowRunLogsFailure,
 };
-use crate::domain::{Repository, Workflow, WorkflowRun};
+use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use async_trait::async_trait;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -166,6 +166,13 @@ pub trait SourceData: Send + Sync {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure>;
+
+    async fn workflow_run_logs(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure>;
 }
 
 #[derive(Clone)]
@@ -454,6 +461,29 @@ impl SourceData for ReadThroughSourceData {
                 Err(SourceDataFailure::Source(failure))
             }
         }
+    }
+
+    async fn workflow_run_logs(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+        let module = self
+            .registry
+            .get(source_id)
+            .ok_or(WorkflowRunLogsFailure::UnknownSource)?;
+        let connection = self
+            .connections
+            .get(source_id)
+            .map_err(|_| WorkflowRunLogsFailure::StorageUnavailable)?
+            .ok_or(WorkflowRunLogsFailure::SourceNotConnected)?;
+        let token = self
+            .secrets
+            .retrieve(&connection.secret_reference)
+            .map_err(|_| WorkflowRunLogsFailure::StorageUnavailable)?;
+
+        module.workflow_run_logs(&token, repository, run).await
     }
 }
 

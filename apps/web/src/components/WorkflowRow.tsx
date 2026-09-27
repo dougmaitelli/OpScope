@@ -1,14 +1,22 @@
-import type { WorkflowSummary } from "../generated/contracts.ts";
+import { useState } from "react";
+import type { WorkflowRunSummary, WorkflowSummary } from "../generated/contracts.ts";
 import "./WorkflowRow.css";
+import { WorkflowRunLogsDialog } from "./WorkflowRunLogsDialog.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
 
 export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
+  const [selectedRun, setSelectedRun] = useState<WorkflowRunSummary | null>(null);
   const latestRun = workflow.runs[0] ?? null;
   const earlierRuns = workflow.runs.slice(1);
 
   return (
     <article className="workflow-row">
-      <div className="workflow-row-summary">
+      <div
+        className={`workflow-row-summary${latestRun ? " workflow-row-summary-clickable" : ""}`}
+        onClick={() => {
+          if (latestRun) setSelectedRun(latestRun);
+        }}
+      >
         <div className="workflow-identity">
           <span className="workflow-mark" aria-hidden="true">
             {workflow.name.slice(0, 2).toUpperCase()}
@@ -20,15 +28,20 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
                 href={workflow.webUrl}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
               >
                 {workflow.name}
               </a>
             </h4>
             {latestRun ? (
               <p className="latest-run">
-                <a href={latestRun.webUrl} target="_blank" rel="noreferrer">
+                <button
+                  className="run-link-button"
+                  type="button"
+                  onClick={() => setSelectedRun(latestRun)}
+                >
                   #{latestRun.runNumber} · {latestRun.title}
-                </a>
+                </button>
                 <span>
                   {latestRun.branch ?? "detached"} · {latestRun.commitSha.slice(0, 7)}
                   {latestRun.actor ? ` · ${latestRun.actor}` : ""}
@@ -46,11 +59,19 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
           <summary>Previous runs</summary>
           <div className="run-history-list">
             {earlierRuns.map((run) => (
-              <div className="run-history-row" key={`${run.id}:${run.attempt}`}>
+              <div
+                className="run-history-row"
+                key={`${run.id}:${run.attempt}`}
+                onClick={() => setSelectedRun(run)}
+              >
                 <div>
-                  <a href={run.webUrl} target="_blank" rel="noreferrer">
+                  <button
+                    className="run-link-button"
+                    type="button"
+                    onClick={() => setSelectedRun(run)}
+                  >
                     #{run.runNumber} · {run.title}
-                  </a>
+                  </button>
                   <span>{run.branch ?? "detached"} · {run.commitSha.slice(0, 7)}</span>
                 </div>
                 <WorkflowRunState run={run} />
@@ -58,6 +79,13 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
             ))}
           </div>
         </details>
+      ) : null}
+      {selectedRun ? (
+        <WorkflowRunLogsDialog
+          workflow={workflow}
+          run={selectedRun}
+          onClose={() => setSelectedRun(null)}
+        />
       ) : null}
     </article>
   );

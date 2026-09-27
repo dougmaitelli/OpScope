@@ -2,17 +2,19 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use ciwatcher_core::application::{
-    ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource, ListRepositories,
-    ListRepositoriesFailure, ListSources, ListWorkflows, ListWorkflowsFailure,
-    RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
-    SecretStore, SourceRegistry, SynchronizeSources,
+    ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
+    GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure, ListSources, ListWorkflows,
+    ListWorkflowsFailure, RepositorySelectionRepository, SaveRepositorySelection,
+    SaveRepositorySelectionFailure, SecretStore, SourceRegistry, SynchronizeSources,
+    WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse,
+    SynchronizationStatusResponse, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
+    WorkflowRunLogsResponse,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -20,6 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub(crate) struct AppState {
     list_workflows: ListWorkflows,
+    workflow_run_logs: GetWorkflowRunLogs,
     connect_source: ConnectSource,
     list_sources: ListSources,
     list_repositories: ListRepositories,
@@ -45,6 +48,7 @@ impl AppState {
         ));
         Self {
             list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),
+            workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 registry.clone(),
                 connections.clone(),
@@ -71,6 +75,44 @@ impl AppState {
     pub(crate) fn synchronizer(&self) -> SynchronizeSources {
         self.synchronize_sources.clone()
     }
+}
+
+pub(crate) async fn workflow_run_logs(
+    State(state): State<AppState>,
+    Json(request): Json<WorkflowRunLogsRequest>,
+) -> Result<Json<WorkflowRunLogsResponse>, (StatusCode, Json<WorkflowRunLogsErrorResponse>)> {
+    state
+        .workflow_run_logs
+        .execute(
+            &request.source_id,
+            &request.repository_id,
+            &request.run_id,
+            request.attempt,
+        )
+        .await
+        .map(WorkflowRunLogsResponse::from)
+        .map(Json)
+        .map_err(http_run_logs_error)
+}
+
+fn http_run_logs_error(
+    failure: WorkflowRunLogsFailure,
+) -> (StatusCode, Json<WorkflowRunLogsErrorResponse>) {
+    let status = match failure {
+        WorkflowRunLogsFailure::UnknownSource
+        | WorkflowRunLogsFailure::RepositoryNotFound
+        | WorkflowRunLogsFailure::RunNotFound => StatusCode::NOT_FOUND,
+        WorkflowRunLogsFailure::SourceNotConnected => StatusCode::CONFLICT,
+        WorkflowRunLogsFailure::LogsUnavailable => StatusCode::NOT_FOUND,
+        WorkflowRunLogsFailure::LogsTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+        WorkflowRunLogsFailure::InvalidCredentials => StatusCode::UNAUTHORIZED,
+        WorkflowRunLogsFailure::PermissionDenied => StatusCode::FORBIDDEN,
+        WorkflowRunLogsFailure::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+        WorkflowRunLogsFailure::ProviderUnavailable
+        | WorkflowRunLogsFailure::UnexpectedResponse => StatusCode::BAD_GATEWAY,
+        WorkflowRunLogsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
 }
 
 pub(crate) async fn synchronization_status(

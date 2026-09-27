@@ -2,16 +2,18 @@
 
 use crate::application::{
     ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor, SourceModule,
-    ValidatedAccount,
+    ValidatedAccount, WorkflowRunLogsFailure,
 };
 use crate::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
-    WorkflowState,
+    WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
 use async_trait::async_trait;
-use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT as USER_AGENT_HEADER};
+use reqwest::header::{ACCEPT, HeaderValue, LOCATION, USER_AGENT as USER_AGENT_HEADER};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
+use std::io::{Cursor, Read};
+use std::net::IpAddr;
 use std::time::Duration;
 
 const USER_API_URL: &str = "https://api.github.com/user";
@@ -25,6 +27,10 @@ const WORKFLOWS_PER_PAGE: usize = 100;
 const MAX_WORKFLOW_PAGES: usize = 100;
 const WORKFLOW_RUNS_PER_PAGE: usize = 100;
 const MAX_WORKFLOW_RUN_PAGES: usize = 2;
+const MAX_LOG_ARCHIVE_BYTES: usize = 25 * 1024 * 1024;
+const MAX_LOG_FILES: usize = 100;
+const MAX_LOG_FILE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_LOG_TEXT_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct GitHubClient {
@@ -96,6 +102,120 @@ impl GitHubClient {
             .header(USER_AGENT_HEADER, USER_AGENT)
             .header("X-GitHub-Api-Version", API_VERSION)
     }
+
+    fn workflow_run_logs_request(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> reqwest::RequestBuilder {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/actions/runs/{}/attempts/{}/logs",
+            repository.owner, repository.name, run.id, run.attempt
+        );
+        self.client
+            .get(url)
+            .bearer_auth(token.expose())
+            .header(ACCEPT, ACCEPT_VALUE)
+            .header(USER_AGENT_HEADER, USER_AGENT)
+            .header("X-GitHub-Api-Version", API_VERSION)
+    }
+
+    async fn download_log_archive(
+        &self,
+        location: &str,
+    ) -> Result<Vec<u8>, WorkflowRunLogsFailure> {
+        let url = reqwest::Url::parse(location)
+            .map_err(|_| WorkflowRunLogsFailure::UnexpectedResponse)?;
+        let host = url
+            .host_str()
+            .ok_or(WorkflowRunLogsFailure::UnexpectedResponse)?;
+        if url.scheme() != "https"
+            || host.eq_ignore_ascii_case("localhost")
+            || host.ends_with(".localhost")
+            || host.ends_with(".local")
+            || host.parse::<IpAddr>().is_ok()
+        {
+            return Err(WorkflowRunLogsFailure::UnexpectedResponse);
+        }
+
+        // The temporary archive URL is deliberately requested without the provider token.
+        let mut response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| WorkflowRunLogsFailure::ProviderUnavailable)?;
+        if response.status() != StatusCode::OK {
+            return Err(WorkflowRunLogsFailure::LogsUnavailable);
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_LOG_ARCHIVE_BYTES as u64)
+        {
+            return Err(WorkflowRunLogsFailure::LogsTooLarge);
+        }
+
+        let mut archive = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| WorkflowRunLogsFailure::ProviderUnavailable)?
+        {
+            if archive.len().saturating_add(chunk.len()) > MAX_LOG_ARCHIVE_BYTES {
+                return Err(WorkflowRunLogsFailure::LogsTooLarge);
+            }
+            archive.extend_from_slice(&chunk);
+        }
+        Ok(archive)
+    }
+}
+
+fn read_log_archive(bytes: Vec<u8>) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|_| WorkflowRunLogsFailure::UnexpectedResponse)?;
+    let mut files = Vec::new();
+    let mut text_bytes = 0usize;
+    let mut truncated = false;
+
+    for index in 0..archive.len() {
+        if files.len() == MAX_LOG_FILES || text_bytes == MAX_LOG_TEXT_BYTES {
+            truncated = true;
+            break;
+        }
+
+        let mut file = archive
+            .by_index(index)
+            .map_err(|_| WorkflowRunLogsFailure::UnexpectedResponse)?;
+        if file.is_dir() {
+            continue;
+        }
+        let Some(name) = file
+            .enclosed_name()
+            .map(|path| path.to_string_lossy().into_owned())
+        else {
+            truncated = true;
+            continue;
+        };
+        let remaining = MAX_LOG_TEXT_BYTES - text_bytes;
+        let limit = remaining.min(MAX_LOG_FILE_BYTES);
+        let mut content = Vec::new();
+        file.by_ref()
+            .take((limit + 1) as u64)
+            .read_to_end(&mut content)
+            .map_err(|_| WorkflowRunLogsFailure::UnexpectedResponse)?;
+        if content.len() > limit {
+            content.truncate(limit);
+            truncated = true;
+        }
+        text_bytes += content.len();
+        files.push(WorkflowRunLog {
+            name,
+            content: String::from_utf8_lossy(&content).into_owned(),
+        });
+    }
+
+    Ok(WorkflowRunLogs { files, truncated })
 }
 
 #[derive(Deserialize)]
@@ -257,6 +377,26 @@ fn response_failure(response: &reqwest::Response) -> ConnectionValidationFailure
     }
 }
 
+fn log_response_failure(response: &reqwest::Response) -> WorkflowRunLogsFailure {
+    match response.status() {
+        StatusCode::UNAUTHORIZED => WorkflowRunLogsFailure::InvalidCredentials,
+        StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS
+            if response
+                .headers()
+                .get("x-ratelimit-remaining")
+                .is_some_and(|value| value == HeaderValue::from_static("0"))
+                || response.headers().contains_key("retry-after")
+                || response.status() == StatusCode::TOO_MANY_REQUESTS =>
+        {
+            WorkflowRunLogsFailure::RateLimited
+        }
+        StatusCode::FORBIDDEN => WorkflowRunLogsFailure::PermissionDenied,
+        StatusCode::NOT_FOUND | StatusCode::CONFLICT => WorkflowRunLogsFailure::LogsUnavailable,
+        status if status.is_server_error() => WorkflowRunLogsFailure::ProviderUnavailable,
+        _ => WorkflowRunLogsFailure::UnexpectedResponse,
+    }
+}
+
 #[async_trait]
 impl SourceModule for GitHubClient {
     fn descriptor(&self) -> SourceDescriptor {
@@ -398,6 +538,29 @@ impl SourceModule for GitHubClient {
             }
         }
         Ok(runs)
+    }
+
+    async fn workflow_run_logs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+        let response = self
+            .workflow_run_logs_request(token, repository, run)
+            .send()
+            .await
+            .map_err(|_| WorkflowRunLogsFailure::ProviderUnavailable)?;
+        if response.status() != StatusCode::FOUND {
+            return Err(log_response_failure(&response));
+        }
+        let location = response
+            .headers()
+            .get(LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .ok_or(WorkflowRunLogsFailure::UnexpectedResponse)?;
+        let bytes = self.download_log_archive(location).await?;
+        read_log_archive(bytes)
     }
 }
 

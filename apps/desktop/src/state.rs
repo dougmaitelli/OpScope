@@ -1,13 +1,14 @@
 use ciwatcher_core::application::{
-    ConnectSource, ConnectionRepository, DisconnectSource, ListRepositories, ListSources,
-    ListWorkflows, RepositorySelectionRepository, SaveRepositorySelection, SecretStore,
-    SourceRegistry, SynchronizeSources,
+    ConnectSource, ConnectionRepository, DisconnectSource, GetWorkflowRunLogs, ListRepositories,
+    ListSources, ListWorkflows, RepositorySelectionRepository, SaveRepositorySelection,
+    SecretStore, SourceRegistry, SynchronizeSources,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 pub(crate) struct DesktopState {
     pub(crate) list_workflows: ListWorkflows,
+    pub(crate) workflow_run_logs: GetWorkflowRunLogs,
     pub(crate) connect_source: ConnectSource,
     pub(crate) list_sources: ListSources,
     pub(crate) list_repositories: ListRepositories,
@@ -33,6 +34,7 @@ impl DesktopState {
         ));
         Self {
             list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),
+            workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 sources.clone(),
                 connections.clone(),

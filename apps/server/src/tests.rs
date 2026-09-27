@@ -4,17 +4,18 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use ciwatcher_core::application::{
     ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor, SourceModule,
-    SourceRegistry, ValidatedAccount,
+    SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
     ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
     SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse,
-    SynchronizationStatusResponse, WORKFLOWS_HTTP_PATH,
+    SynchronizationStatusResponse, WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
+    WorkflowRunLogsResponse,
 };
 use ciwatcher_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
-    WorkflowState,
+    WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
 use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use http_body_util::BodyExt;
@@ -111,6 +112,24 @@ impl SourceModule for TestSourceModule {
             provider_status: "completed".to_owned(),
             provider_conclusion: Some("success".to_owned()),
         }])
+    }
+
+    async fn workflow_run_logs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        assert_eq!(run.id, "run-1");
+        Ok(WorkflowRunLogs {
+            files: vec![WorkflowRunLog {
+                name: "build.txt".to_owned(),
+                content: "Build completed".to_owned(),
+            }],
+            truncated: false,
+        })
     }
 }
 
@@ -272,6 +291,23 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         decoded.workflows[0].runs[0].outcome,
         ciwatcher_core::contracts::RunOutcome::Success
     );
+
+    let logs = app
+        .clone()
+        .oneshot(
+            Request::post(WORKFLOW_RUN_LOGS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"sourceId":"example","repositoryId":"repository-1","runId":"run-1","attempt":1}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(logs.status(), StatusCode::OK);
+    let body = logs.into_body().collect().await?.to_bytes();
+    let decoded: WorkflowRunLogsResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.files[0].name, "build.txt");
+    assert_eq!(decoded.files[0].content, "Build completed");
+    assert!(!decoded.truncated);
 
     let disconnected = app
         .clone()

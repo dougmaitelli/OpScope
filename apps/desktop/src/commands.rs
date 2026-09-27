@@ -4,7 +4,8 @@ use ciwatcher_core::contracts::{
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
     ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
     SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse,
+    SynchronizationStatusResponse, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
+    WorkflowRunLogsResponse,
 };
 use tauri::State;
 
@@ -23,6 +24,24 @@ pub(crate) async fn list_workflows(
         .await
         .map(ListWorkflowsResponse::from_domain)
         .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) async fn workflow_run_logs(
+    state: State<'_, DesktopState>,
+    request: WorkflowRunLogsRequest,
+) -> Result<WorkflowRunLogsResponse, WorkflowRunLogsErrorResponse> {
+    state
+        .workflow_run_logs
+        .execute(
+            &request.source_id,
+            &request.repository_id,
+            &request.run_id,
+            request.attempt,
+        )
+        .await
+        .map(WorkflowRunLogsResponse::from)
+        .map_err(WorkflowRunLogsErrorResponse::from)
 }
 
 #[tauri::command]

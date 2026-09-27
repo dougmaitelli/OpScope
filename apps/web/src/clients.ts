@@ -16,6 +16,8 @@ import {
   type SaveRepositorySelectionResponse,
   type SynchronizationResponse,
   type SynchronizationStatusResponse,
+  type WorkflowRunLogsRequest,
+  type WorkflowRunLogsResponse,
 } from "./generated/contracts.ts";
 
 export class DesktopClient implements ApplicationClient {
@@ -25,6 +27,10 @@ export class DesktopClient implements ApplicationClient {
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
     return invoke<ListWorkflowsResponse>(desktopCommands.listWorkflows);
+  }
+
+  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {
+    return invoke<WorkflowRunLogsResponse>(desktopCommands.workflowRunLogs, { request });
   }
 
   synchronizeSources(): Promise<SynchronizationResponse> {
@@ -73,6 +79,10 @@ export class HttpClient implements ApplicationClient {
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
     return this.get<ListWorkflowsResponse>(httpRoutes.workflows);
+  }
+
+  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {
+    return this.post<WorkflowRunLogsResponse>(httpRoutes.workflowRunLogs, request);
   }
 
   synchronizeSources(): Promise<SynchronizationResponse> {

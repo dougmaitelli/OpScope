@@ -72,3 +72,17 @@ pub struct WorkflowRun {
     pub provider_status: String,
     pub provider_conclusion: Option<String>,
 }
+
+/// One text file from a workflow run's provider-supplied log bundle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowRunLog {
+    pub name: String,
+    pub content: String,
+}
+
+/// Provider-independent logs for a single workflow run attempt.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowRunLogs {
+    pub files: Vec<WorkflowRunLog>,
+    pub truncated: bool,
+}

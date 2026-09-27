@@ -10,12 +10,13 @@ use ciwatcher_core::application::{
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH,
-    WORKFLOWS_HTTP_PATH,
+    WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
 };
 use ciwatcher_core::source_data::SourceDataCache;
 use handlers::{
     AppState, connect_source, disconnect_source, health, list_repositories, list_sources,
     list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
+    workflow_run_logs,
 };
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ pub fn application(
     let router = Router::new()
         .route(HEALTH_HTTP_PATH, get(health))
         .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
+        .route(WORKFLOW_RUN_LOGS_HTTP_PATH, post(workflow_run_logs))
         .route(
             SYNCHRONIZATION_HTTP_PATH,
             get(synchronization_status).post(synchronize_sources),

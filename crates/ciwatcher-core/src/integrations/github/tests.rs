@@ -1,5 +1,7 @@
 use super::*;
 use reqwest::header::AUTHORIZATION;
+use std::io::Write;
+use zip::write::SimpleFileOptions;
 
 #[test]
 fn validation_request_targets_only_github_with_required_headers()
@@ -123,6 +125,69 @@ fn workflow_run_request_targets_selected_repository_with_required_headers()
     assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
     assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
     assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
+    Ok(())
+}
+
+#[test]
+fn workflow_run_log_request_targets_the_selected_attempt() -> Result<(), Box<dyn std::error::Error>>
+{
+    let client = GitHubClient::new()?;
+    let token = ProviderToken::new("github_pat_test".to_owned());
+    let repository = Repository {
+        id: "1296269".to_owned(),
+        owner: "octocat".to_owned(),
+        name: "Hello-World".to_owned(),
+        description: None,
+        visibility: RepositoryVisibility::Public,
+        web_url: "https://github.com/octocat/Hello-World".to_owned(),
+    };
+    let run = WorkflowRun {
+        id: "30433642".to_owned(),
+        workflow_id: "161335".to_owned(),
+        run_number: 562,
+        attempt: 2,
+        title: "Build".to_owned(),
+        lifecycle: RunLifecycle::Completed,
+        outcome: RunOutcome::Success,
+        branch: Some("main".to_owned()),
+        commit_sha: "abc123".to_owned(),
+        actor: None,
+        trigger: "push".to_owned(),
+        created_at: "2026-09-26T18:00:00Z".to_owned(),
+        started_at: None,
+        updated_at: "2026-09-26T18:03:00Z".to_owned(),
+        web_url: "https://github.com/octocat/Hello-World/actions/runs/30433642".to_owned(),
+        provider_status: "completed".to_owned(),
+        provider_conclusion: Some("success".to_owned()),
+    };
+    let request = client
+        .workflow_run_logs_request(&token, &repository, &run)
+        .build()?;
+
+    assert_eq!(
+        request.url().path(),
+        "/repos/octocat/Hello-World/actions/runs/30433642/attempts/2/logs"
+    );
+    assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
+    Ok(())
+}
+
+#[test]
+fn log_archive_is_decoded_into_named_text_files() -> Result<(), Box<dyn std::error::Error>> {
+    let cursor = Cursor::new(Vec::new());
+    let mut writer = zip::ZipWriter::new(cursor);
+    writer.start_file("build/1_setup.txt", SimpleFileOptions::default())?;
+    writer.write_all(b"Preparing build\n")?;
+    writer.start_file("build/2_test.txt", SimpleFileOptions::default())?;
+    writer.write_all(b"All tests passed\n")?;
+    let bytes = writer.finish()?.into_inner();
+
+    let logs = read_log_archive(bytes)?;
+
+    assert_eq!(logs.files.len(), 2);
+    assert_eq!(logs.files[0].name, "build/1_setup.txt");
+    assert_eq!(logs.files[1].content, "All tests passed\n");
+    assert!(!logs.truncated);
     Ok(())
 }
 

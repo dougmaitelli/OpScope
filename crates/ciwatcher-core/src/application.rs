@@ -1,13 +1,16 @@
 //! Application use cases and the ports they require.
 
+mod run_logs;
 mod sync;
+
+pub use run_logs::GetWorkflowRunLogs;
 
 pub use sync::{
     DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationStatus,
     SynchronizationSummary, SynchronizeSources,
 };
 
-use crate::domain::{Repository, Workflow, WorkflowRun};
+use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
 use async_trait::async_trait;
 use std::collections::HashSet;
@@ -93,6 +96,43 @@ impl Display for ConnectionValidationFailure {
 
 impl Error for ConnectionValidationFailure {}
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkflowRunLogsFailure {
+    UnknownSource,
+    SourceNotConnected,
+    RepositoryNotFound,
+    RunNotFound,
+    LogsUnavailable,
+    LogsTooLarge,
+    InvalidCredentials,
+    PermissionDenied,
+    RateLimited,
+    ProviderUnavailable,
+    UnexpectedResponse,
+    StorageUnavailable,
+}
+
+impl Display for WorkflowRunLogsFailure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::UnknownSource => "source module is not registered",
+            Self::SourceNotConnected => "source is not connected",
+            Self::RepositoryNotFound => "repository is not available",
+            Self::RunNotFound => "workflow run is no longer available",
+            Self::LogsUnavailable => "workflow run logs are not available",
+            Self::LogsTooLarge => "workflow run logs exceed the viewing limit",
+            Self::InvalidCredentials => "provider rejected the credential",
+            Self::PermissionDenied => "provider credential lacks permission to read logs",
+            Self::RateLimited => "provider rate limit reached",
+            Self::ProviderUnavailable => "provider unavailable",
+            Self::UnexpectedResponse => "provider returned unexpected workflow run logs",
+            Self::StorageUnavailable => "stored connection credential could not be read",
+        })
+    }
+}
+
+impl Error for WorkflowRunLogsFailure {}
+
 #[async_trait]
 pub trait SourceModule: Send + Sync {
     fn descriptor(&self) -> SourceDescriptor;
@@ -118,6 +158,13 @@ pub trait SourceModule: Send + Sync {
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure>;
+
+    async fn workflow_run_logs(
+        &self,
+        token: &ProviderToken,
+        repository: &Repository,
+        run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure>;
 }
 
 #[derive(Clone)]

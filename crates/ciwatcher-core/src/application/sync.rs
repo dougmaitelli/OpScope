@@ -214,7 +214,7 @@ mod tests {
         ConnectionValidationFailure, CredentialField, PersistenceFailure, RepositorySelection,
         SourceDescriptor, SourceRepositorySelection,
     };
-    use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowRun};
+    use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs};
     use crate::source_data::{SourceDataFailure, WorkflowRunCollection};
     use async_trait::async_trait;
 
@@ -301,6 +301,15 @@ mod tests {
                 stale: false,
                 error: None,
             })
+        }
+
+        async fn workflow_run_logs(
+            &self,
+            _source_id: &str,
+            _repository: &Repository,
+            _run: &WorkflowRun,
+        ) -> Result<WorkflowRunLogs, crate::application::WorkflowRunLogsFailure> {
+            unreachable!("synchronization does not load logs")
         }
     }
 

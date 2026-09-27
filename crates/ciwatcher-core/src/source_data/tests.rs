@@ -1,9 +1,11 @@
 use super::*;
 use crate::application::{
     CredentialField, ProviderToken, SecretReference, SourceModule, StoredConnection,
-    ValidatedAccount,
+    ValidatedAccount, WorkflowRunLogsFailure,
 };
-use crate::domain::{RepositoryVisibility, RunLifecycle, RunOutcome, WorkflowRun, WorkflowState};
+use crate::domain::{
+    RepositoryVisibility, RunLifecycle, RunOutcome, WorkflowRun, WorkflowRunLogs, WorkflowState,
+};
 use crate::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -72,6 +74,18 @@ impl SourceModule for CountingSourceModule {
         } else {
             Ok(vec![test_run()])
         }
+    }
+
+    async fn workflow_run_logs(
+        &self,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _run: &WorkflowRun,
+    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+        Ok(WorkflowRunLogs {
+            files: Vec::new(),
+            truncated: false,
+        })
     }
 }
 
