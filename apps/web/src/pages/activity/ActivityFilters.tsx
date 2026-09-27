@@ -50,6 +50,20 @@ export function ActivityFilters({
         />
       </label>
       <label className="activity-filter">
+        <span>Repository</span>
+        <select
+          value={values.repository}
+          onChange={(event) => onChange({ ...values, repository: event.target.value })}
+        >
+          <option value="">All repositories</option>
+          {repositories.map((repository) => (
+            <option value={repository.id} key={repository.id}>
+              {repository.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="activity-filter">
         <span>Status</span>
         <select
           value={values.status}
@@ -65,20 +79,6 @@ export function ActivityFilters({
           <option value="running">Running</option>
           <option value="successful">Successful</option>
           <option value="other">Other</option>
-        </select>
-      </label>
-      <label className="activity-filter">
-        <span>Repository</span>
-        <select
-          value={values.repository}
-          onChange={(event) => onChange({ ...values, repository: event.target.value })}
-        >
-          <option value="">All repositories</option>
-          {repositories.map((repository) => (
-            <option value={repository.id} key={repository.id}>
-              {repository.label}
-            </option>
-          ))}
         </select>
       </label>
       <label className="activity-filter">
