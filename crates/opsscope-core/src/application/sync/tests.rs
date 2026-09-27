@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::application::{
     ConnectedSource, ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
