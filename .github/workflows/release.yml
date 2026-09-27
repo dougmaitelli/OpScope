@@ -118,13 +118,13 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-22.04
-            args: --bundles appimage,deb
+            asset_suffix: linux_x86_64.AppImage
           - name: Windows
             runner: windows-latest
-            args: --bundles nsis,msi
+            asset_suffix: windows_x86_64.exe
           - name: macOS universal
             runner: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            asset_suffix: macos_universal.app.zip
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -160,20 +160,69 @@ jobs:
             exit 1
           fi
 
-      - name: Build and upload desktop bundles
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+      - name: Build Linux portable executable
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        run: npx --no-install tauri build --bundles appimage
+
+      - name: Build Windows portable executable
+        if: runner.os == 'Windows'
+        run: npm run desktop:build
+
+      - name: Build macOS application bundle
+        if: runner.os == 'macOS'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
-        with:
-          projectPath: apps/desktop
-          tauriScript: npx --no-install tauri
-          releaseId: ${{ needs.create_release.outputs.release_id }}
-          releaseDraft: true
-          tagName: ${{ github.ref_name }}
-          args: ${{ matrix.args }}
-          releaseAssetNamePattern: opsscope_[version]_[platform]_[arch]_[bundle][ext]
-          uploadUpdaterJson: false
+          APPLE_SIGNING_IDENTITY: "-"
+        working-directory: apps/desktop
+        run: npx --no-install tauri build --target universal-apple-darwin --bundles app
+
+      - name: Stage Linux release asset
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+          RAW_RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_linux_x86_64
+        run: |
+          source_asset="$(find target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          if [[ -z "$source_asset" ]]; then
+            echo "Linux AppImage was not produced." >&2
+            exit 1
+          fi
+          cp "$source_asset" "$RELEASE_ASSET"
+          chmod +x "$RELEASE_ASSET"
+          cp target/release/opsscope-desktop "$RAW_RELEASE_ASSET"
+          chmod +x "$RAW_RELEASE_ASSET"
+
+      - name: Stage Windows release asset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+        run: Copy-Item target/release/opsscope-desktop.exe $env:RELEASE_ASSET
+
+      - name: Stage macOS release asset
+        if: runner.os == 'macOS'
+        env:
+          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+        run: >-
+          ditto -c -k --sequesterRsrc --keepParent
+          target/universal-apple-darwin/release/bundle/macos/OpsScope.app
+          "$RELEASE_ASSET"
+
+      - name: Upload portable desktop asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+        shell: bash
+        run: gh release upload "$GITHUB_REF_NAME" "$RELEASE_ASSET" --clobber
+
+      - name: Upload raw Linux binary
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_linux_x86_64
+        shell: bash
+        run: gh release upload "$GITHUB_REF_NAME" "$RELEASE_ASSET" --clobber
 
   container:
     name: Container
