@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell.tsx";
 import { ConnectionsPage } from "./pages/connections/ConnectionsPage.tsx";
 import { OverviewPage } from "./pages/overview/OverviewPage.tsx";
 import { RepositoriesPage } from "./pages/repositories/RepositoriesPage.tsx";
+import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
         <Route index element={<OverviewPage />} />
         <Route path="repositories" element={<RepositoriesPage />} />
         <Route path="connections" element={<ConnectionsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -3,17 +3,19 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use ciwatcher_core::application::{
     ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
-    GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure, ListSources, ListWorkflows,
-    ListWorkflowsFailure, RepositorySelectionRepository, SaveRepositorySelection,
-    SaveRepositorySelectionFailure, SecretStore, SourceRegistry, SynchronizeSources,
+    GetMonitoringSettings, GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure,
+    ListSources, ListWorkflows, ListWorkflowsFailure, RepositorySelectionRepository,
+    SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
+    SettingsRepository, SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
     WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
-    ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
+    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
+    MonitoringSettingsResponse, RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
     WorkflowRunLogsResponse,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
@@ -29,6 +31,8 @@ pub(crate) struct AppState {
     save_repository_selection: SaveRepositorySelection,
     disconnect_source: DisconnectSource,
     synchronize_sources: SynchronizeSources,
+    get_settings: GetMonitoringSettings,
+    update_settings: UpdateMonitoringSettings,
 }
 
 impl AppState {
@@ -38,6 +42,7 @@ impl AppState {
         secrets: Arc<dyn SecretStore>,
         repository_selections: Arc<dyn RepositorySelectionRepository>,
         source_data_cache: Arc<dyn SourceDataCache>,
+        settings: Arc<dyn SettingsRepository>,
     ) -> Self {
         let source_data = Arc::new(ReadThroughSourceData::cached(
             registry.clone(),
@@ -47,7 +52,11 @@ impl AppState {
             SourceDataCachePolicy::default(),
         ));
         Self {
-            list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),
+            list_workflows: ListWorkflows::new(
+                source_data.clone(),
+                repository_selections.clone(),
+                settings.clone(),
+            ),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 registry.clone(),
@@ -69,12 +78,51 @@ impl AppState {
                 repository_selections,
             ),
             disconnect_source: DisconnectSource::new(registry, connections, secrets),
+            get_settings: GetMonitoringSettings::new(settings.clone()),
+            update_settings: UpdateMonitoringSettings::new(settings),
         }
     }
 
     pub(crate) fn synchronizer(&self) -> SynchronizeSources {
         self.synchronize_sources.clone()
     }
+
+    pub(crate) fn settings_reader(&self) -> GetMonitoringSettings {
+        self.get_settings.clone()
+    }
+}
+
+pub(crate) async fn get_settings(
+    State(state): State<AppState>,
+) -> Result<Json<MonitoringSettingsResponse>, (StatusCode, Json<MonitoringSettingsErrorResponse>)> {
+    state
+        .get_settings
+        .execute()
+        .map(MonitoringSettingsResponse::from)
+        .map(Json)
+        .map_err(http_settings_error)
+}
+
+pub(crate) async fn update_settings(
+    State(state): State<AppState>,
+    Json(request): Json<UpdateMonitoringSettingsRequest>,
+) -> Result<Json<MonitoringSettingsResponse>, (StatusCode, Json<MonitoringSettingsErrorResponse>)> {
+    state
+        .update_settings
+        .execute(request.into())
+        .map(MonitoringSettingsResponse::from)
+        .map(Json)
+        .map_err(http_settings_error)
+}
+
+fn http_settings_error(
+    failure: SettingsFailure,
+) -> (StatusCode, Json<MonitoringSettingsErrorResponse>) {
+    let status = match failure {
+        SettingsFailure::InvalidSettings => StatusCode::BAD_REQUEST,
+        SettingsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
 }
 
 pub(crate) async fn workflow_run_logs(

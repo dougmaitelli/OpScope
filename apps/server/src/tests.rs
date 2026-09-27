@@ -8,10 +8,10 @@ use ciwatcher_core::application::{
 };
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
-    ListWorkflowsResponse, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH,
-    SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse,
-    SynchronizationStatusResponse, WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
-    WorkflowRunLogsResponse,
+    ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
+    REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
+    SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
+    WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
 };
 use ciwatcher_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
@@ -93,25 +93,27 @@ impl SourceModule for TestSourceModule {
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
         assert_eq!(token.expose(), "test_credential");
         assert_eq!(repository.id, "repository-1");
-        Ok(vec![WorkflowRun {
-            id: "run-1".to_owned(),
-            workflow_id: "workflow-1".to_owned(),
-            run_number: 12,
-            attempt: 1,
-            title: "Build main".to_owned(),
-            lifecycle: RunLifecycle::Completed,
-            outcome: RunOutcome::Success,
-            branch: Some("main".to_owned()),
-            commit_sha: "abcdef123456".to_owned(),
-            actor: Some("example-user".to_owned()),
-            trigger: "push".to_owned(),
-            created_at: "2026-09-26T18:00:00Z".to_owned(),
-            started_at: Some("2026-09-26T18:00:02Z".to_owned()),
-            updated_at: "2026-09-26T18:03:00Z".to_owned(),
-            web_url: "https://example.com/runs/1".to_owned(),
-            provider_status: "completed".to_owned(),
-            provider_conclusion: Some("success".to_owned()),
-        }])
+        Ok((1..=12)
+            .map(|number| WorkflowRun {
+                id: format!("run-{number}"),
+                workflow_id: "workflow-1".to_owned(),
+                run_number: 13 - number,
+                attempt: 1,
+                title: format!("Build main {number}"),
+                lifecycle: RunLifecycle::Completed,
+                outcome: RunOutcome::Success,
+                branch: Some("main".to_owned()),
+                commit_sha: format!("abcdef{number:06}"),
+                actor: Some("example-user".to_owned()),
+                trigger: "push".to_owned(),
+                created_at: "2026-09-26T18:00:00Z".to_owned(),
+                started_at: Some("2026-09-26T18:00:02Z".to_owned()),
+                updated_at: "2026-09-26T18:03:00Z".to_owned(),
+                web_url: format!("https://example.com/runs/{number}"),
+                provider_status: "completed".to_owned(),
+                provider_conclusion: Some("success".to_owned()),
+            })
+            .collect())
     }
 
     async fn workflow_run_logs(
@@ -145,6 +147,7 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
         test_registry(),
         Arc::new(database.clone()),
         Arc::new(secrets),
+        Arc::new(database.clone()),
         Arc::new(database.clone()),
         Arc::new(database),
     );
@@ -185,6 +188,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         test_registry(),
         Arc::new(database.clone()),
         Arc::new(secrets),
+        Arc::new(database.clone()),
         Arc::new(database.clone()),
         Arc::new(database),
     );
@@ -258,6 +262,32 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.failed_repository_count, 0);
     assert!(!decoded.already_running);
 
+    let settings = app
+        .clone()
+        .oneshot(Request::get(SETTINGS_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    assert_eq!(settings.status(), StatusCode::OK);
+    let body = settings.into_body().collect().await?.to_bytes();
+    let decoded: MonitoringSettingsResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.synchronization_interval_seconds, 60);
+    assert_eq!(decoded.recent_runs_per_workflow, 10);
+
+    let settings = app
+        .clone()
+        .oneshot(
+            Request::put(SETTINGS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(settings.status(), StatusCode::OK);
+    let body = settings.into_body().collect().await?.to_bytes();
+    let decoded: MonitoringSettingsResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.synchronization_interval_seconds, 120);
+    assert_eq!(decoded.recent_runs_per_workflow, 5);
+
     let synchronization = app
         .clone()
         .oneshot(Request::get(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
@@ -286,7 +316,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.workflows.len(), 1);
     assert_eq!(decoded.workflows[0].name, "Build");
     assert_eq!(decoded.workflows[0].repository_name, "example-project");
-    assert_eq!(decoded.workflows[0].runs.len(), 1);
+    assert_eq!(decoded.workflows[0].runs.len(), 5);
     assert_eq!(
         decoded.workflows[0].runs[0].outcome,
         ciwatcher_core::contracts::RunOutcome::Success

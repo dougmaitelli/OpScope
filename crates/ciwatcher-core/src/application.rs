@@ -1,9 +1,16 @@
 //! Application use cases and the ports they require.
 
 mod run_logs;
+mod settings;
 mod sync;
 
 pub use run_logs::GetWorkflowRunLogs;
+pub use settings::{
+    DEFAULT_RECENT_RUNS_PER_WORKFLOW, DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
+    GetMonitoringSettings, MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
+    MIN_RECENT_RUNS_PER_WORKFLOW, MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings,
+    SettingsFailure, SettingsRepository, UpdateMonitoringSettings,
+};
 
 pub use sync::{
     DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationStatus,
@@ -18,12 +25,6 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use zeroize::Zeroize;
-
-/// Default number of recent activities returned for each workflow.
-///
-/// This is the single application-level default until workspace settings make
-/// the value configurable.
-pub const RECENT_RUNS_PER_WORKFLOW: usize = 10;
 
 /// A provider credential whose contents are cleared when it leaves scope.
 ///
@@ -612,6 +613,7 @@ impl Error for ListWorkflowsFailure {}
 pub struct ListWorkflows {
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
+    settings: Arc<dyn SettingsRepository>,
 }
 
 impl ListWorkflows {
@@ -619,14 +621,21 @@ impl ListWorkflows {
     pub fn new(
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
+        settings: Arc<dyn SettingsRepository>,
     ) -> Self {
         Self {
             source_data,
             selections,
+            settings,
         }
     }
 
     pub async fn execute(&self) -> Result<WorkflowInventory, ListWorkflowsFailure> {
+        let recent_runs_per_workflow = self
+            .settings
+            .load_settings()
+            .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?
+            .recent_runs_per_workflow;
         let selections = self
             .selections
             .list()
@@ -687,7 +696,7 @@ impl ListWorkflows {
                         .runs
                         .iter()
                         .filter(|run| run.workflow_id == workflow.id)
-                        .take(RECENT_RUNS_PER_WORKFLOW)
+                        .take(recent_runs_per_workflow)
                         .cloned()
                         .collect();
                     DiscoveredWorkflow {

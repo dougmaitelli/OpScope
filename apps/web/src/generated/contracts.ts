@@ -52,6 +52,12 @@ export type SynchronizationResponse = { selectedRepositoryCount: number, synchro
 
 export type SynchronizationStatusResponse = { running: boolean, activeSourceCount: number, lastCompletedAt: number | null, lastFailedRepositoryCount: number, };
 
+export type MonitoringSettingsResponse = { synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+
+export type UpdateMonitoringSettingsRequest = { synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+
+export type MonitoringSettingsErrorResponse = { message: string, };
+
 export type RepositorySelectionSourceRequest = { sourceId: string, repositoryIds: Array<string>, };
 
 export type SaveRepositorySelectionRequest = { sources: Array<RepositorySelectionSourceRequest>, };
@@ -62,11 +68,17 @@ export type RepositorySelectionErrorResponse = { message: string, };
 
 export const applicationVersion = "0.1.0" as const;
 
+export const settingsLimits = {
+  synchronizationIntervalSeconds: { min: 30, max: 3600 },
+  recentRunsPerWorkflow: { min: 1, max: 100 },
+} as const;
+
 export const httpRoutes = {
   health: "/api/health",
   workflows: "/api/workflows",
   workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
+  settings: "/api/settings",
   sources: "/api/sources",
   connections: "/api/connections",
   repositories: "/api/repositories",
@@ -79,6 +91,8 @@ export const desktopCommands = {
   workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
   synchronizationStatus: "synchronization_status",
+  getSettings: "get_settings",
+  updateSettings: "update_settings",
   listSources: "list_sources",
   connectSource: "connect_source",
   disconnectSource: "disconnect_source",
@@ -92,6 +106,8 @@ export interface ApplicationClient {
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;
+  getSettings(): Promise<MonitoringSettingsResponse>;
+  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;
   listSources(): Promise<ListSourcesResponse>;
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;
   disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;

@@ -253,7 +253,21 @@ export function OverviewPage() {
         <dl className="health-stats">
           <div><dt>Workflows</dt><dd>{error ? "—" : workflows.length}</dd></div>
           <div><dt>Running</dt><dd>{error ? "—" : running}</dd></div>
-          <div><dt>Failing</dt><dd>{error ? "—" : failing}</dd></div>
+          <div>
+            <dt>Failing</dt>
+            <dd>
+              {!error && failing > 0 ? (
+                <button
+                  className="health-stat-link health-stat-link-failing"
+                  type="button"
+                  aria-label={`Show ${failing} failing workflow${failing === 1 ? "" : "s"}`}
+                  onClick={() => updateFilters("", "failing")}
+                >
+                  {failing}
+                </button>
+              ) : error ? "—" : failing}
+            </dd>
+          </div>
         </dl>
       </section>
 

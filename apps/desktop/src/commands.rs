@@ -2,9 +2,10 @@ use crate::state::DesktopState;
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
-    ListSourcesResponse, ListWorkflowsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
+    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
+    MonitoringSettingsResponse, RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest,
     WorkflowRunLogsResponse,
 };
 use tauri::State;
@@ -61,6 +62,29 @@ pub(crate) fn synchronization_status(
     state: State<'_, DesktopState>,
 ) -> SynchronizationStatusResponse {
     state.synchronize_sources.status().into()
+}
+
+#[tauri::command]
+pub(crate) fn get_settings(
+    state: State<'_, DesktopState>,
+) -> Result<MonitoringSettingsResponse, MonitoringSettingsErrorResponse> {
+    state
+        .get_settings
+        .execute()
+        .map(MonitoringSettingsResponse::from)
+        .map_err(MonitoringSettingsErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) fn update_settings(
+    state: State<'_, DesktopState>,
+    request: UpdateMonitoringSettingsRequest,
+) -> Result<MonitoringSettingsResponse, MonitoringSettingsErrorResponse> {
+    state
+        .update_settings
+        .execute(request.into())
+        .map(MonitoringSettingsResponse::from)
+        .map_err(MonitoringSettingsErrorResponse::from)
 }
 
 #[tauri::command]

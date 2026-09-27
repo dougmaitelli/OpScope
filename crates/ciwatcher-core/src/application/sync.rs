@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub const DEFAULT_SYNCHRONIZATION_INTERVAL: Duration = Duration::from_secs(60);
+pub const DEFAULT_SYNCHRONIZATION_INTERVAL: Duration =
+    Duration::from_secs(super::DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SynchronizationFailure {

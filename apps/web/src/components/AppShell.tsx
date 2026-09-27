@@ -7,6 +7,7 @@ const pageTitles: Record<string, string> = {
   "/": "Overview",
   "/repositories": "Repositories",
   "/connections": "Connections",
+  "/settings": "Settings",
 };
 
 export function AppShell() {
@@ -43,6 +44,10 @@ export function AppShell() {
           <NavLink className={navClass} to="/connections">
             <span className="nav-symbol" aria-hidden="true">C</span>
             Connections
+          </NavLink>
+          <NavLink className={navClass} to="/settings">
+            <span className="nav-symbol" aria-hidden="true">S</span>
+            Settings
           </NavLink>
         </nav>
 

@@ -1,4 +1,6 @@
-use ciwatcher_core::application::{DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizeSources};
+use ciwatcher_core::application::{
+    DEFAULT_SYNCHRONIZATION_INTERVAL, GetMonitoringSettings, SynchronizeSources,
+};
 use std::sync::Mutex;
 use tauri::async_runtime::JoinHandle;
 
@@ -7,10 +9,16 @@ pub(crate) struct SynchronizationScheduler {
 }
 
 impl SynchronizationScheduler {
-    pub(crate) fn start(synchronizer: SynchronizeSources) -> Self {
+    pub(crate) fn start(synchronizer: SynchronizeSources, settings: GetMonitoringSettings) -> Self {
         let task = tauri::async_runtime::spawn(async move {
             loop {
-                tokio::time::sleep(DEFAULT_SYNCHRONIZATION_INTERVAL).await;
+                let interval = settings
+                    .execute()
+                    .map(|settings| {
+                        std::time::Duration::from_secs(settings.synchronization_interval_seconds)
+                    })
+                    .unwrap_or(DEFAULT_SYNCHRONIZATION_INTERVAL);
+                tokio::time::sleep(interval).await;
                 _ = synchronizer.execute().await;
             }
         });

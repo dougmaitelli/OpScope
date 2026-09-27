@@ -81,6 +81,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+.health-stat-link {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.health-stat-link-failing {
+  color: var(--danger);
+}
+
+.health-stat-link-failing:hover {
+  color: #ff9b9e;
+}
+
 .overview-content {
   margin-top: 12px;
 }

@@ -6,8 +6,9 @@ mod scheduler;
 mod state;
 
 use crate::commands::{
-    connect_source, disconnect_source, health, list_repositories, list_sources, list_workflows,
-    save_repository_selection, synchronization_status, synchronize_sources, workflow_run_logs,
+    connect_source, disconnect_source, get_settings, health, list_repositories, list_sources,
+    list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
+    update_settings, workflow_run_logs,
 };
 use crate::keyring::KeyringSecretStore;
 use crate::scheduler::SynchronizationScheduler;
@@ -31,9 +32,13 @@ fn main() {
                 database.clone(),
                 secrets,
                 database.clone(),
+                database.clone(),
                 database,
             );
-            let scheduler = SynchronizationScheduler::start(state.synchronize_sources.clone());
+            let scheduler = SynchronizationScheduler::start(
+                state.synchronize_sources.clone(),
+                state.get_settings.clone(),
+            );
             app.manage(state);
             app.manage(scheduler);
             Ok(())
@@ -44,6 +49,8 @@ fn main() {
             workflow_run_logs,
             synchronize_sources,
             synchronization_status,
+            get_settings,
+            update_settings,
             connect_source,
             list_sources,
             list_repositories,

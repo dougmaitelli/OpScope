@@ -2,7 +2,9 @@
 
 use crate::application::{
     ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
-    ListWorkflowsFailure, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
+    ListWorkflowsFailure, MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
+    MIN_RECENT_RUNS_PER_WORKFLOW, MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings,
+    RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure, SettingsFailure,
     SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationStatus,
     SynchronizationSummary, ValidatedAccount, WorkflowInventory, WorkflowRunLogsFailure,
 };
@@ -14,7 +16,7 @@ use crate::domain::{
 use serde::{Deserialize, Serialize};
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 8;
+pub const CONTRACT_VERSION: u8 = 9;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
@@ -24,6 +26,7 @@ pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
 pub const REPOSITORIES_HTTP_PATH: &str = "/api/repositories";
 pub const REPOSITORY_SELECTIONS_HTTP_PATH: &str = "/api/repository-selections";
 pub const SYNCHRONIZATION_HTTP_PATH: &str = "/api/sync";
+pub const SETTINGS_HTTP_PATH: &str = "/api/settings";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
 pub const WORKFLOW_RUN_LOGS_DESKTOP_COMMAND: &str = "workflow_run_logs";
@@ -34,6 +37,8 @@ pub const LIST_REPOSITORIES_DESKTOP_COMMAND: &str = "list_repositories";
 pub const SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND: &str = "save_repository_selection";
 pub const SYNCHRONIZE_SOURCES_DESKTOP_COMMAND: &str = "synchronize_sources";
 pub const SYNCHRONIZATION_STATUS_DESKTOP_COMMAND: &str = "synchronization_status";
+pub const GET_SETTINGS_DESKTOP_COMMAND: &str = "get_settings";
+pub const UPDATE_SETTINGS_DESKTOP_COMMAND: &str = "update_settings";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -560,6 +565,62 @@ pub struct SynchronizationStatusResponse {
     pub last_failed_repository_count: usize,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitoringSettingsResponse {
+    #[ts(type = "number")]
+    pub synchronization_interval_seconds: u64,
+    pub recent_runs_per_workflow: usize,
+}
+
+impl From<MonitoringSettings> for MonitoringSettingsResponse {
+    fn from(settings: MonitoringSettings) -> Self {
+        Self {
+            synchronization_interval_seconds: settings.synchronization_interval_seconds,
+            recent_runs_per_workflow: settings.recent_runs_per_workflow,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMonitoringSettingsRequest {
+    #[ts(type = "number")]
+    pub synchronization_interval_seconds: u64,
+    pub recent_runs_per_workflow: usize,
+}
+
+impl From<UpdateMonitoringSettingsRequest> for MonitoringSettings {
+    fn from(request: UpdateMonitoringSettingsRequest) -> Self {
+        Self {
+            synchronization_interval_seconds: request.synchronization_interval_seconds,
+            recent_runs_per_workflow: request.recent_runs_per_workflow,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitoringSettingsErrorResponse {
+    pub message: String,
+}
+
+impl From<SettingsFailure> for MonitoringSettingsErrorResponse {
+    fn from(failure: SettingsFailure) -> Self {
+        let message = match failure {
+            SettingsFailure::InvalidSettings => {
+                "The monitoring settings are outside the allowed range."
+            }
+            SettingsFailure::StorageUnavailable => {
+                "The monitoring settings could not be loaded or saved."
+            }
+        };
+        Self {
+            message: message.to_owned(),
+        }
+    }
+}
+
 impl From<SynchronizationStatus> for SynchronizationStatusResponse {
     fn from(status: SynchronizationStatus) -> Self {
         Self {
@@ -727,6 +788,9 @@ pub fn render_typescript_contract() -> String {
         ListWorkflowsResponse::decl(&config),
         SynchronizationResponse::decl(&config),
         SynchronizationStatusResponse::decl(&config),
+        MonitoringSettingsResponse::decl(&config),
+        UpdateMonitoringSettingsRequest::decl(&config),
+        MonitoringSettingsErrorResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),
         SaveRepositorySelectionRequest::decl(&config),
         SaveRepositorySelectionResponse::decl(&config),
@@ -734,7 +798,7 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/ciwatcher-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const settingsLimits = {{\n  synchronizationIntervalSeconds: {{ min: {MIN_SYNCHRONIZATION_INTERVAL_SECONDS}, max: {MAX_SYNCHRONIZATION_INTERVAL_SECONDS} }},\n  recentRunsPerWorkflow: {{ min: {MIN_RECENT_RUNS_PER_WORKFLOW}, max: {MAX_RECENT_RUNS_PER_WORKFLOW} }},\n}} as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  settings: \"{SETTINGS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  getSettings: \"{GET_SETTINGS_DESKTOP_COMMAND}\",\n  updateSettings: \"{UPDATE_SETTINGS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  getSettings(): Promise<MonitoringSettingsResponse>;\n  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

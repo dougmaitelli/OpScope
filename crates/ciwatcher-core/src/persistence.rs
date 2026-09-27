@@ -3,9 +3,10 @@
 mod source_cache;
 
 use crate::application::{
-    ConnectionRepository, PersistenceFailure, ProviderToken, RepositorySelection,
-    RepositorySelectionRepository, SecretReference, SecretStore, SourceRepositorySelection,
-    StoredConnection, ValidatedAccount,
+    ConnectionRepository, DEFAULT_RECENT_RUNS_PER_WORKFLOW,
+    DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings, PersistenceFailure,
+    ProviderToken, RepositorySelection, RepositorySelectionRepository, SecretReference,
+    SecretStore, SettingsRepository, SourceRepositorySelection, StoredConnection, ValidatedAccount,
 };
 use chacha20poly1305::aead::{Aead, Generate, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
@@ -141,7 +142,26 @@ impl SqliteDatabase {
                    event_type TEXT NOT NULL,
                    connection_id TEXT NOT NULL,
                    occurred_at INTEGER NOT NULL DEFAULT (unixepoch())
-                 );",
+                 );
+                 CREATE TABLE IF NOT EXISTS monitoring_settings (
+                   id INTEGER PRIMARY KEY CHECK (id = 1),
+                   synchronization_interval_seconds INTEGER NOT NULL,
+                   recent_runs_per_workflow INTEGER NOT NULL
+                 );
+                 ",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO monitoring_settings (
+                   id, synchronization_interval_seconds, recent_runs_per_workflow
+                 ) VALUES (1, ?1, ?2)",
+                params![
+                    i64::try_from(DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS)
+                        .map_err(|_| PersistenceFailure)?,
+                    i64::try_from(DEFAULT_RECENT_RUNS_PER_WORKFLOW)
+                        .map_err(|_| PersistenceFailure)?,
+                ],
             )
             .map_err(|_| PersistenceFailure)?;
         Ok(Self {
@@ -363,6 +383,49 @@ impl RepositorySelectionRepository for SqliteDatabase {
                 .map_err(|_| PersistenceFailure)?;
         }
         transaction.commit().map_err(|_| PersistenceFailure)
+    }
+}
+
+impl SettingsRepository for SqliteDatabase {
+    fn load_settings(&self) -> Result<MonitoringSettings, PersistenceFailure> {
+        let (synchronization_interval_seconds, recent_runs_per_workflow) = self
+            .lock()?
+            .query_row(
+                "SELECT synchronization_interval_seconds, recent_runs_per_workflow
+                 FROM monitoring_settings WHERE id = 1",
+                [],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .map_err(|_| PersistenceFailure)?;
+        Ok(MonitoringSettings {
+            synchronization_interval_seconds: synchronization_interval_seconds
+                .try_into()
+                .map_err(|_| PersistenceFailure)?,
+            recent_runs_per_workflow: recent_runs_per_workflow
+                .try_into()
+                .map_err(|_| PersistenceFailure)?,
+        })
+    }
+
+    fn save_settings(&self, settings: MonitoringSettings) -> Result<(), PersistenceFailure> {
+        let synchronization_interval_seconds: i64 = settings
+            .synchronization_interval_seconds
+            .try_into()
+            .map_err(|_| PersistenceFailure)?;
+        let recent_runs_per_workflow: i64 = settings
+            .recent_runs_per_workflow
+            .try_into()
+            .map_err(|_| PersistenceFailure)?;
+        self.lock()?
+            .execute(
+                "UPDATE monitoring_settings SET
+                   synchronization_interval_seconds = ?1,
+                   recent_runs_per_workflow = ?2
+                 WHERE id = 1",
+                params![synchronization_interval_seconds, recent_runs_per_workflow,],
+            )
+            .map(|_| ())
+            .map_err(|_| PersistenceFailure)
     }
 }
 
@@ -650,6 +713,25 @@ mod tests {
         assert_eq!(database.list()?.len(), 2);
         database.delete("example")?;
         assert!(database.list()?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn monitoring_settings_have_defaults_and_persist_updates()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let database = SqliteDatabase::in_memory()?;
+        assert_eq!(
+            SettingsRepository::load_settings(&database)?,
+            MonitoringSettings::default()
+        );
+
+        let updated = MonitoringSettings {
+            synchronization_interval_seconds: 120,
+            recent_runs_per_workflow: 25,
+        };
+        database.save_settings(updated)?;
+
+        assert_eq!(SettingsRepository::load_settings(&database)?, updated);
         Ok(())
     }
 }

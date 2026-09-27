@@ -12,10 +12,12 @@ import {
   type ListWorkflowsResponse,
   type ListRepositoriesResponse,
   type ListSourcesResponse,
+  type MonitoringSettingsResponse,
   type SaveRepositorySelectionRequest,
   type SaveRepositorySelectionResponse,
   type SynchronizationResponse,
   type SynchronizationStatusResponse,
+  type UpdateMonitoringSettingsRequest,
   type WorkflowRunLogsRequest,
   type WorkflowRunLogsResponse,
 } from "./generated/contracts.ts";
@@ -39,6 +41,16 @@ export class DesktopClient implements ApplicationClient {
 
   synchronizationStatus(): Promise<SynchronizationStatusResponse> {
     return invoke<SynchronizationStatusResponse>(desktopCommands.synchronizationStatus);
+  }
+
+  getSettings(): Promise<MonitoringSettingsResponse> {
+    return invoke<MonitoringSettingsResponse>(desktopCommands.getSettings);
+  }
+
+  updateSettings(
+    request: UpdateMonitoringSettingsRequest,
+  ): Promise<MonitoringSettingsResponse> {
+    return invoke<MonitoringSettingsResponse>(desktopCommands.updateSettings, { request });
   }
 
   listSources(): Promise<ListSourcesResponse> {
@@ -91,6 +103,16 @@ export class HttpClient implements ApplicationClient {
 
   synchronizationStatus(): Promise<SynchronizationStatusResponse> {
     return this.get<SynchronizationStatusResponse>(httpRoutes.synchronization);
+  }
+
+  getSettings(): Promise<MonitoringSettingsResponse> {
+    return this.get<MonitoringSettingsResponse>(httpRoutes.settings);
+  }
+
+  updateSettings(
+    request: UpdateMonitoringSettingsRequest,
+  ): Promise<MonitoringSettingsResponse> {
+    return this.put<MonitoringSettingsResponse>(httpRoutes.settings, request);
   }
 
   listSources(): Promise<ListSourcesResponse> {

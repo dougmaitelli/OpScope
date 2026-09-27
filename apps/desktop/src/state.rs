@@ -1,7 +1,8 @@
 use ciwatcher_core::application::{
-    ConnectSource, ConnectionRepository, DisconnectSource, GetWorkflowRunLogs, ListRepositories,
-    ListSources, ListWorkflows, RepositorySelectionRepository, SaveRepositorySelection,
-    SecretStore, SourceRegistry, SynchronizeSources,
+    ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
+    GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows,
+    RepositorySelectionRepository, SaveRepositorySelection, SecretStore, SettingsRepository,
+    SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
 };
 use ciwatcher_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -15,6 +16,8 @@ pub(crate) struct DesktopState {
     pub(crate) save_repository_selection: SaveRepositorySelection,
     pub(crate) disconnect_source: DisconnectSource,
     pub(crate) synchronize_sources: SynchronizeSources,
+    pub(crate) get_settings: GetMonitoringSettings,
+    pub(crate) update_settings: UpdateMonitoringSettings,
 }
 
 impl DesktopState {
@@ -24,6 +27,7 @@ impl DesktopState {
         secrets: Arc<dyn SecretStore>,
         repository_selections: Arc<dyn RepositorySelectionRepository>,
         source_data_cache: Arc<dyn SourceDataCache>,
+        settings: Arc<dyn SettingsRepository>,
     ) -> Self {
         let source_data = Arc::new(ReadThroughSourceData::cached(
             sources.clone(),
@@ -33,7 +37,11 @@ impl DesktopState {
             SourceDataCachePolicy::default(),
         ));
         Self {
-            list_workflows: ListWorkflows::new(source_data.clone(), repository_selections.clone()),
+            list_workflows: ListWorkflows::new(
+                source_data.clone(),
+                repository_selections.clone(),
+                settings.clone(),
+            ),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 sources.clone(),
@@ -55,6 +63,8 @@ impl DesktopState {
                 repository_selections,
             ),
             disconnect_source: DisconnectSource::new(sources, connections, secrets),
+            get_settings: GetMonitoringSettings::new(settings.clone()),
+            update_settings: UpdateMonitoringSettings::new(settings),
         }
     }
 }
