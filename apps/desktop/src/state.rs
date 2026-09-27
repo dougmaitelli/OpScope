@@ -1,6 +1,6 @@
 use ciwatcher_core::application::{
     ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
-    GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows,
+    GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows, NotifyRepositoryFailures,
     RepositorySelectionRepository, SaveRepositorySelection, SecretStore, SettingsRepository,
     SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
 };
@@ -28,6 +28,7 @@ impl DesktopState {
         repository_selections: Arc<dyn RepositorySelectionRepository>,
         source_data_cache: Arc<dyn SourceDataCache>,
         settings: Arc<dyn SettingsRepository>,
+        failure_notifications: NotifyRepositoryFailures,
     ) -> Self {
         let source_data = Arc::new(ReadThroughSourceData::cached(
             sources.clone(),
@@ -56,6 +57,7 @@ impl DesktopState {
             synchronize_sources: SynchronizeSources::new(
                 source_data,
                 repository_selections.clone(),
+                failure_notifications,
             ),
             save_repository_selection: SaveRepositorySelection::new(
                 sources.clone(),

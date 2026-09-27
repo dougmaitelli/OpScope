@@ -1,9 +1,15 @@
 //! Application use cases and the ports they require.
 
+mod notifications;
 mod run_logs;
 mod settings;
 mod sync;
 
+pub use notifications::{
+    LatestRunNotificationState, NoopNotificationSink, Notification, NotificationDeliveryFailure,
+    NotificationSeverity, NotificationSink, NotificationStateRepository, NotifyRepositoryFailures,
+    NotifyRepositoryFailuresFailure,
+};
 pub use run_logs::GetWorkflowRunLogs;
 pub use settings::{
     DEFAULT_RECENT_RUNS_PER_WORKFLOW, DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,

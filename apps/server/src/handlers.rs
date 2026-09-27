@@ -4,10 +4,10 @@ use axum::http::StatusCode;
 use ciwatcher_core::application::{
     ConnectSource, ConnectSourceFailure, ConnectionRepository, DisconnectSource,
     GetMonitoringSettings, GetWorkflowRunLogs, ListRepositories, ListRepositoriesFailure,
-    ListSources, ListWorkflows, ListWorkflowsFailure, RepositorySelectionRepository,
-    SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
-    SettingsRepository, SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
-    WorkflowRunLogsFailure,
+    ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
+    RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
+    SecretStore, SettingsFailure, SettingsRepository, SourceRegistry, SynchronizeSources,
+    UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
@@ -43,6 +43,7 @@ impl AppState {
         repository_selections: Arc<dyn RepositorySelectionRepository>,
         source_data_cache: Arc<dyn SourceDataCache>,
         settings: Arc<dyn SettingsRepository>,
+        failure_notifications: NotifyRepositoryFailures,
     ) -> Self {
         let source_data = Arc::new(ReadThroughSourceData::cached(
             registry.clone(),
@@ -71,6 +72,7 @@ impl AppState {
             synchronize_sources: SynchronizeSources::new(
                 source_data,
                 repository_selections.clone(),
+                failure_notifications,
             ),
             save_repository_selection: SaveRepositorySelection::new(
                 registry.clone(),

@@ -1,5 +1,6 @@
 use ciwatcher_core::application::{
-    DEFAULT_SYNCHRONIZATION_INTERVAL, GetMonitoringSettings, SynchronizeSources,
+    DEFAULT_SYNCHRONIZATION_INTERVAL, GetMonitoringSettings, NotifyRepositoryFailures,
+    SynchronizeSources,
 };
 use ciwatcher_core::integrations::registered_sources;
 use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
@@ -26,6 +27,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let master_key = ServerMasterKey::load_or_create(master_key_path)?;
     let secrets = EncryptedSecretStore::new(database.clone(), master_key);
     let database = Arc::new(database);
+    let failure_notifications = NotifyRepositoryFailures::new(
+        database.clone(),
+        ciwatcher_server::notifications::notification_sink_from_environment()?,
+    );
     let application = ciwatcher_server::application(
         sources,
         database.clone(),
@@ -33,6 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         database.clone(),
         database.clone(),
         database,
+        failure_notifications,
     );
     let scheduler = tokio::spawn(run_synchronization_schedule(
         application.synchronizer,

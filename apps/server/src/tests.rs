@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use ciwatcher_core::application::{
-    ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor, SourceModule,
-    SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
+    ConnectionValidationFailure, CredentialField, NoopNotificationSink, NotifyRepositoryFailures,
+    ProviderToken, SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount,
+    WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
@@ -139,6 +140,10 @@ fn test_registry() -> SourceRegistry {
     SourceRegistry::new(vec![Arc::new(TestSourceModule)])
 }
 
+fn test_failure_notifications(database: &SqliteDatabase) -> NotifyRepositoryFailures {
+    NotifyRepositoryFailures::new(Arc::new(database.clone()), Arc::new(NoopNotificationSink))
+}
+
 #[tokio::test]
 async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error::Error>> {
     let database = SqliteDatabase::in_memory()?;
@@ -149,7 +154,8 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
         Arc::new(secrets),
         Arc::new(database.clone()),
         Arc::new(database.clone()),
-        Arc::new(database),
+        Arc::new(database.clone()),
+        test_failure_notifications(&database),
     );
 
     let health = app
@@ -190,7 +196,8 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         Arc::new(secrets),
         Arc::new(database.clone()),
         Arc::new(database.clone()),
-        Arc::new(database),
+        Arc::new(database.clone()),
+        test_failure_notifications(&database),
     );
     let response = app
         .clone()

@@ -4,9 +4,10 @@ mod source_cache;
 
 use crate::application::{
     ConnectionRepository, DEFAULT_RECENT_RUNS_PER_WORKFLOW,
-    DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings, PersistenceFailure,
-    ProviderToken, RepositorySelection, RepositorySelectionRepository, SecretReference,
-    SecretStore, SettingsRepository, SourceRepositorySelection, StoredConnection, ValidatedAccount,
+    DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS, LatestRunNotificationState, MonitoringSettings,
+    NotificationStateRepository, PersistenceFailure, ProviderToken, RepositorySelection,
+    RepositorySelectionRepository, SecretReference, SecretStore, SettingsRepository,
+    SourceRepositorySelection, StoredConnection, ValidatedAccount,
 };
 use chacha20poly1305::aead::{Aead, Generate, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
@@ -147,6 +148,25 @@ impl SqliteDatabase {
                    id INTEGER PRIMARY KEY CHECK (id = 1),
                    synchronization_interval_seconds INTEGER NOT NULL,
                    recent_runs_per_workflow INTEGER NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS notification_repository_states (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   observed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                   PRIMARY KEY (source_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS notification_workflow_states (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   workflow_id TEXT NOT NULL,
+                   run_id TEXT,
+                   attempt INTEGER,
+                   failed INTEGER NOT NULL,
+                   PRIMARY KEY (source_id, repository_id, workflow_id),
+                   FOREIGN KEY (source_id, repository_id)
+                     REFERENCES notification_repository_states(source_id, repository_id)
+                     ON DELETE CASCADE
                  );
                  ",
             )
@@ -426,6 +446,112 @@ impl SettingsRepository for SqliteDatabase {
             )
             .map(|_| ())
             .map_err(|_| PersistenceFailure)
+    }
+}
+
+impl NotificationStateRepository for SqliteDatabase {
+    fn load(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<Vec<LatestRunNotificationState>>, PersistenceFailure> {
+        let database = self.lock()?;
+        let initialized = database
+            .query_row(
+                "SELECT 1 FROM notification_repository_states
+                 WHERE source_id = ?1 AND repository_id = ?2",
+                params![source_id, repository_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)?
+            .is_some();
+        if !initialized {
+            return Ok(None);
+        }
+
+        let mut statement = database
+            .prepare(
+                "SELECT workflow_id, run_id, attempt, failed
+                 FROM notification_workflow_states
+                 WHERE source_id = ?1 AND repository_id = ?2
+                 ORDER BY workflow_id",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map(params![source_id, repository_id], |row| {
+                let attempt = row
+                    .get::<_, Option<i64>>(2)?
+                    .map(u64::try_from)
+                    .transpose()
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            2,
+                            rusqlite::types::Type::Integer,
+                            Box::new(error),
+                        )
+                    })?;
+                Ok(LatestRunNotificationState {
+                    workflow_id: row.get(0)?,
+                    run_id: row.get(1)?,
+                    attempt,
+                    failed: row.get::<_, i64>(3)? != 0,
+                })
+            })
+            .map_err(|_| PersistenceFailure)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map(Some)
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn replace(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+        states: &[LatestRunNotificationState],
+    ) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO notification_repository_states (
+                   source_id, repository_id, observed_at
+                 ) VALUES (?1, ?2, unixepoch())
+                 ON CONFLICT(source_id, repository_id) DO UPDATE SET
+                   observed_at = unixepoch()",
+                params![source_id, repository_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM notification_workflow_states
+                 WHERE source_id = ?1 AND repository_id = ?2",
+                params![source_id, repository_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        for state in states {
+            let attempt = state
+                .attempt
+                .map(i64::try_from)
+                .transpose()
+                .map_err(|_| PersistenceFailure)?;
+            transaction
+                .execute(
+                    "INSERT INTO notification_workflow_states (
+                       source_id, repository_id, workflow_id, run_id, attempt, failed
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        source_id,
+                        repository_id,
+                        state.workflow_id,
+                        state.run_id,
+                        attempt,
+                        i64::from(state.failed),
+                    ],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
+        transaction.commit().map_err(|_| PersistenceFailure)
     }
 }
 
@@ -732,6 +858,33 @@ mod tests {
         database.save_settings(updated)?;
 
         assert_eq!(SettingsRepository::load_settings(&database)?, updated);
+        Ok(())
+    }
+
+    #[test]
+    fn notification_state_distinguishes_an_empty_baseline_and_replaces_workflows()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let database = SqliteDatabase::in_memory()?;
+        database.save(&test_connection())?;
+        assert!(NotificationStateRepository::load(&database, "example", "repository-1")?.is_none());
+
+        NotificationStateRepository::replace(&database, "example", "repository-1", &[])?;
+        assert_eq!(
+            NotificationStateRepository::load(&database, "example", "repository-1")?,
+            Some(Vec::new())
+        );
+
+        let expected = vec![LatestRunNotificationState {
+            workflow_id: "workflow-1".to_owned(),
+            run_id: Some("run-1".to_owned()),
+            attempt: Some(2),
+            failed: true,
+        }];
+        NotificationStateRepository::replace(&database, "example", "repository-1", &expected)?;
+        assert_eq!(
+            NotificationStateRepository::load(&database, "example", "repository-1")?,
+            Some(expected)
+        );
         Ok(())
     }
 }

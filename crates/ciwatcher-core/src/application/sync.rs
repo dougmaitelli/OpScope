@@ -1,4 +1,4 @@
-use super::RepositorySelectionRepository;
+use super::{NotifyRepositoryFailures, RepositorySelectionRepository};
 use crate::source_data::{RefreshMode, SourceData};
 use std::collections::HashSet;
 use std::error::Error;
@@ -56,6 +56,7 @@ impl SynchronizationSummary {
 pub struct SynchronizeSources {
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
+    failure_notifications: NotifyRepositoryFailures,
     active_sources: Arc<Mutex<HashSet<String>>>,
     last_completed_at: Arc<AtomicU64>,
     last_failed_repository_count: Arc<AtomicUsize>,
@@ -66,10 +67,12 @@ impl SynchronizeSources {
     pub fn new(
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
+        failure_notifications: NotifyRepositoryFailures,
     ) -> Self {
         Self {
             source_data,
             selections,
+            failure_notifications,
             active_sources: Arc::new(Mutex::new(HashSet::new())),
             last_completed_at: Arc::new(AtomicU64::new(0)),
             last_failed_repository_count: Arc::new(AtomicUsize::new(0)),
@@ -146,10 +149,15 @@ impl SynchronizeSources {
                     .source_data
                     .workflow_runs(&source.id, &repository, RefreshMode::Force)
                     .await;
-                if workflows.is_ok() && runs.is_ok_and(|runs| !runs.stale) {
-                    summary.synchronized_repository_count += 1;
-                } else {
-                    summary.failed_repository_count += 1;
+                match (workflows, runs) {
+                    (Ok(workflows), Ok(runs)) if !runs.stale => {
+                        summary.synchronized_repository_count += 1;
+                        _ = self
+                            .failure_notifications
+                            .observe(&source.id, &repository, &workflows, &runs.runs)
+                            .await;
+                    }
+                    _ => summary.failed_repository_count += 1,
                 }
             }
         }
@@ -212,7 +220,8 @@ const fn nonzero_timestamp(timestamp: u64) -> Option<u64> {
 mod tests {
     use super::*;
     use crate::application::{
-        ConnectionValidationFailure, CredentialField, PersistenceFailure, RepositorySelection,
+        ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
+        NoopNotificationSink, NotificationStateRepository, PersistenceFailure, RepositorySelection,
         SourceDescriptor, SourceRepositorySelection,
     };
     use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs};
@@ -236,6 +245,36 @@ mod tests {
 
     struct RecordingSourceData {
         refresh_modes: Mutex<Vec<RefreshMode>>,
+    }
+
+    #[derive(Default)]
+    struct TestNotificationStates(Mutex<Option<Vec<LatestRunNotificationState>>>);
+
+    impl NotificationStateRepository for TestNotificationStates {
+        fn load(
+            &self,
+            _source_id: &str,
+            _repository_id: &str,
+        ) -> Result<Option<Vec<LatestRunNotificationState>>, PersistenceFailure> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone())
+        }
+
+        fn replace(
+            &self,
+            _source_id: &str,
+            _repository_id: &str,
+            states: &[LatestRunNotificationState],
+        ) -> Result<(), PersistenceFailure> {
+            *self
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(states.to_vec());
+            Ok(())
+        }
     }
 
     impl RecordingSourceData {
@@ -365,7 +404,14 @@ mod tests {
                 repository_id: "missing".to_owned(),
             },
         ]));
-        let synchronize = SynchronizeSources::new(source_data.clone(), selections);
+        let synchronize = SynchronizeSources::new(
+            source_data.clone(),
+            selections,
+            NotifyRepositoryFailures::new(
+                Arc::new(TestNotificationStates::default()),
+                Arc::new(NoopNotificationSink),
+            ),
+        );
         assert_eq!(synchronize.status().last_completed_at, None);
 
         let summary = synchronize.execute().await.expect("synchronization runs");

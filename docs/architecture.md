@@ -128,6 +128,11 @@ Synchronization is a background application concern, not a UI concern.
 
 - Only one sync for a connection may run at a time.
 - Manual refresh uses the same synchronization path as scheduled refresh.
+- Latest-run failure transitions are persisted and grouped into one
+  provider-independent notification per repository.
+- Desktop and server shells implement notification delivery through native
+  system notifications and an environment-configured Apprise endpoint,
+  respectively.
 - Cached data remains available during provider outages.
 - Last attempt and last successful sync are distinct.
 - Conditional requests and ETags are used where supported.

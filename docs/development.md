@@ -54,6 +54,13 @@ permissions on first use. Set `CIWATCHER_DATA_DIR` to move the database or
 Production self-hosting will require the latter rather than the development
 default.
 
+Set `CIWATCHER_APPRISE_URL` to an Apprise API notification endpoint, such as
+`http://127.0.0.1:8000/notify/ciwatcher`, to enable server notifications. Leave
+it unset to disable delivery. Apprise service URLs and credentials stay in the
+Apprise configuration identified by that endpoint rather than in CI Watcher.
+When using the stateless `/notify` endpoint, configure those destinations on
+the Apprise API process with its `APPRISE_STATELESS_URLS` environment variable.
+
 ## Dependency direction
 
 The workspace has one shared library and two executable crates:

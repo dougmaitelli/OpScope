@@ -2,8 +2,10 @@
 
 mod commands;
 mod keyring;
+mod notifications;
 mod scheduler;
 mod state;
+mod tray;
 
 use crate::commands::{
     connect_source, disconnect_source, get_settings, health, list_repositories, list_sources,
@@ -11,8 +13,10 @@ use crate::commands::{
     update_settings, workflow_run_logs,
 };
 use crate::keyring::KeyringSecretStore;
+use crate::notifications::DesktopNotificationSink;
 use crate::scheduler::SynchronizationScheduler;
 use crate::state::DesktopState;
+use ciwatcher_core::application::NotifyRepositoryFailures;
 use ciwatcher_core::integrations::registered_sources;
 use ciwatcher_core::persistence::SqliteDatabase;
 use std::fs;
@@ -21,12 +25,18 @@ use tauri::Manager;
 
 fn main() {
     let application = tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            tray::setup(app)?;
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
             let database = Arc::new(SqliteDatabase::open(data_dir.join("ciwatcher.sqlite3"))?);
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
+            let failure_notifications = NotifyRepositoryFailures::new(
+                database.clone(),
+                Arc::new(DesktopNotificationSink::new(app.handle().clone())),
+            );
             let state = DesktopState::new(
                 sources,
                 database.clone(),
@@ -34,6 +44,7 @@ fn main() {
                 database.clone(),
                 database.clone(),
                 database,
+                failure_notifications,
             );
             let scheduler = SynchronizationScheduler::start(
                 state.synchronize_sources.clone(),
@@ -57,6 +68,7 @@ fn main() {
             save_repository_selection,
             disconnect_source
         ])
+        .on_window_event(tray::hide_when_minimized)
         .build(tauri::generate_context!())
         .expect("desktop runtime failed");
     application.run(|app, event| {

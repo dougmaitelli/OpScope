@@ -28,12 +28,13 @@ Version one includes:
 - Repository, workflow, branch, commit, actor, trigger, timing, outcome,
   freshness, and links back to GitHub.
 - Manual and scheduled refresh with cached state during transient failures.
+- New latest-run failure notifications, grouped once per repository.
 - Search and filtering by repository, workflow, and status.
 - Configurable local history stored in SQLite.
 - Native desktop and single-administrator self-hosted editions.
 
-It does not include write actions, artifacts, notifications,
-GitHub Enterprise Server, multiple GitHub connections, multiple users,
+It does not include write actions, artifacts, GitHub Enterprise Server,
+multiple GitHub connections, multiple users,
 PostgreSQL, other providers, runtime plugins, mobile applications, or a hosted
 service.
 
@@ -71,8 +72,10 @@ workflow discovery, and recent workflow-run monitoring are implemented. Run
 activity and synchronization freshness are cached in SQLite, with the last
 successful snapshot retained during transient provider failures. Users can
 inspect workflow-run logs on demand without persisting them locally. Desktop
-credentials use the operating-system keychain. The server encrypts credentials
-stored in SQLite. Manual refresh uses a shared synchronization coordinator that
+credentials use the operating-system keychain, minimizes to the system tray,
+and delivers native failure notifications. The server encrypts credentials
+stored in SQLite and can deliver failure notifications through Apprise. Manual
+refresh uses a shared synchronization coordinator that
 bypasses cache TTLs, prevents overlapping work per source, and continues when an
 individual repository fails. Both editions also invoke the same coordinator on
 a 60-second background schedule, and the UI observes completed synchronization

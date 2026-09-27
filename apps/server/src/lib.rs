@@ -1,12 +1,13 @@
 //! Development-only HTTP composition. Authentication is added before exposure.
 
 mod handlers;
+pub mod notifications;
 
 use axum::Router;
 use axum::routing::{get, post, put};
 use ciwatcher_core::application::{
-    ConnectionRepository, GetMonitoringSettings, RepositorySelectionRepository, SecretStore,
-    SettingsRepository, SourceRegistry,
+    ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
+    RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
 };
 use ciwatcher_core::contracts::{
     CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
@@ -34,6 +35,7 @@ pub fn application(
     repository_selections: Arc<dyn RepositorySelectionRepository>,
     source_data_cache: Arc<dyn SourceDataCache>,
     settings: Arc<dyn SettingsRepository>,
+    failure_notifications: NotifyRepositoryFailures,
 ) -> ServerApplication {
     let state = AppState::new(
         registry,
@@ -42,6 +44,7 @@ pub fn application(
         repository_selections,
         source_data_cache,
         settings,
+        failure_notifications,
     );
     let synchronizer = state.synchronizer();
     let settings = state.settings_reader();
@@ -80,6 +83,7 @@ pub fn router(
     repository_selections: Arc<dyn RepositorySelectionRepository>,
     source_data_cache: Arc<dyn SourceDataCache>,
     settings: Arc<dyn SettingsRepository>,
+    failure_notifications: NotifyRepositoryFailures,
 ) -> Router {
     application(
         registry,
@@ -88,6 +92,7 @@ pub fn router(
         repository_selections,
         source_data_cache,
         settings,
+        failure_notifications,
     )
     .router
 }
