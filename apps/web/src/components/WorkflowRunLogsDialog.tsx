@@ -15,11 +15,7 @@ interface WorkflowRunLogsDialogProps {
   onClose: () => void;
 }
 
-export function WorkflowRunLogsDialog({
-  workflow,
-  run,
-  onClose,
-}: WorkflowRunLogsDialogProps) {
+export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLogsDialogProps) {
   const client = useApplicationClient();
   const dialog = useRef<HTMLDialogElement>(null);
   const [files, setFiles] = useState<WorkflowRunLogFile[]>([]);

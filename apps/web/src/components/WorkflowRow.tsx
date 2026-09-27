@@ -72,7 +72,9 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
                   >
                     #{run.runNumber} · {run.title}
                   </button>
-                  <span>{run.branch ?? "detached"} · {run.commitSha.slice(0, 7)}</span>
+                  <span>
+                    {run.branch ?? "detached"} · {run.commitSha.slice(0, 7)}
+                  </span>
                 </div>
                 <WorkflowRunState run={run} />
               </div>

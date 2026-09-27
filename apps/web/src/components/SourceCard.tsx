@@ -26,7 +26,9 @@ export function SourceCard({
     <article className="source-entry">
       <div className="source-row">
         <div className="source-identity">
-          <span className="source-mark" aria-hidden="true">{source.abbreviation}</span>
+          <span className="source-mark" aria-hidden="true">
+            {source.abbreviation}
+          </span>
           <div>
             <h3>{source.name}</h3>
             <p>{source.description}</p>

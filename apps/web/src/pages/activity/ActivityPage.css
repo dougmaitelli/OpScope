@@ -10,7 +10,9 @@
   display: grid;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  grid-template-columns: 105px minmax(180px, 1.4fr) minmax(170px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.7fr) 14px;
+  grid-template-columns:
+    105px minmax(180px, 1.4fr) minmax(170px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.7fr)
+    14px;
   gap: 12px;
   color: var(--subtle);
   background: #0e131a;

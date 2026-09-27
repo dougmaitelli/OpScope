@@ -97,12 +97,12 @@ export function ActivityPage() {
   const filters: ActivityFilterValues = {
     query: searchParams.get("q") ?? "",
     status: STATUS_FILTERS.has(requestedStatus as ActivityStatusFilter)
-      ? requestedStatus as ActivityStatusFilter
+      ? (requestedStatus as ActivityStatusFilter)
       : "all",
     repository: searchParams.get("repository") ?? "",
     trigger: searchParams.get("trigger") ?? "",
     range: RANGE_FILTERS.has(requestedRange as ActivityRangeFilter)
-      ? requestedRange as ActivityRangeFilter
+      ? (requestedRange as ActivityRangeFilter)
       : "all",
   };
 
@@ -224,9 +224,7 @@ export function ActivityPage() {
               <ActivityRow
                 activity={activity}
                 key={activity.id}
-                onOpen={() =>
-                  setSelected({ workflow: activity.workflow, run: activity.run })
-                }
+                onOpen={() => setSelected({ workflow: activity.workflow, run: activity.run })}
               />
             ))
           )}

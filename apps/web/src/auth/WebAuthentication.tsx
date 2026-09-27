@@ -7,10 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  isDesktopRuntime,
-  setHttpCsrfToken,
-} from "../api/application-client.tsx";
+import { isDesktopRuntime, setHttpCsrfToken } from "../api/application-client.tsx";
 import "./WebAuthentication.css";
 
 const SESSION_PATH = "/api/auth/session";
@@ -39,9 +36,7 @@ const AuthenticationContext = createContext<AuthenticationContextValue | null>(n
 
 export function WebAuthentication({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthenticationStatus | null>(
-    isDesktopRuntime
-      ? { enabled: false, authenticated: false, user: null, csrfToken: null }
-      : null,
+    isDesktopRuntime ? { enabled: false, authenticated: false, user: null, csrfToken: null } : null,
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -67,9 +62,11 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     void loadSession();
     const unauthorized = () => {
       setHttpCsrfToken(null);
-      setStatus((current) => current?.enabled === false
-        ? current
-        : { enabled: true, authenticated: false, user: null, csrfToken: null });
+      setStatus((current) =>
+        current?.enabled === false
+          ? current
+          : { enabled: true, authenticated: false, user: null, csrfToken: null },
+      );
     };
     globalThis.addEventListener("ciwatcher:unauthorized", unauthorized);
     return () => globalThis.removeEventListener("ciwatcher:unauthorized", unauthorized);
@@ -93,7 +90,7 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
       webAuthentication: !isDesktopRuntime && (status?.enabled ?? false),
       logout,
     }),
-    [logout, status?.user],
+    [logout, status?.enabled, status?.user],
   );
 
   if (error) {
@@ -124,15 +121,15 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
       <AuthenticationScreen>
         <h1>Sign in required</h1>
         <p>Authenticate with the identity provider configured by your administrator.</p>
-        <a className="auth-action" href={loginUrl}>Sign in with OpenID Connect</a>
+        <a className="auth-action" href={loginUrl}>
+          Sign in with OpenID Connect
+        </a>
       </AuthenticationScreen>
     );
   }
 
   return (
-    <AuthenticationContext.Provider value={context}>
-      {children}
-    </AuthenticationContext.Provider>
+    <AuthenticationContext.Provider value={context}>{children}</AuthenticationContext.Provider>
   );
 }
 
@@ -147,7 +144,9 @@ function AuthenticationScreen({ children }: { children: ReactNode }) {
     <main className="auth-screen">
       <section className="auth-panel" aria-live="polite">
         <div className="auth-brand">
-          <span className="auth-mark" aria-hidden="true">CI</span>
+          <span className="auth-mark" aria-hidden="true">
+            CI
+          </span>
           <span>CI Watcher</span>
         </div>
         {children}

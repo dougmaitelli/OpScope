@@ -2,10 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
-import {
-  settingsLimits,
-  type MonitoringSettingsResponse,
-} from "../../generated/contracts.ts";
+import { settingsLimits, type MonitoringSettingsResponse } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import "./SettingsPage.css";
 
@@ -144,8 +141,8 @@ export function SettingsPage() {
               <span>runs</span>
             </span>
             <small>
-              {settingsLimits.recentRunsPerWorkflow.min}–
-              {settingsLimits.recentRunsPerWorkflow.max} runs
+              {settingsLimits.recentRunsPerWorkflow.min}–{settingsLimits.recentRunsPerWorkflow.max}{" "}
+              runs
             </small>
           </label>
 

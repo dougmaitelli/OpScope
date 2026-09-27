@@ -5,14 +5,8 @@ import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { groupWorkflows, ProjectGroup } from "../../components/ProjectGroup.tsx";
-import {
-  WorkflowFilters,
-  type WorkflowStatusFilter,
-} from "../../components/WorkflowFilters.tsx";
-import type {
-  ListWorkflowsResponse,
-  WorkflowSummary,
-} from "../../generated/contracts.ts";
+import { WorkflowFilters, type WorkflowStatusFilter } from "../../components/WorkflowFilters.tsx";
+import type { ListWorkflowsResponse, WorkflowSummary } from "../../generated/contracts.ts";
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
 import "./OverviewPage.css";
 
@@ -25,18 +19,12 @@ const WORKFLOW_STATUS_FILTERS = new Set<WorkflowStatusFilter>([
   "other",
 ]);
 
-function workflowMatchesStatus(
-  workflow: WorkflowSummary,
-  status: WorkflowStatusFilter,
-): boolean {
+function workflowMatchesStatus(workflow: WorkflowSummary, status: WorkflowStatusFilter): boolean {
   if (status === "all") return true;
   const latestRun = workflow.runs[0] ?? null;
-  const running =
-    latestRun?.lifecycle === "queued" || latestRun?.lifecycle === "running";
-  const failing =
-    latestRun?.lifecycle === "completed" && latestRun.outcome === "failure";
-  const successful =
-    latestRun?.lifecycle === "completed" && latestRun.outcome === "success";
+  const running = latestRun?.lifecycle === "queued" || latestRun?.lifecycle === "running";
+  const failing = latestRun?.lifecycle === "completed" && latestRun.outcome === "failure";
+  const successful = latestRun?.lifecycle === "completed" && latestRun.outcome === "success";
 
   if (status === "running") return running;
   if (status === "failing") return failing;
@@ -134,10 +122,7 @@ export function OverviewPage() {
       }
     };
     void poll();
-    const interval = window.setInterval(
-      () => void poll(),
-      SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS,
-    );
+    const interval = window.setInterval(() => void poll(), SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS);
     return () => {
       stopped = true;
       window.clearInterval(interval);
@@ -148,12 +133,12 @@ export function OverviewPage() {
   const query = searchParams.get("q") ?? "";
   const requestedStatus = searchParams.get("status") ?? "all";
   const status = WORKFLOW_STATUS_FILTERS.has(requestedStatus as WorkflowStatusFilter)
-    ? requestedStatus as WorkflowStatusFilter
+    ? (requestedStatus as WorkflowStatusFilter)
     : "all";
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredWorkflows = workflows.filter((workflow) => {
-    const searchable = `${workflow.repositoryOwner}/${workflow.repositoryName} ${workflow.name}`
-      .toLocaleLowerCase();
+    const searchable =
+      `${workflow.repositoryOwner}/${workflow.repositoryName} ${workflow.name}`.toLocaleLowerCase();
     return searchable.includes(normalizedQuery) && workflowMatchesStatus(workflow, status);
   });
   const projects = groupWorkflows(filteredWorkflows);
@@ -180,20 +165,22 @@ export function OverviewPage() {
               : (inventory?.selectedRepositoryCount ?? 0) > 0
                 ? "No workflows discovered"
                 : "Select repositories to begin";
-  const statusTone = error || failing > 0
-    ? "failing"
-    : running > 0
-      ? "running"
-      : workflows.length > 0
-        ? "passing"
-        : "idle";
-  const statusIcon = statusTone === "failing"
-    ? "!"
-    : statusTone === "running"
-      ? "↻"
-      : statusTone === "passing"
-        ? "✓"
-        : "·";
+  const statusTone =
+    error || failing > 0
+      ? "failing"
+      : running > 0
+        ? "running"
+        : workflows.length > 0
+          ? "passing"
+          : "idle";
+  const statusIcon =
+    statusTone === "failing"
+      ? "!"
+      : statusTone === "running"
+        ? "↻"
+        : statusTone === "passing"
+          ? "✓"
+          : "·";
   const updated = inventory?.lastSuccessfulAt
     ? `Last synchronized ${formatRelativeUnix(inventory.lastSuccessfulAt)}`
     : "No run activity synchronized yet";
@@ -232,10 +219,7 @@ export function OverviewPage() {
         aria-busy={loading || backgroundSyncing}
       >
         <div className="health-heading">
-          <span
-            className={`health-icon health-icon-${statusTone}`}
-            aria-hidden="true"
-          >
+          <span className={`health-icon health-icon-${statusTone}`} aria-hidden="true">
             {statusIcon}
           </span>
           <div>
@@ -251,8 +235,14 @@ export function OverviewPage() {
           </div>
         </div>
         <dl className="health-stats">
-          <div><dt>Workflows</dt><dd>{error ? "—" : workflows.length}</dd></div>
-          <div><dt>Running</dt><dd>{error ? "—" : running}</dd></div>
+          <div>
+            <dt>Workflows</dt>
+            <dd>{error ? "—" : workflows.length}</dd>
+          </div>
+          <div>
+            <dt>Running</dt>
+            <dd>{error ? "—" : running}</dd>
+          </div>
           <div>
             <dt>Failing</dt>
             <dd>
@@ -265,7 +255,11 @@ export function OverviewPage() {
                 >
                   {failing}
                 </button>
-              ) : error ? "—" : failing}
+              ) : error ? (
+                "—"
+              ) : (
+                failing
+              )}
             </dd>
           </div>
         </dl>

@@ -2,7 +2,12 @@
   color: #e7eaf0;
   background: #0c0f15;
   font-family:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-synthesis: none;
   color-scheme: dark;
   --surface: #121720;

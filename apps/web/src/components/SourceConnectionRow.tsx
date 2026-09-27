@@ -25,13 +25,13 @@ export function SourceConnectionRow({
   return (
     <div className="source-connection">
       <div className="connected-account">
-        <span className="account-mark" aria-hidden="true">{source.abbreviation}</span>
+        <span className="account-mark" aria-hidden="true">
+          {source.abbreviation}
+        </span>
         <div className="connection-account-copy">
           <strong>{connection.label}</strong>
           <span>
-            {connection.handle
-              ? `${connection.name} · ${connection.handle}`
-              : connection.name}
+            {connection.handle ? `${connection.name} · ${connection.handle}` : connection.name}
           </span>
         </div>
         <span className="secure-label">Credential stored securely</span>

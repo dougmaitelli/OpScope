@@ -6,7 +6,9 @@
   padding: 7px 12px;
   border: 0;
   border-bottom: 1px solid #252d38;
-  grid-template-columns: 105px minmax(180px, 1.4fr) minmax(170px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.7fr) 14px;
+  grid-template-columns:
+    105px minmax(180px, 1.4fr) minmax(170px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.7fr)
+    14px;
   gap: 12px;
   color: var(--text);
   background: #10151c;

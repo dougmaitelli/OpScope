@@ -47,9 +47,7 @@ export class DesktopClient implements ApplicationClient {
     return invoke<MonitoringSettingsResponse>(desktopCommands.getSettings);
   }
 
-  updateSettings(
-    request: UpdateMonitoringSettingsRequest,
-  ): Promise<MonitoringSettingsResponse> {
+  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse> {
     return invoke<MonitoringSettingsResponse>(desktopCommands.updateSettings, { request });
   }
 
@@ -64,10 +62,9 @@ export class DesktopClient implements ApplicationClient {
   saveRepositorySelection(
     request: SaveRepositorySelectionRequest,
   ): Promise<SaveRepositorySelectionResponse> {
-    return invoke<SaveRepositorySelectionResponse>(
-      desktopCommands.saveRepositorySelection,
-      { request },
-    );
+    return invoke<SaveRepositorySelectionResponse>(desktopCommands.saveRepositorySelection, {
+      request,
+    });
   }
 
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {
@@ -83,8 +80,7 @@ export class HttpClient implements ApplicationClient {
   private csrfToken: string | null = null;
 
   constructor(
-    private readonly fetcher: typeof fetch = (input, init) =>
-      globalThis.fetch(input, init),
+    private readonly fetcher: typeof fetch = (input, init) => globalThis.fetch(input, init),
   ) {}
 
   setCsrfToken(csrfToken: string | null): void {
@@ -115,9 +111,7 @@ export class HttpClient implements ApplicationClient {
     return this.get<MonitoringSettingsResponse>(httpRoutes.settings);
   }
 
-  updateSettings(
-    request: UpdateMonitoringSettingsRequest,
-  ): Promise<MonitoringSettingsResponse> {
+  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse> {
     return this.put<MonitoringSettingsResponse>(httpRoutes.settings, request);
   }
 
@@ -132,10 +126,7 @@ export class HttpClient implements ApplicationClient {
   saveRepositorySelection(
     request: SaveRepositorySelectionRequest,
   ): Promise<SaveRepositorySelectionResponse> {
-    return this.put<SaveRepositorySelectionResponse>(
-      httpRoutes.repositorySelections,
-      request,
-    );
+    return this.put<SaveRepositorySelectionResponse>(httpRoutes.repositorySelections, request);
   }
 
   connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary> {

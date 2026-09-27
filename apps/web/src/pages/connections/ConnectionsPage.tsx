@@ -41,9 +41,8 @@ export function ConnectionsPage() {
   }, [load]);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
-  const activeConnection = activeSource?.connections.find(
-    (connection) => connection.id === activeConnectionId,
-  ) ?? null;
+  const activeConnection =
+    activeSource?.connections.find((connection) => connection.id === activeConnectionId) ?? null;
   const connectedCount = sources.reduce((total, source) => total + source.connections.length, 0);
 
   const openEditor = (source: SourceSummary, connection?: ConnectionSummary) => {
@@ -52,10 +51,8 @@ export function ConnectionsPage() {
     setPendingDisconnectId(null);
     setCredential("");
     setConfiguration(
-      connection?.configuration
-      ?? Object.fromEntries(
-        source.connectionFields.map((field) => [field.key, field.defaultValue]),
-      ),
+      connection?.configuration ??
+        Object.fromEntries(source.connectionFields.map((field) => [field.key, field.defaultValue])),
     );
   };
 
@@ -82,7 +79,8 @@ export function ConnectionsPage() {
                 ...source,
                 connections: activeConnection
                   ? source.connections.map((candidate) =>
-                      candidate.id === connection.id ? connection : candidate)
+                      candidate.id === connection.id ? connection : candidate,
+                    )
                   : [...source.connections, connection],
               }
             : source,
@@ -140,7 +138,11 @@ export function ConnectionsPage() {
         <PanelHeader
           label="Configured sources"
           title="Monitoring connections"
-          metadata={<span className="source-count">{loadError ? "Unavailable" : `${connectedCount} connected`}</span>}
+          metadata={
+            <span className="source-count">
+              {loadError ? "Unavailable" : `${connectedCount} connected`}
+            </span>
+          }
         />
         <div className="source-list" aria-live="polite">
           {loading ? (
@@ -188,7 +190,11 @@ export function ConnectionsPage() {
             </h2>
             <p>CI Watcher validates the account before storing the credential securely.</p>
           </div>
-          <form className="connection-form" aria-busy={connecting} onSubmit={(event) => void submit(event)}>
+          <form
+            className="connection-form"
+            aria-busy={connecting}
+            onSubmit={(event) => void submit(event)}
+          >
             {activeSource.connectionFields.map((field) => (
               <div className="connection-field" key={field.key}>
                 <label htmlFor={`source-${field.key}`}>{field.label}</label>
@@ -202,10 +208,12 @@ export function ConnectionsPage() {
                   disabled={activeConnection !== null}
                   placeholder={field.placeholder}
                   value={configuration[field.key] ?? ""}
-                  onChange={(event) => setConfiguration((current) => ({
-                    ...current,
-                    [field.key]: event.currentTarget.value,
-                  }))}
+                  onChange={(event) =>
+                    setConfiguration((current) => ({
+                      ...current,
+                      [field.key]: event.currentTarget.value,
+                    }))
+                  }
                 />
                 <p className="field-help">{field.help}</p>
               </div>
@@ -224,7 +232,8 @@ export function ConnectionsPage() {
               onChange={(event) => setCredential(event.currentTarget.value)}
             />
             <p className="field-help">
-              {activeSource.credential.help} The credential is never returned to this interface after submission.
+              {activeSource.credential.help} The credential is never returned to this interface
+              after submission.
             </p>
             <div className="editor-actions">
               <button

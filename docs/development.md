@@ -26,8 +26,8 @@ npm run check
 ```
 
 This verifies the generated contract, Rust formatting, Clippy with warnings
-denied, all Rust tests, and strict TypeScript compilation. Build all Rust crates
-and the production frontend with:
+denied, all Rust tests, strict TypeScript compilation, ESLint, and frontend
+formatting with Prettier. Build all Rust crates and the production frontend with:
 
 ```sh
 npm run build

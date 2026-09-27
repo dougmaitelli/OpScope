@@ -1,11 +1,6 @@
 import "./ActivityFilters.css";
 
-export type ActivityStatusFilter =
-  | "all"
-  | "failing"
-  | "running"
-  | "successful"
-  | "other";
+export type ActivityStatusFilter = "all" | "failing" | "running" | "successful" | "other";
 export type ActivityRangeFilter = "all" | "day" | "week" | "month";
 
 export interface ActivityFilterValues {
@@ -89,7 +84,9 @@ export function ActivityFilters({
         >
           <option value="">All triggers</option>
           {triggers.map((trigger) => (
-            <option value={trigger} key={trigger}>{trigger}</option>
+            <option value={trigger} key={trigger}>
+              {trigger}
+            </option>
           ))}
         </select>
       </label>

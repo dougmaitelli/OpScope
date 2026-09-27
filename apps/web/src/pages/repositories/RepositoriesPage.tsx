@@ -3,10 +3,7 @@ import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
-import {
-  RepositoryRow,
-  type RepositoryRowModel,
-} from "../../components/RepositoryRow.tsx";
+import { RepositoryRow, type RepositoryRowModel } from "../../components/RepositoryRow.tsx";
 import type { RepositorySourceSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import "./RepositoriesPage.css";
@@ -161,10 +158,13 @@ export function RepositoriesPage() {
               type="button"
               disabled={loading || Boolean(loadError) || allVisibleSelected}
               onClick={() => {
-                setSelectedIds((current) => new Set([
-                  ...current,
-                  ...visibleRepositories.map(({ selectionId }) => selectionId),
-                ]));
+                setSelectedIds(
+                  (current) =>
+                    new Set([
+                      ...current,
+                      ...visibleRepositories.map(({ selectionId }) => selectionId),
+                    ]),
+                );
                 setNote("Visible repositories selected. Apply for this session.");
               }}
             >
@@ -185,7 +185,9 @@ export function RepositoriesPage() {
         </div>
 
         <div className="repository-list-heading">
-          <span>{visibleRepositories.length} shown · {selectedIds.size} selected</span>
+          <span>
+            {visibleRepositories.length} shown · {selectedIds.size} selected
+          </span>
           <span>Monitor</span>
         </div>
         <div className="repository-list" aria-live="polite">
@@ -212,7 +214,9 @@ export function RepositoriesPage() {
         </div>
 
         <div className="repository-footer">
-          <p role="status" aria-live="polite">{note}</p>
+          <p role="status" aria-live="polite">
+            {note}
+          </p>
           <div className="repository-footer-actions">
             <button
               className="secondary-button"

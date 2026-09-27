@@ -20,9 +20,7 @@ const ApplicationClientContext = createContext<ApplicationClient | null>(null);
 
 export function ApplicationClientProvider({ children }: { children: ReactNode }) {
   return (
-    <ApplicationClientContext.Provider value={client}>
-      {children}
-    </ApplicationClientContext.Provider>
+    <ApplicationClientContext.Provider value={client}>{children}</ApplicationClientContext.Provider>
   );
 }
 

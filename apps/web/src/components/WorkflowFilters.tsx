@@ -1,11 +1,6 @@
 import "./WorkflowFilters.css";
 
-export type WorkflowStatusFilter =
-  | "all"
-  | "failing"
-  | "running"
-  | "successful"
-  | "other";
+export type WorkflowStatusFilter = "all" | "failing" | "running" | "successful" | "other";
 
 interface WorkflowFiltersProps {
   query: string;
@@ -39,9 +34,7 @@ export function WorkflowFilters({
         <span>Status</span>
         <select
           value={status}
-          onChange={(event) =>
-            onStatusChange(event.target.value as WorkflowStatusFilter)
-          }
+          onChange={(event) => onStatusChange(event.target.value as WorkflowStatusFilter)}
         >
           <option value="all">All statuses</option>
           <option value="failing">Failing</option>

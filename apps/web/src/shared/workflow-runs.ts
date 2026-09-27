@@ -1,8 +1,4 @@
-import type {
-  RunLifecycle,
-  RunOutcome,
-  WorkflowRunSummary,
-} from "../generated/contracts.ts";
+import type { RunLifecycle, RunOutcome, WorkflowRunSummary } from "../generated/contracts.ts";
 
 export type RunTone =
   | "cancelled"

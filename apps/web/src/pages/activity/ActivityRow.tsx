@@ -1,7 +1,4 @@
-import type {
-  WorkflowRunSummary,
-  WorkflowSummary,
-} from "../../generated/contracts.ts";
+import type { WorkflowRunSummary, WorkflowSummary } from "../../generated/contracts.ts";
 import { formatRelativeDate, runPresentation } from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
 
@@ -36,9 +33,12 @@ export function ActivityRow({
         <time dateTime={run.createdAt}>{formatRelativeDate(run.createdAt)}</time>
       </span>
       <span className="activity-run-cell">
-        <strong>#{run.runNumber} · {run.title}</strong>
+        <strong>
+          #{run.runNumber} · {run.title}
+        </strong>
         <span>
-          {run.attempt > 1 ? `Attempt ${run.attempt} · ` : ""}{workflow.sourceName}
+          {run.attempt > 1 ? `Attempt ${run.attempt} · ` : ""}
+          {workflow.sourceName}
         </span>
       </span>
       <span className="activity-project-cell">
@@ -53,7 +53,9 @@ export function ActivityRow({
         <strong>{run.actor ?? "Unknown actor"}</strong>
         <span>{run.trigger}</span>
       </span>
-      <span className="activity-row-chevron" aria-hidden="true">›</span>
+      <span className="activity-row-chevron" aria-hidden="true">
+        ›
+      </span>
     </button>
   );
 }

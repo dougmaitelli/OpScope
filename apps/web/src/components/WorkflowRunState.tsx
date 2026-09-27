@@ -12,9 +12,7 @@ export function WorkflowRunState({ run, workflowState }: WorkflowRunStateProps) 
     const disabled = workflowState === "disabled";
     return (
       <div className="run-state-block">
-        <span className="run-state run-state-idle">
-          {disabled ? "Disabled" : "No runs"}
-        </span>
+        <span className="run-state run-state-idle">{disabled ? "Disabled" : "No runs"}</span>
       </div>
     );
   }
@@ -22,9 +20,7 @@ export function WorkflowRunState({ run, workflowState }: WorkflowRunStateProps) 
   const presentation = runPresentation(run);
   return (
     <div className="run-state-block">
-      <span className={`run-state run-state-${presentation.tone}`}>
-        {presentation.label}
-      </span>
+      <span className={`run-state run-state-${presentation.tone}`}>{presentation.label}</span>
       <time dateTime={run.updatedAt}>{formatRelativeDate(run.updatedAt)}</time>
     </div>
   );

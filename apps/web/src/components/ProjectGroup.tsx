@@ -48,7 +48,9 @@ export function ProjectGroup({ project }: { project: WorkflowProject }) {
             {project.sourceAbbreviation}
           </span>
           <div>
-            <h3>{project.repositoryOwner}/{project.repositoryName}</h3>
+            <h3>
+              {project.repositoryOwner}/{project.repositoryName}
+            </h3>
             <p>
               {project.sourceName} · {project.workflows.length} workflow
               {project.workflows.length === 1 ? "" : "s"}
@@ -57,7 +59,9 @@ export function ProjectGroup({ project }: { project: WorkflowProject }) {
         </div>
         <div className="project-metadata">
           <span>{active} active</span>
-          <span className="project-chevron" aria-hidden="true">⌄</span>
+          <span className="project-chevron" aria-hidden="true">
+            ⌄
+          </span>
         </div>
       </summary>
       <div className="project-workflows">

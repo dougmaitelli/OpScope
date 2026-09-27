@@ -1,7 +1,4 @@
-import type {
-  RepositorySourceSummary,
-  RepositorySummary,
-} from "../generated/contracts.ts";
+import type { RepositorySourceSummary, RepositorySummary } from "../generated/contracts.ts";
 import "./RepositoryRow.css";
 
 export interface RepositoryRowModel {
@@ -30,14 +27,18 @@ export function RepositoryRow({ model, selected, onSelectionChanged }: Repositor
         {repository.name.slice(0, 2).toUpperCase()}
       </span>
       <span className="repository-identity">
-        <strong>{repository.owner}/{repository.name}</strong>
+        <strong>
+          {repository.owner}/{repository.name}
+        </strong>
         <span>{repository.description ?? "No description"}</span>
       </span>
       <span className="repository-metadata">
         <span className="repository-visibility">
           {repository.visibility === "private" ? "Private" : "Public"}
         </span>
-        <span className="repository-source">{source.abbreviation} · {source.name}</span>
+        <span className="repository-source">
+          {source.abbreviation} · {source.name}
+        </span>
       </span>
     </label>
   );
