@@ -44,10 +44,12 @@ The other root commands are:
 | `npm run web:dev` | Run the browser frontend on port 1420 and proxy `/api` to the development server. |
 | `npm run desktop:dev` | Run the Tauri desktop shell and shared Vite frontend. |
 
-The HTTP server binds to `127.0.0.1` for direct development and is intended to
-sit behind the self-hosted reverse proxy later. OIDC is disabled when issuer,
-client ID, and client secret are all unset. When any of those three is set, all
-four required values must be present and valid or startup fails:
+The HTTP server binds to `127.0.0.1:4317` by default. Set
+`CIWATCHER_BIND_ADDRESS` to another socket address when deploying it; the
+container sets this to `0.0.0.0:4317`. Set `CIWATCHER_WEB_DIR` to a production
+frontend directory to serve the SPA and API from one process. OIDC is disabled
+when issuer, client ID, and client secret are all unset. When any of those three
+is set, all four required values must be present and valid or startup fails:
 
 | Variable | Purpose |
 | --- | --- |
@@ -123,3 +125,33 @@ to justify a crate, it can be extracted then.
 The frontend implements the generated `ApplicationClient` twice: once with
 same-origin HTTP and once with Tauri IPC. The desktop application does not run
 an HTTP server.
+
+## Continuous delivery
+
+GitHub Actions runs the complete check and build gate on every branch push and
+pull request. Pushing a semantic-version tag such as `v0.1.0` starts a release.
+The tag must match the versions in `Cargo.toml`, `package.json`, and
+`apps/desktop/tauri.conf.json`.
+
+A successful tag build publishes a GitHub Release containing a universal macOS
+DMG, Windows NSIS and MSI installers, and Linux AppImage and Debian packages.
+It also publishes a multi-platform `linux/amd64` and `linux/arm64` image to
+`ghcr.io/<owner>/<repository>`, tagged with the full version, major/minor,
+major, and (for stable releases) `latest`. The GitHub Release remains a draft
+unless every desktop build and the container publish succeed.
+
+Run the self-hosted image with a persistent data volume:
+
+```sh
+docker run --detach --name ciwatcher \
+  --publish 4317:4317 \
+  --volume ciwatcher-data:/data \
+  ghcr.io/<owner>/<repository>:latest
+```
+
+The image serves the web application and API from port 4317, runs as an
+unprivileged user, and stores its SQLite database and generated encryption key
+under `/data`. Pass the existing server environment variables to configure
+OIDC, Apprise, or a separately mounted master key. Desktop packages are
+currently unsigned; macOS uses ad-hoc signing so downloaded universal builds
+remain runnable while production signing credentials are not configured.

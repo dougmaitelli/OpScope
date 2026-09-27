@@ -13,7 +13,9 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind("127.0.0.1:4317").await?;
+    let bind_address =
+        env::var("CIWATCHER_BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:4317".to_owned());
+    let listener = TcpListener::bind(&bind_address).await?;
     let authentication = ciwatcher_server::auth::WebAuthentication::from_environment().await?;
     if !authentication.is_enabled() {
         eprintln!("OIDC authentication is disabled; access must be restricted by the deployment");
@@ -44,13 +46,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         failure_notifications,
         authentication,
     });
-    let scheduler = tokio::spawn(run_synchronization_schedule(
-        application.synchronizer,
-        application.settings,
-    ));
+    let ciwatcher_server::ServerApplication {
+        router,
+        synchronizer,
+        settings,
+    } = application;
+    let scheduler = tokio::spawn(run_synchronization_schedule(synchronizer, settings));
     let scheduler_abort = scheduler.abort_handle();
-    println!("CI Watcher development server listening on http://127.0.0.1:4317");
-    axum::serve(listener, application.router)
+    let router = match env::var_os("CIWATCHER_WEB_DIR") {
+        Some(directory) => {
+            ciwatcher_server::serve_web_application(router, PathBuf::from(directory))
+        }
+        None => router,
+    };
+    println!("CI Watcher server listening on http://{bind_address}");
+    axum::serve(listener, router)
         .with_graceful_shutdown(async move {
             shutdown_signal().await;
             scheduler_abort.abort();

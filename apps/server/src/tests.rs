@@ -1,4 +1,4 @@
-use super::{ServerDependencies, router};
+use super::{ServerDependencies, router, serve_web_application};
 use crate::auth::{AUTH_SESSION_PATH, CSRF_HEADER, TestSession, WebAuthentication};
 use async_trait::async_trait;
 use axum::body::Body;
@@ -21,7 +21,9 @@ use ciwatcher_core::domain::{
 };
 use ciwatcher_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use http_body_util::BodyExt;
+use std::fs;
 use std::sync::Arc;
+use tempfile::tempdir;
 use tower::ServiceExt;
 
 #[derive(Clone)]
@@ -228,6 +230,46 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
     let decoded: ListWorkflowsResponse = serde_json::from_slice(&body)?;
     assert_eq!(decoded.selected_repository_count, 0);
     assert!(decoded.workflows.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn web_assets_use_spa_fallback_without_masking_unknown_api_routes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    fs::write(
+        directory.path().join("index.html"),
+        "<main>CI Watcher</main>",
+    )?;
+    fs::write(directory.path().join("asset.txt"), "asset")?;
+    let database = SqliteDatabase::in_memory()?;
+    let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+    let app = serve_web_application(
+        router(test_dependencies(
+            &database,
+            secrets,
+            WebAuthentication::disabled_for_tests(),
+        )),
+        directory.path(),
+    );
+
+    for (path, expected) in [
+        ("/settings", "<main>CI Watcher</main>"),
+        ("/asset.txt", "asset"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::get(path).body(Body::empty())?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK, "failed to serve {path}");
+        let body = response.into_body().collect().await?.to_bytes();
+        assert_eq!(body.as_ref(), expected.as_bytes());
+    }
+
+    let missing_api = app
+        .oneshot(Request::get("/api/not-found").body(Body::empty())?)
+        .await?;
+    assert_eq!(missing_api.status(), StatusCode::NOT_FOUND);
     Ok(())
 }
 

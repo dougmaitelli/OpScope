@@ -1,0 +1,12 @@
+.git
+.github
+.ciwatcher-data
+.env
+*.local
+node_modules
+target
+apps/desktop/gen
+apps/web/dist
+build
+dist
+.DS_Store

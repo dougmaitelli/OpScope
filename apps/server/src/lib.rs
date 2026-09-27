@@ -1,4 +1,4 @@
-//! Development-only HTTP composition. Authentication is added before exposure.
+//! Self-hosted HTTP composition. Authentication is added before exposure.
 
 pub mod auth;
 mod handlers;
@@ -6,8 +6,9 @@ pub mod notifications;
 
 use auth::{AUTH_LOGOUT_PATH, WebAuthentication, logout, require_authenticated_session};
 use axum::Router;
+use axum::http::StatusCode;
 use axum::middleware;
-use axum::routing::{get, post, put};
+use axum::routing::{any, get, post, put};
 use ciwatcher_core::application::{
     ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
     RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
@@ -23,7 +24,9 @@ use handlers::{
     list_sources, list_workflows, save_repository_selection, synchronization_status,
     synchronize_sources, update_settings, workflow_run_logs,
 };
+use std::path::Path;
 use std::sync::Arc;
+use tower_http::services::{ServeDir, ServeFile};
 
 pub struct ServerApplication {
     pub router: Router,
@@ -103,6 +106,15 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
 
 pub fn router(dependencies: ServerDependencies) -> Router {
     application(dependencies).router
+}
+
+pub fn serve_web_application(router: Router, directory: impl AsRef<Path>) -> Router {
+    let directory = directory.as_ref();
+    let index = directory.join("index.html");
+    router
+        .route("/api", any(|| async { StatusCode::NOT_FOUND }))
+        .route("/api/{*path}", any(|| async { StatusCode::NOT_FOUND }))
+        .fallback_service(ServeDir::new(directory).fallback(ServeFile::new(index)))
 }
 
 #[cfg(test)]
