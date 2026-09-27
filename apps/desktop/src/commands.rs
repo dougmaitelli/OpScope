@@ -1,12 +1,12 @@
 use crate::state::DesktopState;
 use opsscope_core::contracts::{
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListRepositoriesResponse,
-    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsErrorResponse,
-    MonitoringSettingsResponse, RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
-    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
-    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListChangeRequestsResponse,
+    ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
+    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
+    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
+    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
+    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
 
@@ -36,6 +36,18 @@ pub(crate) async fn list_workflows(
         .execute()
         .await
         .map(ListWorkflowsResponse::from_domain)
+        .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) async fn list_change_requests(
+    state: State<'_, DesktopState>,
+) -> Result<ListChangeRequestsResponse, ConnectionValidationErrorResponse> {
+    state
+        .list_change_requests
+        .execute()
+        .await
+        .map(ListChangeRequestsResponse::from_domain)
         .map_err(ConnectionValidationErrorResponse::from)
 }
 

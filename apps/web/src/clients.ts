@@ -10,6 +10,7 @@ import {
   type DisconnectSourceResponse,
   type HealthResponse,
   type ListWorkflowsResponse,
+  type ListChangeRequestsResponse,
   type ListRepositoriesResponse,
   type ListSourcesResponse,
   type MonitoringSettingsResponse,
@@ -34,6 +35,10 @@ export class DesktopClient implements ApplicationClient {
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
     return invoke<ListWorkflowsResponse>(desktopCommands.listWorkflows);
+  }
+
+  listChangeRequests(): Promise<ListChangeRequestsResponse> {
+    return invoke<ListChangeRequestsResponse>(desktopCommands.listChangeRequests);
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {
@@ -102,6 +107,10 @@ export class HttpClient implements ApplicationClient {
 
   listWorkflows(): Promise<ListWorkflowsResponse> {
     return this.get<ListWorkflowsResponse>(httpRoutes.workflows);
+  }
+
+  listChangeRequests(): Promise<ListChangeRequestsResponse> {
+    return this.get<ListChangeRequestsResponse>(httpRoutes.changeRequests);
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {

@@ -1,8 +1,8 @@
 use opsscope_core::application::{
     CheckForUpdates, ConnectSource, ConnectionRepository, DisconnectSource, GetMonitoringSettings,
-    GetWorkflowRunLogs, ListRepositories, ListSources, ListWorkflows, NotifyRepositoryFailures,
-    RepositorySelectionRepository, SaveRepositorySelection, SecretStore, SettingsRepository,
-    SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
+    GetWorkflowRunLogs, ListChangeRequests, ListRepositories, ListSources, ListWorkflows,
+    NotifyRepositoryFailures, RepositorySelectionRepository, SaveRepositorySelection, SecretStore,
+    SettingsRepository, SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use std::sync::Arc;
 pub(crate) struct DesktopState {
     pub(crate) check_for_updates: CheckForUpdates,
     pub(crate) list_workflows: ListWorkflows,
+    pub(crate) list_change_requests: ListChangeRequests,
     pub(crate) workflow_run_logs: GetWorkflowRunLogs,
     pub(crate) connect_source: ConnectSource,
     pub(crate) list_sources: ListSources,
@@ -44,6 +45,10 @@ impl DesktopState {
                 source_data.clone(),
                 repository_selections.clone(),
                 settings.clone(),
+            ),
+            list_change_requests: ListChangeRequests::new(
+                source_data.clone(),
+                repository_selections.clone(),
             ),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(

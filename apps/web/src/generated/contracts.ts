@@ -12,7 +12,9 @@ export type CredentialFieldSummary = { label: string, placeholder: string, help:
 
 export type ConnectionFieldSummary = { key: string, label: string, placeholder: string, help: string, defaultValue: string, };
 
-export type SourceSummary = { id: string, name: string, description: string, abbreviation: string, credential: CredentialFieldSummary, connectionFields: Array<ConnectionFieldSummary>, connections: Array<ConnectionSummary>, };
+export type SourceCapability = "workflows" | "changeRequests";
+
+export type SourceSummary = { id: string, name: string, description: string, abbreviation: string, capabilities: Array<SourceCapability>, credential: CredentialFieldSummary, connectionFields: Array<ConnectionFieldSummary>, connections: Array<ConnectionSummary>, };
 
 export type ListSourcesResponse = { sources: Array<SourceSummary>, };
 
@@ -31,6 +33,18 @@ export type RepositorySummary = { id: string, owner: string, name: string, descr
 export type RepositorySourceSummary = { id: string, name: string, abbreviation: string, repositories: Array<RepositorySummary>, };
 
 export type ListRepositoriesResponse = { sources: Array<RepositorySourceSummary>, };
+
+export type ChangeRequestState = "open" | "closed" | "merged";
+
+export type ChangeRequestReviewStatus = "approved" | "changesRequested" | "reviewRequired" | "unknown";
+
+export type ChangeRequestCheckStatus = "passed" | "failing" | "running" | "unknown";
+
+export type ChangeRequestMergeStatus = "ready" | "blocked" | "conflicting" | "unknown";
+
+export type ChangeRequestSummary = { id: string, number: number, title: string, author: string | null, sourceBranch: string, targetBranch: string, state: ChangeRequestState, draft: boolean, reviewStatus: ChangeRequestReviewStatus, checkStatus: ChangeRequestCheckStatus, mergeStatus: ChangeRequestMergeStatus, createdAt: string, updatedAt: string, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, };
+
+export type ListChangeRequestsResponse = { selectedRepositoryCount: number, changeRequests: Array<ChangeRequestSummary>, };
 
 export type WorkflowState = "active" | "disabled";
 
@@ -81,6 +95,7 @@ export const httpRoutes = {
   health: "/api/health",
   updateStatus: "/api/update-status",
   workflows: "/api/workflows",
+  changeRequests: "/api/change-requests",
   workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
   settings: "/api/settings",
@@ -94,6 +109,7 @@ export const desktopCommands = {
   health: "health",
   updateStatus: "update_status",
   listWorkflows: "list_workflows",
+  listChangeRequests: "list_change_requests",
   workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
   synchronizationStatus: "synchronization_status",
@@ -110,6 +126,7 @@ export interface ApplicationClient {
   health(): Promise<HealthResponse>;
   updateStatus(): Promise<UpdateStatusResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
+  listChangeRequests(): Promise<ListChangeRequestsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;

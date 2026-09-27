@@ -141,6 +141,35 @@ impl SqliteDatabase {
                    PRIMARY KEY (source_id, account_id, repository_id, run_id),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS change_request_cache_sync (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   refreshed_at INTEGER NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS change_requests (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   change_request_id TEXT NOT NULL,
+                   number INTEGER NOT NULL,
+                   title TEXT NOT NULL,
+                   author TEXT,
+                   source_branch TEXT NOT NULL,
+                   target_branch TEXT NOT NULL,
+                   state TEXT NOT NULL,
+                   draft INTEGER NOT NULL,
+                   review_status TEXT NOT NULL,
+                   check_status TEXT NOT NULL,
+                   merge_status TEXT NOT NULL,
+                   created_at TEXT NOT NULL,
+                   updated_at TEXT NOT NULL,
+                   web_url TEXT NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id, change_request_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    event_type TEXT NOT NULL,

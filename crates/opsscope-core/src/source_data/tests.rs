@@ -1,7 +1,8 @@
 use super::*;
 use crate::application::{
     ConfiguredSource, ConnectionConfiguration, CredentialField, ProviderToken, SecretReference,
-    SourceDescriptor, SourceModule, StoredConnection, ValidatedAccount, WorkflowRunLogsFailure,
+    SourceCapability, SourceDescriptor, SourceModule, StoredConnection, ValidatedAccount,
+    WorkflowRunLogsFailure,
 };
 use crate::domain::{
     RepositoryVisibility, RunLifecycle, RunOutcome, WorkflowRun, WorkflowRunLogs, WorkflowState,
@@ -25,6 +26,7 @@ impl SourceModule for CountingSourceModule {
             name: "Example".to_owned(),
             description: "Example source".to_owned(),
             abbreviation: "EX".to_owned(),
+            capabilities: vec![SourceCapability::Workflows],
             credential: CredentialField {
                 label: "Token".to_owned(),
                 placeholder: "token".to_owned(),
@@ -247,6 +249,7 @@ async fn cache_policy_applies_a_separate_ttl_to_each_resource_kind()
             repositories: Duration::MAX,
             workflows: Duration::ZERO,
             workflow_runs: Duration::ZERO,
+            change_requests: Duration::ZERO,
         },
     );
 
@@ -432,5 +435,27 @@ async fn provider_failure_returns_the_last_successful_run_snapshot()
         Some(ConnectionValidationFailure::ProviderUnavailable)
     );
     assert_eq!(dependencies.workflow_run_requests.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn source_modules_can_omit_change_request_monitoring()
+-> Result<(), Box<dyn std::error::Error>> {
+    let dependencies = dependencies()?;
+    let module = dependencies
+        .registry
+        .get("example")
+        .expect("test source module");
+    let descriptor = module.descriptor();
+    let token = ProviderToken::new("secret".to_owned());
+
+    assert!(descriptor.supports(SourceCapability::Workflows));
+    assert!(!descriptor.supports(SourceCapability::ChangeRequests));
+    assert_eq!(
+        module
+            .list_change_requests(&ConnectionConfiguration::new(), &token, &test_repository(),)
+            .await?,
+        None
+    );
     Ok(())
 }

@@ -18,6 +18,56 @@ pub struct Repository {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeRequestState {
+    Open,
+    Closed,
+    Merged,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeRequestReviewStatus {
+    Approved,
+    ChangesRequested,
+    ReviewRequired,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeRequestCheckStatus {
+    Passed,
+    Failing,
+    Running,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeRequestMergeStatus {
+    Ready,
+    Blocked,
+    Conflicting,
+    Unknown,
+}
+
+/// A provider-independent proposed change to a repository.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChangeRequest {
+    pub id: String,
+    pub number: u64,
+    pub title: String,
+    pub author: Option<String>,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub state: ChangeRequestState,
+    pub draft: bool,
+    pub review_status: ChangeRequestReviewStatus,
+    pub check_status: ChangeRequestCheckStatus,
+    pub merge_status: ChangeRequestMergeStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub web_url: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkflowState {
     Active,
     Disabled,

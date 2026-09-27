@@ -6,12 +6,13 @@ use axum::http::{Method, Request, StatusCode, header};
 use http_body_util::BodyExt;
 use opsscope_core::application::{
     ConfiguredSource, ConnectionConfiguration, ConnectionValidationFailure, CredentialField,
-    NoopNotificationSink, NotifyRepositoryFailures, ProviderToken, SourceDescriptor, SourceModule,
-    SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
+    NoopNotificationSink, NotifyRepositoryFailures, ProviderToken, SourceCapability,
+    SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
-    CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH, ListRepositoriesResponse,
-    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
+    CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH,
+    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
@@ -37,6 +38,7 @@ impl SourceModule for TestSourceModule {
             name: "Example".to_owned(),
             description: "Example monitoring source".to_owned(),
             abbreviation: "EX".to_owned(),
+            capabilities: vec![SourceCapability::Workflows],
             credential: CredentialField {
                 label: "Access token".to_owned(),
                 placeholder: "token_…".to_owned(),
@@ -221,6 +223,7 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
     assert!(decoded.last_completed_at.is_none());
 
     let workflows = app
+        .clone()
         .oneshot(
             authenticated(Request::get(WORKFLOWS_HTTP_PATH), &session, false).body(Body::empty())?,
         )
@@ -230,6 +233,18 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
     let decoded: ListWorkflowsResponse = serde_json::from_slice(&body)?;
     assert_eq!(decoded.selected_repository_count, 0);
     assert!(decoded.workflows.is_empty());
+
+    let change_requests = app
+        .oneshot(
+            authenticated(Request::get(CHANGE_REQUESTS_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(change_requests.status(), StatusCode::OK);
+    let body = change_requests.into_body().collect().await?.to_bytes();
+    let decoded: ListChangeRequestsResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.selected_repository_count, 0);
+    assert!(decoded.change_requests.is_empty());
     Ok(())
 }
 

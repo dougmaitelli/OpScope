@@ -2,9 +2,11 @@ use super::*;
 use crate::application::{
     ConnectedSource, ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
     NoopNotificationSink, NotificationStateRepository, PersistenceFailure, RepositorySelection,
-    SourceDescriptor, SourceRepositorySelection,
+    SourceCapability, SourceDescriptor, SourceRepositorySelection,
 };
-use crate::domain::{Repository, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs};
+use crate::domain::{
+    ChangeRequest, Repository, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs,
+};
 use crate::source_data::{SourceDataFailure, WorkflowRunCollection};
 use async_trait::async_trait;
 
@@ -77,6 +79,7 @@ impl SourceData for RecordingSourceData {
                 name: "Source".to_owned(),
                 description: "Test source".to_owned(),
                 abbreviation: "SO".to_owned(),
+                capabilities: vec![SourceCapability::Workflows],
                 credential: CredentialField {
                     label: "Token".to_owned(),
                     placeholder: "token".to_owned(),
@@ -126,6 +129,16 @@ impl SourceData for RecordingSourceData {
             stale: false,
             error: None,
         })
+    }
+
+    async fn change_requests(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
+        self.record(refresh);
+        Ok(None)
     }
 
     async fn workflow_run_logs(

@@ -145,6 +145,15 @@ impl SynchronizeSources {
                 .into_iter()
                 .filter(|repository| selected_ids.contains(&repository.id))
             {
+                if source
+                    .descriptor
+                    .supports(super::SourceCapability::ChangeRequests)
+                {
+                    _ = self
+                        .source_data
+                        .change_requests(&source.id, &repository, RefreshMode::Force)
+                        .await;
+                }
                 let workflows = self
                     .source_data
                     .workflows(&source.id, &repository, RefreshMode::Force)

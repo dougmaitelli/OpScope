@@ -2,12 +2,13 @@
 
 use crate::application::{
     ConfiguredSource, ConnectionConfiguration, ConnectionField, ConnectionValidationFailure,
-    CredentialField, ProviderToken, SourceDescriptor, SourceModule, ValidatedAccount,
-    WorkflowRunLogsFailure,
+    CredentialField, ProviderToken, SourceCapability, SourceDescriptor, SourceModule,
+    ValidatedAccount, WorkflowRunLogsFailure,
 };
 use crate::domain::{
-    Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
-    WorkflowRunLog, WorkflowRunLogs, WorkflowState,
+    ChangeRequest, ChangeRequestCheckStatus, ChangeRequestMergeStatus, ChangeRequestReviewStatus,
+    ChangeRequestState, Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow,
+    WorkflowRun, WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
 use async_trait::async_trait;
 use reqwest::header::{ACCEPT, HeaderValue, LOCATION, USER_AGENT as USER_AGENT_HEADER};
@@ -29,6 +30,8 @@ const WORKFLOWS_PER_PAGE: usize = 100;
 const MAX_WORKFLOW_PAGES: usize = 100;
 const WORKFLOW_RUNS_PER_PAGE: usize = 100;
 const MAX_WORKFLOW_RUN_PAGES: usize = 2;
+const CHANGE_REQUESTS_PER_PAGE: usize = 100;
+const MAX_CHANGE_REQUEST_PAGES: usize = 10;
 const MAX_LOG_ARCHIVE_BYTES: usize = 25 * 1024 * 1024;
 const MAX_LOG_FILES: usize = 100;
 const MAX_LOG_FILE_BYTES: usize = 2 * 1024 * 1024;
@@ -65,6 +68,20 @@ impl GitHubClient {
         .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)?;
         base.join(path)
             .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)
+    }
+
+    fn graphql_url(
+        configuration: &ConnectionConfiguration,
+    ) -> Result<reqwest::Url, ConnectionValidationFailure> {
+        let server_url = configuration
+            .get(SERVER_URL_KEY)
+            .ok_or(ConnectionValidationFailure::InvalidConfiguration)?;
+        let value = if server_url == DEFAULT_SERVER_URL {
+            "https://api.github.com/graphql".to_owned()
+        } else {
+            format!("{server_url}/api/graphql")
+        };
+        reqwest::Url::parse(&value).map_err(|_| ConnectionValidationFailure::InvalidConfiguration)
     }
 
     fn validation_request(
@@ -173,6 +190,49 @@ impl GitHubClient {
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
             .header("X-GitHub-Api-Version", API_VERSION))
+    }
+
+    fn change_requests_request(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        after: Option<&str>,
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        const QUERY: &str = r#"
+          query OpenChangeRequests($owner: String!, $name: String!, $first: Int!, $after: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequests(first: $first, after: $after, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+                nodes {
+                  id number title state isDraft reviewDecision mergeStateStatus createdAt updatedAt url
+                  author { login }
+                  headRefName
+                  baseRefName
+                  commits(last: 1) {
+                    nodes { commit { statusCheckRollup { state } } }
+                  }
+                }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+        "#;
+        Ok(self
+            .client
+            .post(Self::graphql_url(configuration)?)
+            .bearer_auth(token.expose())
+            .header(ACCEPT, ACCEPT_VALUE)
+            .header(USER_AGENT_HEADER, USER_AGENT)
+            .header("X-GitHub-Api-Version", API_VERSION)
+            .json(&serde_json::json!({
+                "query": QUERY,
+                "variables": {
+                    "owner": repository.owner,
+                    "name": repository.name,
+                    "first": CHANGE_REQUESTS_PER_PAGE,
+                    "after": after,
+                }
+            })))
     }
 
     async fn download_log_archive(
@@ -429,6 +489,162 @@ impl From<GitHubWorkflowRun> for WorkflowRun {
     }
 }
 
+#[derive(Deserialize)]
+struct GitHubGraphQlResponse<T> {
+    data: Option<T>,
+    #[serde(default)]
+    errors: Vec<GitHubGraphQlError>,
+}
+
+#[derive(Deserialize)]
+struct GitHubGraphQlError {
+    message: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubChangeRequestData {
+    repository: Option<GitHubChangeRequestRepository>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubChangeRequestRepository {
+    pull_requests: GitHubChangeRequestConnection,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubChangeRequestConnection {
+    nodes: Vec<Option<GitHubChangeRequest>>,
+    page_info: GitHubPageInfo,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubPageInfo {
+    has_next_page: bool,
+    end_cursor: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GitHubChangeRequestAuthor {
+    login: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubStatusCheckRollup {
+    state: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubCommit {
+    status_check_rollup: Option<GitHubStatusCheckRollup>,
+}
+
+#[derive(Deserialize)]
+struct GitHubCommitNode {
+    commit: GitHubCommit,
+}
+
+#[derive(Deserialize)]
+struct GitHubCommitConnection {
+    nodes: Vec<Option<GitHubCommitNode>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubChangeRequest {
+    id: String,
+    number: u64,
+    title: String,
+    author: Option<GitHubChangeRequestAuthor>,
+    head_ref_name: String,
+    base_ref_name: String,
+    state: String,
+    is_draft: bool,
+    review_decision: Option<String>,
+    merge_state_status: String,
+    commits: GitHubCommitConnection,
+    created_at: String,
+    updated_at: String,
+    url: String,
+}
+
+impl From<GitHubChangeRequest> for ChangeRequest {
+    fn from(change_request: GitHubChangeRequest) -> Self {
+        let state = match change_request.state.as_str() {
+            "OPEN" => ChangeRequestState::Open,
+            "MERGED" => ChangeRequestState::Merged,
+            _ => ChangeRequestState::Closed,
+        };
+        let review_status = match change_request.review_decision.as_deref() {
+            Some("APPROVED") => ChangeRequestReviewStatus::Approved,
+            Some("CHANGES_REQUESTED") => ChangeRequestReviewStatus::ChangesRequested,
+            Some("REVIEW_REQUIRED") => ChangeRequestReviewStatus::ReviewRequired,
+            _ => ChangeRequestReviewStatus::Unknown,
+        };
+        let check_status = match change_request
+            .commits
+            .nodes
+            .iter()
+            .rev()
+            .flatten()
+            .next()
+            .and_then(|node| node.commit.status_check_rollup.as_ref())
+            .map(|rollup| rollup.state.as_str())
+        {
+            Some("SUCCESS") => ChangeRequestCheckStatus::Passed,
+            Some("FAILURE" | "ERROR") => ChangeRequestCheckStatus::Failing,
+            Some("PENDING" | "EXPECTED") => ChangeRequestCheckStatus::Running,
+            _ => ChangeRequestCheckStatus::Unknown,
+        };
+        let merge_status = match change_request.merge_state_status.as_str() {
+            "CLEAN" | "HAS_HOOKS" | "UNSTABLE" => ChangeRequestMergeStatus::Ready,
+            "BLOCKED" | "BEHIND" => ChangeRequestMergeStatus::Blocked,
+            "DIRTY" => ChangeRequestMergeStatus::Conflicting,
+            _ => ChangeRequestMergeStatus::Unknown,
+        };
+        Self {
+            id: change_request.id,
+            number: change_request.number,
+            title: change_request.title,
+            author: change_request.author.map(|author| author.login),
+            source_branch: change_request.head_ref_name,
+            target_branch: change_request.base_ref_name,
+            state,
+            draft: change_request.is_draft,
+            review_status,
+            check_status,
+            merge_status,
+            created_at: change_request.created_at,
+            updated_at: change_request.updated_at,
+            web_url: change_request.url,
+        }
+    }
+}
+
+fn report_graphql_errors(errors: &[GitHubGraphQlError]) {
+    for error in errors {
+        let message = error.message.replace(['\r', '\n'], " ");
+        let message = message.chars().take(500).collect::<String>();
+        eprintln!("GitHub GraphQL change-request query returned an error: {message}");
+    }
+}
+
+fn graphql_failure(errors: &[GitHubGraphQlError]) -> ConnectionValidationFailure {
+    if errors.iter().any(|error| {
+        let message = error.message.to_ascii_lowercase();
+        message.contains("permission")
+            || message.contains("forbidden")
+            || message.contains("not accessible")
+    }) {
+        ConnectionValidationFailure::PermissionDenied
+    } else {
+        ConnectionValidationFailure::UnexpectedResponse
+    }
+}
+
 fn response_failure(response: &reqwest::Response) -> ConnectionValidationFailure {
     match response.status() {
         StatusCode::UNAUTHORIZED => ConnectionValidationFailure::InvalidCredentials,
@@ -474,12 +690,16 @@ impl SourceModule for GitHubClient {
         SourceDescriptor {
             id: "github".to_owned(),
             name: "GitHub".to_owned(),
-            description: "Repositories, Actions workflows, and workflow runs".to_owned(),
+            description: "Repositories, workflows, runs, and pull requests".to_owned(),
             abbreviation: "GH".to_owned(),
+            capabilities: vec![
+                SourceCapability::Workflows,
+                SourceCapability::ChangeRequests,
+            ],
             credential: CredentialField {
-                label: "Fine-grained personal access token".to_owned(),
-                placeholder: "github_pat_…".to_owned(),
-                help: "Use a repository-scoped token with Metadata and Actions read access."
+                label: "Personal access token".to_owned(),
+                placeholder: "github_pat_… or ghp_…".to_owned(),
+                help: "Use a fine-grained token with Metadata, Actions, Pull requests, Checks, and Commit statuses read access, or a classic token with repo access."
                     .to_owned(),
             },
             connection_fields: vec![ConnectionField {
@@ -676,6 +896,59 @@ impl SourceModule for GitHubClient {
             }
         }
         Ok(runs)
+    }
+
+    async fn list_change_requests(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Option<Vec<ChangeRequest>>, ConnectionValidationFailure> {
+        let mut change_requests = Vec::new();
+        let mut after = None;
+        for _ in 0..MAX_CHANGE_REQUEST_PAGES {
+            let response = self
+                .change_requests_request(configuration, token, repository, after.as_deref())?
+                .send()
+                .await
+                .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
+            if matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ) {
+                return Err(ConnectionValidationFailure::PermissionDenied);
+            }
+            if response.status() != StatusCode::OK {
+                return Err(response_failure(&response));
+            }
+            let response = response
+                .json::<GitHubGraphQlResponse<GitHubChangeRequestData>>()
+                .await
+                .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
+            if !response.errors.is_empty() {
+                report_graphql_errors(&response.errors);
+            }
+            let repository = response
+                .data
+                .and_then(|data| data.repository)
+                .ok_or_else(|| graphql_failure(&response.errors))?;
+            change_requests.extend(
+                repository
+                    .pull_requests
+                    .nodes
+                    .into_iter()
+                    .flatten()
+                    .map(ChangeRequest::from),
+            );
+            if !repository.pull_requests.page_info.has_next_page {
+                return Ok(Some(change_requests));
+            }
+            after = repository.pull_requests.page_info.end_cursor;
+            if after.is_none() {
+                return Err(ConnectionValidationFailure::UnexpectedResponse);
+            }
+        }
+        Err(ConnectionValidationFailure::UnexpectedResponse)
     }
 
     async fn workflow_run_logs(

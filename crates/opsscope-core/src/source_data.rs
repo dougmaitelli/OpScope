@@ -4,7 +4,7 @@ use crate::application::{
     ConnectedSource, ConnectionRepository, ConnectionValidationFailure, PersistenceFailure,
     SecretStore, SourceRegistry, StoredConnection, WorkflowRunLogsFailure,
 };
-use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
+use crate::domain::{ChangeRequest, Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use async_trait::async_trait;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -14,12 +14,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub const DEFAULT_REPOSITORY_CACHE_MAX_AGE: Duration = Duration::from_secs(15 * 60);
 pub const DEFAULT_WORKFLOW_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 pub const DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+pub const DEFAULT_CHANGE_REQUEST_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceDataCachePolicy {
     pub repositories: Duration,
     pub workflows: Duration,
     pub workflow_runs: Duration,
+    pub change_requests: Duration,
 }
 
 impl SourceDataCachePolicy {
@@ -27,6 +29,7 @@ impl SourceDataCachePolicy {
         repositories: DEFAULT_REPOSITORY_CACHE_MAX_AGE,
         workflows: DEFAULT_WORKFLOW_CACHE_MAX_AGE,
         workflow_runs: DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE,
+        change_requests: DEFAULT_CHANGE_REQUEST_CACHE_MAX_AGE,
     };
 
     #[must_use]
@@ -35,6 +38,7 @@ impl SourceDataCachePolicy {
             repositories: max_age,
             workflows: max_age,
             workflow_runs: max_age,
+            change_requests: max_age,
         }
     }
 }
@@ -63,6 +67,12 @@ pub struct WorkflowRunSnapshot {
     pub last_successful_at: Option<u64>,
     pub last_error: Option<ConnectionValidationFailure>,
     pub runs: Vec<WorkflowRun>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChangeRequestSnapshot {
+    pub refreshed_at: u64,
+    pub change_requests: Vec<ChangeRequest>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -124,6 +134,21 @@ pub trait SourceDataCache: Send + Sync {
         repository_id: &str,
         snapshot: &WorkflowRunSnapshot,
     ) -> Result<(), PersistenceFailure>;
+
+    fn change_requests(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<ChangeRequestSnapshot>, PersistenceFailure>;
+
+    fn replace_change_requests(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        snapshot: &ChangeRequestSnapshot,
+    ) -> Result<(), PersistenceFailure>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,6 +191,13 @@ pub trait SourceData: Send + Sync {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure>;
+
+    async fn change_requests(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure>;
 
     async fn workflow_run_logs(
         &self,
@@ -245,6 +277,68 @@ impl ReadThroughSourceData {
                 ConnectionValidationFailure::UnexpectedResponse,
             ))?;
         Ok((connection, module))
+    }
+
+    async fn load_change_requests(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
+        let (connection, module) = self.connection(source_id)?;
+        if !module
+            .descriptor()
+            .supports(crate::application::SourceCapability::ChangeRequests)
+        {
+            return Ok(None);
+        }
+        let now = Self::now();
+        let cached = self.cache.as_ref().and_then(|cache| {
+            cache
+                .change_requests(source_id, &connection.account.external_id, &repository.id)
+                .ok()
+                .flatten()
+        });
+        if let Some(snapshot) = &cached
+            && (refresh == RefreshMode::CacheFirst
+                || refresh == RefreshMode::IfStale
+                    && Self::is_fresh(
+                        snapshot.refreshed_at,
+                        now,
+                        self.cache_policy.change_requests,
+                    ))
+        {
+            return Ok(Some(snapshot.change_requests.clone()));
+        }
+
+        let token = self
+            .secrets
+            .retrieve(&connection.secret_reference)
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?;
+        let change_requests = match module
+            .list_change_requests(&connection.configuration, &token, repository)
+            .await
+        {
+            Ok(Some(change_requests)) => change_requests,
+            Ok(None) => return Ok(None),
+            Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
+                return Ok(cached.map(|snapshot| snapshot.change_requests));
+            }
+            Err(failure) => return Err(SourceDataFailure::Source(failure)),
+        };
+
+        if let Some(cache) = &self.cache {
+            _ = cache.replace_change_requests(
+                source_id,
+                &connection.account.external_id,
+                &repository.id,
+                &ChangeRequestSnapshot {
+                    refreshed_at: Self::now(),
+                    change_requests: change_requests.clone(),
+                },
+            );
+        }
+        Ok(Some(change_requests))
     }
 }
 
@@ -478,6 +572,16 @@ impl SourceData for ReadThroughSourceData {
                 Err(SourceDataFailure::Source(failure))
             }
         }
+    }
+
+    async fn change_requests(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
+        self.load_change_requests(source_id, repository, refresh)
+            .await
     }
 
     async fn workflow_run_logs(

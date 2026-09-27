@@ -1,15 +1,22 @@
 //! Data transfer objects shared by HTTP and desktop IPC.
 
 use crate::application::{
-    ConnectSourceFailure, ConnectionState, ConnectionValidationFailure, DiscoveredWorkflow,
+    ChangeRequestInventory, ConnectSourceFailure, ConnectionState, ConnectionValidationFailure,
+    DiscoveredChangeRequest, DiscoveredWorkflow, ListChangeRequestsFailure,
     ListRepositoriesFailure, ListWorkflowsFailure, MAX_RECENT_RUNS_PER_WORKFLOW,
     MAX_SYNCHRONIZATION_INTERVAL_SECONDS, MIN_RECENT_RUNS_PER_WORKFLOW,
     MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings, ReleaseUpdate, RepositoryCatalog,
-    RepositoryState, SaveRepositorySelectionFailure, SettingsFailure, SourceRepositorySelection,
-    SourceState, SynchronizationFailure, SynchronizationStatus, SynchronizationSummary,
-    WorkflowInventory, WorkflowRunLogsFailure,
+    RepositoryState, SaveRepositorySelectionFailure, SettingsFailure,
+    SourceCapability as DomainSourceCapability, SourceRepositorySelection, SourceState,
+    SynchronizationFailure, SynchronizationStatus, SynchronizationSummary, WorkflowInventory,
+    WorkflowRunLogsFailure,
 };
 use crate::domain::{
+    ChangeRequest as DomainChangeRequest,
+    ChangeRequestCheckStatus as DomainChangeRequestCheckStatus,
+    ChangeRequestMergeStatus as DomainChangeRequestMergeStatus,
+    ChangeRequestReviewStatus as DomainChangeRequestReviewStatus,
+    ChangeRequestState as DomainChangeRequestState,
     RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
     RunOutcome as DomainRunOutcome, WorkflowRun as DomainWorkflowRun,
     WorkflowRunLogs as DomainWorkflowRunLogs, WorkflowState as DomainWorkflowState,
@@ -18,11 +25,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 11;
+pub const CONTRACT_VERSION: u8 = 13;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const UPDATE_STATUS_HTTP_PATH: &str = "/api/update-status";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
+pub const CHANGE_REQUESTS_HTTP_PATH: &str = "/api/change-requests";
 pub const WORKFLOW_RUN_LOGS_HTTP_PATH: &str = "/api/workflow-run-logs";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
@@ -33,6 +41,7 @@ pub const SETTINGS_HTTP_PATH: &str = "/api/settings";
 pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const UPDATE_STATUS_DESKTOP_COMMAND: &str = "update_status";
 pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
+pub const LIST_CHANGE_REQUESTS_DESKTOP_COMMAND: &str = "list_change_requests";
 pub const WORKFLOW_RUN_LOGS_DESKTOP_COMMAND: &str = "workflow_run_logs";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
 pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
@@ -141,6 +150,22 @@ pub struct ConnectionFieldSummary {
     pub default_value: String,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceCapability {
+    Workflows,
+    ChangeRequests,
+}
+
+impl From<DomainSourceCapability> for SourceCapability {
+    fn from(capability: DomainSourceCapability) -> Self {
+        match capability {
+            DomainSourceCapability::Workflows => Self::Workflows,
+            DomainSourceCapability::ChangeRequests => Self::ChangeRequests,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceSummary {
@@ -148,6 +173,7 @@ pub struct SourceSummary {
     pub name: String,
     pub description: String,
     pub abbreviation: String,
+    pub capabilities: Vec<SourceCapability>,
     pub credential: CredentialFieldSummary,
     pub connection_fields: Vec<ConnectionFieldSummary>,
     pub connections: Vec<ConnectionSummary>,
@@ -160,6 +186,12 @@ impl From<SourceState> for SourceSummary {
             name: source.descriptor.name,
             description: source.descriptor.description,
             abbreviation: source.descriptor.abbreviation,
+            capabilities: source
+                .descriptor
+                .capabilities
+                .into_iter()
+                .map(SourceCapability::from)
+                .collect(),
             credential: CredentialFieldSummary {
                 label: source.descriptor.credential.label,
                 placeholder: source.descriptor.credential.placeholder,
@@ -329,6 +361,156 @@ impl From<RepositoryCatalog> for RepositorySourceSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ListRepositoriesResponse {
     pub sources: Vec<RepositorySourceSummary>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeRequestState {
+    Open,
+    Closed,
+    Merged,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeRequestReviewStatus {
+    Approved,
+    ChangesRequested,
+    ReviewRequired,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeRequestCheckStatus {
+    Passed,
+    Failing,
+    Running,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeRequestMergeStatus {
+    Ready,
+    Blocked,
+    Conflicting,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestSummary {
+    pub id: String,
+    #[ts(type = "number")]
+    pub number: u64,
+    pub title: String,
+    pub author: Option<String>,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub state: ChangeRequestState,
+    pub draft: bool,
+    pub review_status: ChangeRequestReviewStatus,
+    pub check_status: ChangeRequestCheckStatus,
+    pub merge_status: ChangeRequestMergeStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub web_url: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub source_abbreviation: String,
+    pub repository_id: String,
+    pub repository_owner: String,
+    pub repository_name: String,
+}
+
+impl From<DiscoveredChangeRequest> for ChangeRequestSummary {
+    fn from(discovered: DiscoveredChangeRequest) -> Self {
+        let DomainChangeRequest {
+            id,
+            number,
+            title,
+            author,
+            source_branch,
+            target_branch,
+            state,
+            draft,
+            review_status,
+            check_status,
+            merge_status,
+            created_at,
+            updated_at,
+            web_url,
+        } = discovered.change_request;
+        Self {
+            id,
+            number,
+            title,
+            author,
+            source_branch,
+            target_branch,
+            state: match state {
+                DomainChangeRequestState::Open => ChangeRequestState::Open,
+                DomainChangeRequestState::Closed => ChangeRequestState::Closed,
+                DomainChangeRequestState::Merged => ChangeRequestState::Merged,
+            },
+            draft,
+            review_status: match review_status {
+                DomainChangeRequestReviewStatus::Approved => ChangeRequestReviewStatus::Approved,
+                DomainChangeRequestReviewStatus::ChangesRequested => {
+                    ChangeRequestReviewStatus::ChangesRequested
+                }
+                DomainChangeRequestReviewStatus::ReviewRequired => {
+                    ChangeRequestReviewStatus::ReviewRequired
+                }
+                DomainChangeRequestReviewStatus::Unknown => ChangeRequestReviewStatus::Unknown,
+            },
+            check_status: match check_status {
+                DomainChangeRequestCheckStatus::Passed => ChangeRequestCheckStatus::Passed,
+                DomainChangeRequestCheckStatus::Failing => ChangeRequestCheckStatus::Failing,
+                DomainChangeRequestCheckStatus::Running => ChangeRequestCheckStatus::Running,
+                DomainChangeRequestCheckStatus::Unknown => ChangeRequestCheckStatus::Unknown,
+            },
+            merge_status: match merge_status {
+                DomainChangeRequestMergeStatus::Ready => ChangeRequestMergeStatus::Ready,
+                DomainChangeRequestMergeStatus::Blocked => ChangeRequestMergeStatus::Blocked,
+                DomainChangeRequestMergeStatus::Conflicting => {
+                    ChangeRequestMergeStatus::Conflicting
+                }
+                DomainChangeRequestMergeStatus::Unknown => ChangeRequestMergeStatus::Unknown,
+            },
+            created_at,
+            updated_at,
+            web_url,
+            source_id: discovered.source.id,
+            source_name: discovered.source.label,
+            source_abbreviation: discovered.source.descriptor.abbreviation,
+            repository_id: discovered.repository.id,
+            repository_owner: discovered.repository.owner,
+            repository_name: discovered.repository.name,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ListChangeRequestsResponse {
+    pub selected_repository_count: usize,
+    pub change_requests: Vec<ChangeRequestSummary>,
+}
+
+impl ListChangeRequestsResponse {
+    #[must_use]
+    pub fn from_domain(inventory: ChangeRequestInventory) -> Self {
+        Self {
+            selected_repository_count: inventory.selected_repository_count,
+            change_requests: inventory
+                .change_requests
+                .into_iter()
+                .map(ChangeRequestSummary::from)
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
@@ -824,6 +1006,18 @@ impl From<ListWorkflowsFailure> for ConnectionValidationErrorResponse {
     }
 }
 
+impl From<ListChangeRequestsFailure> for ConnectionValidationErrorResponse {
+    fn from(failure: ListChangeRequestsFailure) -> Self {
+        match failure {
+            ListChangeRequestsFailure::Source(failure) => failure.into(),
+            ListChangeRequestsFailure::StorageUnavailable => Self {
+                code: ConnectionValidationErrorCode::StorageUnavailable,
+                message: "The cached change requests could not be read.".to_owned(),
+            },
+        }
+    }
+}
+
 impl From<SynchronizationFailure> for ConnectionValidationErrorResponse {
     fn from(_failure: SynchronizationFailure) -> Self {
         Self {
@@ -843,6 +1037,7 @@ pub fn render_typescript_contract() -> String {
         ConnectionSummary::decl(&config),
         CredentialFieldSummary::decl(&config),
         ConnectionFieldSummary::decl(&config),
+        SourceCapability::decl(&config),
         SourceSummary::decl(&config),
         ListSourcesResponse::decl(&config),
         DisconnectSourceRequest::decl(&config),
@@ -853,6 +1048,12 @@ pub fn render_typescript_contract() -> String {
         RepositorySummary::decl(&config),
         RepositorySourceSummary::decl(&config),
         ListRepositoriesResponse::decl(&config),
+        ChangeRequestState::decl(&config),
+        ChangeRequestReviewStatus::decl(&config),
+        ChangeRequestCheckStatus::decl(&config),
+        ChangeRequestMergeStatus::decl(&config),
+        ChangeRequestSummary::decl(&config),
+        ListChangeRequestsResponse::decl(&config),
         WorkflowState::decl(&config),
         RunLifecycle::decl(&config),
         RunOutcome::decl(&config),
@@ -875,14 +1076,17 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/opsscope-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const settingsLimits = {{\n  synchronizationIntervalSeconds: {{ min: {MIN_SYNCHRONIZATION_INTERVAL_SECONDS}, max: {MAX_SYNCHRONIZATION_INTERVAL_SECONDS} }},\n  recentRunsPerWorkflow: {{ min: {MIN_RECENT_RUNS_PER_WORKFLOW}, max: {MAX_RECENT_RUNS_PER_WORKFLOW} }},\n}} as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  updateStatus: \"{UPDATE_STATUS_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  settings: \"{SETTINGS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  updateStatus: \"{UPDATE_STATUS_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  getSettings: \"{GET_SETTINGS_DESKTOP_COMMAND}\",\n  updateSettings: \"{UPDATE_SETTINGS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  updateStatus(): Promise<UpdateStatusResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  getSettings(): Promise<MonitoringSettingsResponse>;\n  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/opsscope-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const settingsLimits = {{\n  synchronizationIntervalSeconds: {{ min: {MIN_SYNCHRONIZATION_INTERVAL_SECONDS}, max: {MAX_SYNCHRONIZATION_INTERVAL_SECONDS} }},\n  recentRunsPerWorkflow: {{ min: {MIN_RECENT_RUNS_PER_WORKFLOW}, max: {MAX_RECENT_RUNS_PER_WORKFLOW} }},\n}} as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  updateStatus: \"{UPDATE_STATUS_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  changeRequests: \"{CHANGE_REQUESTS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  settings: \"{SETTINGS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  updateStatus: \"{UPDATE_STATUS_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  listChangeRequests: \"{LIST_CHANGE_REQUESTS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  getSettings: \"{GET_SETTINGS_DESKTOP_COMMAND}\",\n  updateSettings: \"{UPDATE_SETTINGS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  updateStatus(): Promise<UpdateStatusResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  listChangeRequests(): Promise<ListChangeRequestsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  getSettings(): Promise<MonitoringSettingsResponse>;\n  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::{ConnectedSource, SourceDescriptor, ValidatedAccount};
+    use crate::application::{
+        ConnectedSource, SourceCapability as DomainSourceCapability, SourceDescriptor,
+        ValidatedAccount,
+    };
 
     #[test]
     fn maps_domain_values_without_exposing_infrastructure() {
@@ -895,6 +1099,7 @@ mod tests {
                     name: "Source".to_owned(),
                     description: "Source description".to_owned(),
                     abbreviation: "SO".to_owned(),
+                    capabilities: vec![DomainSourceCapability::Workflows],
                     credential: crate::application::CredentialField {
                         label: "Token".to_owned(),
                         placeholder: "token".to_owned(),
