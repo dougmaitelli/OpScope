@@ -1,0 +1,109 @@
+.activity-row {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-height: 54px;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid #252d38;
+  grid-template-columns: 105px minmax(180px, 1.4fr) minmax(170px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.7fr) 14px;
+  gap: 12px;
+  color: var(--text);
+  background: #10151c;
+  cursor: pointer;
+  text-align: left;
+}
+
+.activity-row:last-child {
+  border-bottom: 0;
+}
+
+.activity-row:hover {
+  background: #151c25;
+}
+
+.activity-row > span:not(.activity-state-cell, .activity-row-chevron),
+.activity-state-cell {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.activity-row strong,
+.activity-row span span,
+.activity-row time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row strong {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.activity-row span span,
+.activity-row time {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.activity-state {
+  width: fit-content;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #181f29;
+  font-size: 8px !important;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.activity-state-success {
+  border-color: #2e7551;
+  color: var(--success) !important;
+  background: #122a20;
+}
+
+.activity-state-warning,
+.activity-state-running,
+.activity-state-queued {
+  border-color: #7b6232;
+  color: var(--warning) !important;
+  background: #2d2516;
+}
+
+.activity-state-failure,
+.activity-state-cancelled {
+  border-color: #7c3e43;
+  color: var(--danger) !important;
+  background: #30191d;
+}
+
+.activity-row-chevron {
+  color: var(--subtle);
+  font-size: 16px;
+}
+
+@media (max-width: 980px) {
+  .activity-row {
+    grid-template-columns: 100px minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(100px, 0.7fr) 14px;
+  }
+
+  .activity-actor-cell {
+    display: none !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .activity-row {
+    grid-template-columns: 92px minmax(160px, 1fr) minmax(130px, 0.8fr) 14px;
+  }
+
+  .activity-ref-cell {
+    display: none !important;
+  }
+}

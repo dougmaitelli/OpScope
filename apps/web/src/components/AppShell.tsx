@@ -5,6 +5,7 @@ import "./AppShell.css";
 
 const pageTitles: Record<string, string> = {
   "/": "Overview",
+  "/activity": "Activity",
   "/repositories": "Repositories",
   "/connections": "Connections",
   "/settings": "Settings",
@@ -33,10 +34,10 @@ export function AppShell() {
             <span className="nav-symbol" aria-hidden="true">O</span>
             Overview
           </NavLink>
-          <button className="nav-item" type="button" disabled>
+          <NavLink className={navClass} to="/activity">
             <span className="nav-symbol" aria-hidden="true">A</span>
             Activity
-          </button>
+          </NavLink>
           <NavLink className={navClass} to="/repositories">
             <span className="nav-symbol" aria-hidden="true">R</span>
             Repositories
