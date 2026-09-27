@@ -50,6 +50,7 @@ pub struct AuthenticatedSession {
 
 #[derive(Clone)]
 pub struct WebAuthentication {
+    enabled: bool,
     oidc: Option<Arc<OidcConfiguration>>,
     sessions: SessionStore,
     secure_cookies: bool,
@@ -58,24 +59,47 @@ pub struct WebAuthentication {
 
 impl WebAuthentication {
     pub async fn from_environment() -> Result<Self, AuthenticationConfigurationError> {
-        let configuration = config::from_environment().await?;
-
-        Ok(Self {
-            oidc: Some(configuration.oidc),
-            sessions: SessionStore::default(),
-            secure_cookies: configuration.secure_cookies,
-            allowed_subjects: configuration.allowed_subjects,
+        Ok(match config::from_environment().await? {
+            Some(configuration) => Self {
+                enabled: true,
+                oidc: Some(configuration.oidc),
+                sessions: SessionStore::default(),
+                secure_cookies: configuration.secure_cookies,
+                allowed_subjects: configuration.allowed_subjects,
+            },
+            None => Self::disabled(),
         })
     }
 
-    #[cfg(test)]
-    pub(crate) fn for_tests() -> Self {
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn disabled() -> Self {
         Self {
+            enabled: false,
             oidc: None,
             sessions: SessionStore::default(),
             secure_cookies: false,
             allowed_subjects: Arc::new(HashSet::new()),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_tests() -> Self {
+        Self {
+            enabled: true,
+            oidc: None,
+            sessions: SessionStore::default(),
+            secure_cookies: false,
+            allowed_subjects: Arc::new(HashSet::new()),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn disabled_for_tests() -> Self {
+        Self::disabled()
     }
 
     #[cfg(test)]
@@ -126,6 +150,7 @@ pub(crate) struct TestSession {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthenticationStatus {
+    enabled: bool,
     authenticated: bool,
     user: Option<AuthenticatedUser>,
     csrf_token: Option<String>,
@@ -157,14 +182,27 @@ async fn session_status(
     Extension(authentication): Extension<WebAuthentication>,
     headers: HeaderMap,
 ) -> Response {
+    if !authentication.enabled {
+        return no_store(
+            Json(AuthenticationStatus {
+                enabled: false,
+                authenticated: false,
+                user: None,
+                csrf_token: None,
+            })
+            .into_response(),
+        );
+    }
     let session = authentication.session_from_headers(&headers);
     let status = match session {
         Some(session) => AuthenticationStatus {
+            enabled: true,
             authenticated: true,
             user: Some(session.user),
             csrf_token: Some(session.csrf_token),
         },
         None => AuthenticationStatus {
+            enabled: true,
             authenticated: false,
             user: None,
             csrf_token: None,
@@ -178,7 +216,7 @@ async fn login(
     Query(query): Query<LoginQuery>,
 ) -> Response {
     let Some(oidc) = &authentication.oidc else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "OIDC is unavailable").into_response();
+        return StatusCode::NOT_FOUND.into_response();
     };
     let client = CoreClient::from_provider_metadata(
         oidc.provider.clone(),
@@ -223,7 +261,7 @@ async fn callback(
     headers: HeaderMap,
 ) -> Response {
     let Some(oidc) = &authentication.oidc else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "OIDC is unavailable").into_response();
+        return StatusCode::NOT_FOUND.into_response();
     };
     let Some(login_token) = cookie_value(&headers, authentication.login_cookie_name()) else {
         return authentication_error("OIDC login cookie is missing");
@@ -320,8 +358,11 @@ pub async fn require_authenticated_session(
     mut request: Request<Body>,
     next: Next,
 ) -> Response {
+    if !authentication.enabled {
+        return no_store(next.run(request).await);
+    }
     let Some(session) = authentication.session_from_headers(request.headers()) else {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return no_store(StatusCode::UNAUTHORIZED.into_response());
     };
     if is_state_changing(request.method()) {
         let csrf = request
@@ -329,7 +370,7 @@ pub async fn require_authenticated_session(
             .get(CSRF_HEADER)
             .and_then(|value| value.to_str().ok());
         if !csrf.is_some_and(|csrf| secure_eq(csrf, &session.csrf_token)) {
-            return StatusCode::FORBIDDEN.into_response();
+            return no_store(StatusCode::FORBIDDEN.into_response());
         }
     }
     request.extensions_mut().insert(session);
@@ -338,9 +379,11 @@ pub async fn require_authenticated_session(
 
 pub async fn logout(
     Extension(authentication): Extension<WebAuthentication>,
-    Extension(session): Extension<AuthenticatedSession>,
+    headers: HeaderMap,
 ) -> Response {
-    authentication.sessions.delete_session(&session.id);
+    if let Some(session) = authentication.session_from_headers(&headers) {
+        authentication.sessions.delete_session(&session.id);
+    }
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
         SET_COOKIE,
@@ -350,7 +393,7 @@ pub async fn logout(
             "Strict",
         )),
     );
-    response
+    no_store(response)
 }
 
 fn safe_return_to(value: Option<&str>) -> String {

@@ -74,7 +74,7 @@ successful snapshot retained during transient provider failures. Users can
 inspect workflow-run logs on demand without persisting them locally. Desktop
 credentials use the operating-system keychain, minimizes to the system tray,
 and delivers native failure notifications. The server encrypts credentials
-stored in SQLite, authenticates browser sessions through OpenID Connect, and
+stored in SQLite, optionally authenticates browser sessions through OpenID Connect, and
 can deliver failure notifications through Apprise. Manual refresh uses a shared
 synchronization coordinator that
 bypasses cache TTLs, prevents overlapping work per source, and continues when an

@@ -45,21 +45,26 @@ The other root commands are:
 | `npm run desktop:dev` | Run the Tauri desktop shell and shared Vite frontend. |
 
 The HTTP server binds to `127.0.0.1` for direct development and is intended to
-sit behind the self-hosted reverse proxy later. It requires OIDC configuration
-at startup:
+sit behind the self-hosted reverse proxy later. OIDC is disabled when issuer,
+client ID, and client secret are all unset. When any of those three is set, all
+four required values must be present and valid or startup fails:
 
 | Variable | Purpose |
 | --- | --- |
-| `CIWATCHER_PUBLIC_URL` | Browser-visible origin. HTTPS is required except for loopback development. The callback is `<origin>/api/auth/callback`. |
-| `CIWATCHER_OIDC_ISSUER` | Exact issuer URL used for OIDC discovery and ID-token validation. |
-| `CIWATCHER_OIDC_CLIENT_ID` | Confidential web-client identifier. |
-| `CIWATCHER_OIDC_CLIENT_SECRET` | Confidential web-client secret. |
+| `CIWATCHER_PUBLIC_URL` | Required with OIDC. Browser-visible origin. HTTPS is required except for loopback development. The callback is `<origin>/api/auth/callback`. |
+| `CIWATCHER_OIDC_ISSUER` | Required with OIDC. Exact issuer URL used for discovery and ID-token validation. |
+| `CIWATCHER_OIDC_CLIENT_ID` | Required with OIDC. Confidential web-client identifier. |
+| `CIWATCHER_OIDC_CLIENT_SECRET` | Required with OIDC. Confidential web-client secret. |
 | `CIWATCHER_OIDC_ALLOWED_SUBJECTS` | Optional comma-separated `sub` allowlist. When unset, provider-side client access policy controls admission. |
 
 For local development, register
 `http://127.0.0.1:1420/api/auth/callback` with the provider and set
 `CIWATCHER_PUBLIC_URL=http://127.0.0.1:1420`. Vite proxies the callback and API
 requests to the Rust server.
+
+With OIDC disabled, the web API and interface do not require a session or CSRF
+token. Use that mode only where network access is already restricted to trusted
+users.
 
 The development server stores metadata and encrypted credentials under
 `.ciwatcher-data/`. It creates a 32-byte `master.key` with owner-only

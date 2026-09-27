@@ -519,3 +519,37 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
     assert_eq!(decoded["csrfToken"], session.csrf_token);
     Ok(())
 }
+
+#[tokio::test]
+async fn routes_are_available_without_sessions_when_oidc_is_disabled()
+-> Result<(), Box<dyn std::error::Error>> {
+    let database = SqliteDatabase::in_memory()?;
+    let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+    let app = router(test_dependencies(
+        &database,
+        secrets,
+        WebAuthentication::disabled_for_tests(),
+    ));
+
+    let session = app
+        .clone()
+        .oneshot(Request::get(AUTH_SESSION_PATH).body(Body::empty())?)
+        .await?;
+    assert_eq!(session.status(), StatusCode::OK);
+    let body = session.into_body().collect().await?.to_bytes();
+    let status: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(status["enabled"], false);
+    assert_eq!(status["authenticated"], false);
+
+    let settings = app
+        .oneshot(
+            Request::put(SETTINGS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(settings.status(), StatusCode::OK);
+    Ok(())
+}

@@ -34,11 +34,24 @@ impl Display for AuthenticationConfigurationError {
 impl Error for AuthenticationConfigurationError {}
 
 pub(super) async fn from_environment()
--> Result<AuthenticationConfiguration, AuthenticationConfigurationError> {
-    let issuer = validate_issuer_url(&required_environment("CIWATCHER_OIDC_ISSUER")?)?;
-    let client_id = required_environment("CIWATCHER_OIDC_CLIENT_ID")?;
-    let client_secret = required_environment("CIWATCHER_OIDC_CLIENT_SECRET")?;
-    let public_url = validate_public_url(&required_environment("CIWATCHER_PUBLIC_URL")?)?;
+-> Result<Option<AuthenticationConfiguration>, AuthenticationConfigurationError> {
+    let issuer = optional_environment("CIWATCHER_OIDC_ISSUER");
+    let client_id = optional_environment("CIWATCHER_OIDC_CLIENT_ID");
+    let client_secret = optional_environment("CIWATCHER_OIDC_CLIENT_SECRET");
+    let public_url = optional_environment("CIWATCHER_PUBLIC_URL");
+    let allowed_subjects = optional_environment("CIWATCHER_OIDC_ALLOWED_SUBJECTS");
+    if authentication_is_unconfigured(&[
+        issuer.as_deref(),
+        client_id.as_deref(),
+        client_secret.as_deref(),
+    ]) {
+        return Ok(None);
+    }
+
+    let issuer = validate_issuer_url(&required_value("CIWATCHER_OIDC_ISSUER", issuer)?)?;
+    let client_id = required_value("CIWATCHER_OIDC_CLIENT_ID", client_id)?;
+    let client_secret = required_value("CIWATCHER_OIDC_CLIENT_SECRET", client_secret)?;
+    let public_url = validate_public_url(&required_value("CIWATCHER_PUBLIC_URL", public_url)?)?;
     let secure_cookies = public_url.starts_with("https://");
     let redirect_url = format!("{public_url}{AUTH_CALLBACK_PATH}");
     let http_client = openidconnect::reqwest::ClientBuilder::new()
@@ -53,7 +66,7 @@ pub(super) async fn from_environment()
     )
     .await
     .map_err(|_| AuthenticationConfigurationError("OIDC discovery failed"))?;
-    let allowed_subjects = env::var("CIWATCHER_OIDC_ALLOWED_SUBJECTS")
+    let allowed_subjects = allowed_subjects
         .unwrap_or_default()
         .split(',')
         .map(str::trim)
@@ -61,7 +74,7 @@ pub(super) async fn from_environment()
         .map(str::to_owned)
         .collect();
 
-    Ok(AuthenticationConfiguration {
+    Ok(Some(AuthenticationConfiguration {
         oidc: Arc::new(OidcConfiguration {
             provider,
             client_id,
@@ -71,20 +84,31 @@ pub(super) async fn from_environment()
         }),
         secure_cookies,
         allowed_subjects: Arc::new(allowed_subjects),
-    })
+    }))
 }
 
-fn required_environment(name: &'static str) -> Result<String, AuthenticationConfigurationError> {
+fn optional_environment(name: &'static str) -> Option<String> {
     env::var(name)
         .ok()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or(AuthenticationConfigurationError(match name {
-            "CIWATCHER_OIDC_ISSUER" => "CIWATCHER_OIDC_ISSUER is required",
-            "CIWATCHER_OIDC_CLIENT_ID" => "CIWATCHER_OIDC_CLIENT_ID is required",
-            "CIWATCHER_OIDC_CLIENT_SECRET" => "CIWATCHER_OIDC_CLIENT_SECRET is required",
-            "CIWATCHER_PUBLIC_URL" => "CIWATCHER_PUBLIC_URL is required",
-            _ => "required authentication environment variable is missing",
-        }))
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn authentication_is_unconfigured(values: &[Option<&str>]) -> bool {
+    values.iter().all(Option::is_none)
+}
+
+fn required_value(
+    name: &'static str,
+    value: Option<String>,
+) -> Result<String, AuthenticationConfigurationError> {
+    value.ok_or(AuthenticationConfigurationError(match name {
+        "CIWATCHER_OIDC_ISSUER" => "CIWATCHER_OIDC_ISSUER is required",
+        "CIWATCHER_OIDC_CLIENT_ID" => "CIWATCHER_OIDC_CLIENT_ID is required",
+        "CIWATCHER_OIDC_CLIENT_SECRET" => "CIWATCHER_OIDC_CLIENT_SECRET is required",
+        "CIWATCHER_PUBLIC_URL" => "CIWATCHER_PUBLIC_URL is required",
+        _ => "required authentication environment variable is missing",
+    }))
 }
 
 fn validate_public_url(value: &str) -> Result<String, AuthenticationConfigurationError> {
@@ -164,5 +188,15 @@ mod tests {
         assert!(validate_issuer_url("http://localhost:8080/tenant").is_ok());
         assert!(validate_issuer_url("http://id.example.com/tenant").is_err());
         assert!(validate_issuer_url("https://id.example.com/tenant?key=value").is_err());
+    }
+
+    #[test]
+    fn oidc_is_disabled_only_when_every_related_value_is_absent() {
+        assert!(authentication_is_unconfigured(&[None, None, None]));
+        assert!(!authentication_is_unconfigured(&[
+            Some("issuer"),
+            None,
+            None,
+        ]));
     }
 }

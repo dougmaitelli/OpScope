@@ -15,6 +15,9 @@ use tokio::net::TcpListener;
 async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:4317").await?;
     let authentication = ciwatcher_server::auth::WebAuthentication::from_environment().await?;
+    if !authentication.is_enabled() {
+        eprintln!("OIDC authentication is disabled; access must be restricted by the deployment");
+    }
     let sources = registered_sources()?;
     let data_dir = env::var_os("CIWATCHER_DATA_DIR")
         .map(PathBuf::from)

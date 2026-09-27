@@ -23,6 +23,7 @@ interface AuthenticatedUser {
 }
 
 interface AuthenticationStatus {
+  enabled: boolean;
   authenticated: boolean;
   user: AuthenticatedUser | null;
   csrfToken: string | null;
@@ -39,7 +40,7 @@ const AuthenticationContext = createContext<AuthenticationContextValue | null>(n
 export function WebAuthentication({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthenticationStatus | null>(
     isDesktopRuntime
-      ? { authenticated: true, user: null, csrfToken: null }
+      ? { enabled: false, authenticated: false, user: null, csrfToken: null }
       : null,
   );
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
       });
       if (!response.ok) throw new Error(`Session request failed with ${response.status}`);
       const next = (await response.json()) as AuthenticationStatus;
-      setHttpCsrfToken(next.authenticated ? next.csrfToken : null);
+      setHttpCsrfToken(next.enabled && next.authenticated ? next.csrfToken : null);
       setStatus(next);
     } catch {
       setHttpCsrfToken(null);
@@ -66,14 +67,16 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     void loadSession();
     const unauthorized = () => {
       setHttpCsrfToken(null);
-      setStatus({ authenticated: false, user: null, csrfToken: null });
+      setStatus((current) => current?.enabled === false
+        ? current
+        : { enabled: true, authenticated: false, user: null, csrfToken: null });
     };
     globalThis.addEventListener("ciwatcher:unauthorized", unauthorized);
     return () => globalThis.removeEventListener("ciwatcher:unauthorized", unauthorized);
   }, [loadSession]);
 
   const logout = useCallback(async () => {
-    if (isDesktopRuntime || !status?.csrfToken) return;
+    if (isDesktopRuntime || !status?.enabled || !status.csrfToken) return;
     const response = await fetch(LOGOUT_PATH, {
       method: "POST",
       headers: { "X-CSRF-Token": status.csrfToken },
@@ -81,13 +84,13 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     });
     if (!response.ok && response.status !== 401) return;
     setHttpCsrfToken(null);
-    setStatus({ authenticated: false, user: null, csrfToken: null });
+    setStatus({ enabled: true, authenticated: false, user: null, csrfToken: null });
   }, [status]);
 
   const context = useMemo<AuthenticationContextValue>(
     () => ({
       user: status?.user ?? null,
-      webAuthentication: !isDesktopRuntime,
+      webAuthentication: !isDesktopRuntime && (status?.enabled ?? false),
       logout,
     }),
     [logout, status?.user],
@@ -114,7 +117,7 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!status.authenticated) {
+  if (status.enabled && !status.authenticated) {
     const returnTo = `${window.location.pathname}${window.location.search}`;
     const loginUrl = `${LOGIN_PATH}?returnTo=${encodeURIComponent(returnTo)}`;
     return (

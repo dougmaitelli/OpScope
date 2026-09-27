@@ -36,11 +36,13 @@ Future versions may hold credentials with write permissions. Its design must:
 
 ## Principal threats and controls
 
-### Public deployment without authentication
+### Deployment without authentication
 
-The server refuses to bind to a non-loopback address unless production
-authentication has been initialized. Any development bypass must be explicit,
-visibly logged, limited to loopback, and unavailable in release configuration.
+OIDC is optional. When no issuer, client ID, or client secret is present, the API is
+available without sessions or CSRF checks. The server itself remains bound to
+loopback; an operator exposing it through a reverse proxy in this mode must
+provide an equivalent trusted access boundary. Partially configured OIDC fails
+startup instead of silently disabling authentication.
 
 ### Authentication credential disclosure
 
@@ -132,9 +134,10 @@ as administrator-controlled configuration.
 ## Self-hosted identity configuration
 
 OIDC issuer, client ID, client secret, and public origin are supplied through
-the deployment environment. Startup fails when required values are missing,
-discovery fails, or a non-loopback public origin does not use HTTPS. An optional
-subject allowlist provides application-side admission control; otherwise the
+the deployment environment. If none are present, OIDC is disabled. If any OIDC
+setting is present, startup fails when required values are missing, discovery
+fails, or a non-loopback public origin does not use HTTPS. An optional subject
+allowlist provides application-side admission control; otherwise the
 administrator must restrict access through the provider's client policy.
 
 ## Future GitHub App and webhooks
@@ -155,7 +158,7 @@ When GitHub App support is introduced:
 - A test proves every protected HTTP route rejects an anonymous request.
 - State-changing route tests cover missing and invalid CSRF tokens.
 - Logs are tested for redaction using representative provider failures.
-- Public binding without initialized authentication fails closed.
+- Partial or invalid OIDC configuration fails closed.
 - Desktop IPC and capability configuration grants no unused native permission.
 - Backup files do not contain plaintext GitHub credentials.
 - Authentication and encryption secrets can be rotated independently.
