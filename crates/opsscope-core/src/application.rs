@@ -1,5 +1,6 @@
 //! Application use cases and the ports they require.
 
+mod change_request_details;
 mod notifications;
 mod run_logs;
 mod settings;
@@ -25,7 +26,9 @@ pub use sync::{
 };
 pub use updates::{CheckForUpdates, ReleaseUpdate, UpdateCheckFailure};
 
-use crate::domain::{ChangeRequest, Repository, Workflow, WorkflowRun, WorkflowRunLogs};
+use crate::domain::{
+    ChangeRequest, ChangeRequestDetails, Repository, Workflow, WorkflowRun, WorkflowRunLogs,
+};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashSet};
@@ -218,6 +221,16 @@ pub trait SourceModule: Send + Sync {
         _token: &ProviderToken,
         _repository: &Repository,
     ) -> Result<Option<Vec<ChangeRequest>>, ConnectionValidationFailure> {
+        Ok(None)
+    }
+
+    async fn change_request_details(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _number: u64,
+    ) -> Result<Option<ChangeRequestDetails>, ConnectionValidationFailure> {
         Ok(None)
     }
 
@@ -1023,3 +1036,4 @@ impl DisconnectSource {
         Ok(true)
     }
 }
+pub use change_request_details::{GetChangeRequestDetails, GetChangeRequestDetailsFailure};

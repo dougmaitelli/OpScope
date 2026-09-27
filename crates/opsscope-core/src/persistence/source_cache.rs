@@ -6,8 +6,8 @@ use crate::domain::{
     WorkflowRun, WorkflowState,
 };
 use crate::source_data::{
-    ChangeRequestSnapshot, RepositorySnapshot, SourceDataCache, WorkflowRunSnapshot,
-    WorkflowSnapshot,
+    ChangeRequestDetailsSnapshot, ChangeRequestSnapshot, RepositorySnapshot, SourceDataCache,
+    WorkflowRunSnapshot, WorkflowSnapshot,
 };
 use rusqlite::{OptionalExtension, params};
 
@@ -258,6 +258,12 @@ impl SourceDataCache for SqliteDatabase {
             .execute(
                 "DELETE FROM change_request_cache_sync
                  WHERE source_id = ?1 AND account_id <> ?2",
+                params![source_id, account_id],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "DELETE FROM change_request_details WHERE source_id = ?1 AND account_id <> ?2",
                 params![source_id, account_id],
             )
             .map_err(|_| PersistenceFailure)?;
@@ -694,6 +700,66 @@ impl SourceDataCache for SqliteDatabase {
             .map_err(|_| PersistenceFailure)?;
         transaction.commit().map_err(|_| PersistenceFailure)
     }
+
+    fn change_request_details(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        number: u64,
+    ) -> Result<Option<ChangeRequestDetailsSnapshot>, PersistenceFailure> {
+        let number = i64::try_from(number).map_err(|_| PersistenceFailure)?;
+        let database = self.lock()?;
+        database
+            .query_row(
+                "SELECT refreshed_at, payload FROM change_request_details
+                 WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3 AND number = ?4",
+                params![source_id, account_id, repository_id, number],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)?
+            .map(|(refreshed_at, payload)| {
+                Ok(ChangeRequestDetailsSnapshot {
+                    refreshed_at: refreshed_at.try_into().map_err(|_| PersistenceFailure)?,
+                    details: serde_json::from_str(&payload).map_err(|_| PersistenceFailure)?,
+                })
+            })
+            .transpose()
+    }
+
+    fn replace_change_request_details(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        number: u64,
+        snapshot: &ChangeRequestDetailsSnapshot,
+    ) -> Result<(), PersistenceFailure> {
+        let number = i64::try_from(number).map_err(|_| PersistenceFailure)?;
+        let refreshed_at = i64::try_from(snapshot.refreshed_at).map_err(|_| PersistenceFailure)?;
+        let payload = serde_json::to_string(&snapshot.details).map_err(|_| PersistenceFailure)?;
+        let database = self.lock()?;
+        database
+            .execute(
+                "INSERT INTO change_request_details (
+                   source_id, account_id, repository_id, number, refreshed_at, payload
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(source_id, account_id, repository_id, number) DO UPDATE SET
+                   refreshed_at = excluded.refreshed_at,
+                   payload = excluded.payload",
+                params![
+                    source_id,
+                    account_id,
+                    repository_id,
+                    number,
+                    refreshed_at,
+                    payload,
+                ],
+            )
+            .map(|_| ())
+            .map_err(|_| PersistenceFailure)
+    }
 }
 
 #[cfg(test)]
@@ -783,6 +849,31 @@ mod tests {
                 web_url: "https://example.com/pulls/42".to_owned(),
             }],
         };
+        let change_request_details = ChangeRequestDetailsSnapshot {
+            refreshed_at: 127,
+            details: crate::domain::ChangeRequestDetails {
+                change_request: change_requests.change_requests[0].clone(),
+                body: Some("Improves token handling.".to_owned()),
+                labels: vec!["security".to_owned()],
+                reviews: vec![crate::domain::ChangeRequestReview {
+                    reviewer: Some("reviewer".to_owned()),
+                    status: ChangeRequestReviewStatus::Approved,
+                    submitted_at: Some("2026-09-27T17:00:00Z".to_owned()),
+                }],
+                checks: vec![crate::domain::ChangeRequestCheck {
+                    name: "test".to_owned(),
+                    status: ChangeRequestCheckStatus::Passed,
+                    web_url: Some("https://example.com/checks/1".to_owned()),
+                    workflow_run_id: Some("123".to_owned()),
+                }],
+                latest_commit: Some(crate::domain::ChangeRequestCommit {
+                    sha: "abcdef123456".to_owned(),
+                    title: "Harden tokens".to_owned(),
+                    author: Some("octocat".to_owned()),
+                    committed_at: "2026-09-27T16:00:00Z".to_owned(),
+                }),
+            },
+        };
 
         {
             let database = SqliteDatabase::open(&database_path)?;
@@ -791,6 +882,13 @@ mod tests {
             database.replace_workflows("example", "42", "repository-1", &workflows)?;
             database.replace_workflow_runs("example", "42", "repository-1", &runs)?;
             database.replace_change_requests("example", "42", "repository-1", &change_requests)?;
+            database.replace_change_request_details(
+                "example",
+                "42",
+                "repository-1",
+                42,
+                &change_request_details,
+            )?;
         }
 
         let database = SqliteDatabase::open(&database_path)?;
@@ -812,6 +910,10 @@ mod tests {
             database.change_requests("example", "42", "repository-1")?,
             Some(change_requests)
         );
+        assert_eq!(
+            database.change_request_details("example", "42", "repository-1", 42)?,
+            Some(change_request_details)
+        );
         database.delete("example")?;
         assert!(database.repositories("example", "42")?.is_none());
         assert!(
@@ -827,6 +929,11 @@ mod tests {
         assert!(
             database
                 .change_requests("example", "42", "repository-1")?
+                .is_none()
+        );
+        assert!(
+            database
+                .change_request_details("example", "42", "repository-1", 42)?
                 .is_none()
         );
         Ok(())

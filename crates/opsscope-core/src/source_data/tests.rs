@@ -250,6 +250,7 @@ async fn cache_policy_applies_a_separate_ttl_to_each_resource_kind()
             workflows: Duration::ZERO,
             workflow_runs: Duration::ZERO,
             change_requests: Duration::ZERO,
+            change_request_details: Duration::ZERO,
         },
     );
 
@@ -454,6 +455,17 @@ async fn source_modules_can_omit_change_request_monitoring()
     assert_eq!(
         module
             .list_change_requests(&ConnectionConfiguration::new(), &token, &test_repository(),)
+            .await?,
+        None
+    );
+    assert_eq!(
+        module
+            .change_request_details(
+                &ConnectionConfiguration::new(),
+                &token,
+                &test_repository(),
+                42,
+            )
             .await?,
         None
     );

@@ -3,6 +3,8 @@ import {
   desktopCommands,
   httpRoutes,
   type ApplicationClient,
+  type ChangeRequestDetailsRequest,
+  type ChangeRequestDetailsResponse,
   type ConnectionSummary,
   type ConnectionValidationErrorResponse,
   type ConnectSourceRequest,
@@ -39,6 +41,12 @@ export class DesktopClient implements ApplicationClient {
 
   listChangeRequests(): Promise<ListChangeRequestsResponse> {
     return invoke<ListChangeRequestsResponse>(desktopCommands.listChangeRequests);
+  }
+
+  changeRequestDetails(
+    request: ChangeRequestDetailsRequest,
+  ): Promise<ChangeRequestDetailsResponse> {
+    return invoke<ChangeRequestDetailsResponse>(desktopCommands.changeRequestDetails, { request });
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {
@@ -111,6 +119,12 @@ export class HttpClient implements ApplicationClient {
 
   listChangeRequests(): Promise<ListChangeRequestsResponse> {
     return this.get<ListChangeRequestsResponse>(httpRoutes.changeRequests);
+  }
+
+  changeRequestDetails(
+    request: ChangeRequestDetailsRequest,
+  ): Promise<ChangeRequestDetailsResponse> {
+    return this.post<ChangeRequestDetailsResponse>(httpRoutes.changeRequestDetails, request);
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {

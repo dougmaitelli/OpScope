@@ -1,5 +1,6 @@
 use crate::state::DesktopState;
 use opsscope_core::contracts::{
+    ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListChangeRequestsResponse,
     ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
@@ -49,6 +50,19 @@ pub(crate) async fn list_change_requests(
         .await
         .map(ListChangeRequestsResponse::from_domain)
         .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) async fn change_request_details(
+    state: State<'_, DesktopState>,
+    request: ChangeRequestDetailsRequest,
+) -> Result<ChangeRequestDetailsResponse, ChangeRequestDetailsErrorResponse> {
+    state
+        .change_request_details
+        .execute(&request.source_id, &request.repository_id, request.number)
+        .await
+        .map(ChangeRequestDetailsResponse::from)
+        .map_err(ChangeRequestDetailsErrorResponse::from)
 }
 
 #[tauri::command]

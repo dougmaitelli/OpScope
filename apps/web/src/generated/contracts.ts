@@ -46,6 +46,18 @@ export type ChangeRequestSummary = { id: string, number: number, title: string, 
 
 export type ListChangeRequestsResponse = { selectedRepositoryCount: number, changeRequests: Array<ChangeRequestSummary>, };
 
+export type ChangeRequestDetailsRequest = { sourceId: string, repositoryId: string, number: number, };
+
+export type ChangeRequestReviewSummary = { reviewer: string | null, status: ChangeRequestReviewStatus, submittedAt: string | null, };
+
+export type ChangeRequestCheckSummary = { name: string, status: ChangeRequestCheckStatus, webUrl: string | null, workflowRunId: string | null, };
+
+export type ChangeRequestCommitSummary = { sha: string, title: string, author: string | null, committedAt: string, };
+
+export type ChangeRequestDetailsResponse = { body: string | null, labels: Array<string>, reviews: Array<ChangeRequestReviewSummary>, checks: Array<ChangeRequestCheckSummary>, latestCommit: ChangeRequestCommitSummary | null, };
+
+export type ChangeRequestDetailsErrorResponse = { message: string, };
+
 export type WorkflowState = "active" | "disabled";
 
 export type RunLifecycle = "queued" | "running" | "completed" | "unknown";
@@ -96,6 +108,7 @@ export const httpRoutes = {
   updateStatus: "/api/update-status",
   workflows: "/api/workflows",
   changeRequests: "/api/change-requests",
+  changeRequestDetails: "/api/change-request-details",
   workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
   settings: "/api/settings",
@@ -110,6 +123,7 @@ export const desktopCommands = {
   updateStatus: "update_status",
   listWorkflows: "list_workflows",
   listChangeRequests: "list_change_requests",
+  changeRequestDetails: "change_request_details",
   workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
   synchronizationStatus: "synchronization_status",
@@ -127,6 +141,7 @@ export interface ApplicationClient {
   updateStatus(): Promise<UpdateStatusResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
   listChangeRequests(): Promise<ListChangeRequestsResponse>;
+  changeRequestDetails(request: ChangeRequestDetailsRequest): Promise<ChangeRequestDetailsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;

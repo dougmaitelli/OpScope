@@ -3,9 +3,13 @@ import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
-import type { ListChangeRequestsResponse } from "../../generated/contracts.ts";
+import type {
+  ChangeRequestSummary,
+  ListChangeRequestsResponse,
+} from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { ChangeRequestFilters, type ChangeRequestFilter } from "./ChangeRequestFilters.tsx";
+import { ChangeRequestDetailsDialog } from "./ChangeRequestDetailsDialog.tsx";
 import { ChangeRequestRow } from "./ChangeRequestRow.tsx";
 import "./ChangeRequestsPage.css";
 
@@ -16,6 +20,7 @@ export function ChangeRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ChangeRequestFilter>("all");
+  const [selected, setSelected] = useState<ChangeRequestSummary | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -118,11 +123,15 @@ export function ChangeRequestsPage() {
               <ChangeRequestRow
                 key={`${item.sourceId}:${item.repositoryId}:${item.id}`}
                 changeRequest={item}
+                onOpen={() => setSelected(item)}
               />
             ))
           )}
         </div>
       </section>
+      {selected ? (
+        <ChangeRequestDetailsDialog changeRequest={selected} onClose={() => setSelected(null)} />
+      ) : null}
     </section>
   );
 }

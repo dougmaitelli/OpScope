@@ -2,18 +2,19 @@
 
 use crate::application::{
     ChangeRequestInventory, ConnectSourceFailure, ConnectionState, ConnectionValidationFailure,
-    DiscoveredChangeRequest, DiscoveredWorkflow, ListChangeRequestsFailure,
-    ListRepositoriesFailure, ListWorkflowsFailure, MAX_RECENT_RUNS_PER_WORKFLOW,
-    MAX_SYNCHRONIZATION_INTERVAL_SECONDS, MIN_RECENT_RUNS_PER_WORKFLOW,
-    MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings, ReleaseUpdate, RepositoryCatalog,
-    RepositoryState, SaveRepositorySelectionFailure, SettingsFailure,
-    SourceCapability as DomainSourceCapability, SourceRepositorySelection, SourceState,
-    SynchronizationFailure, SynchronizationStatus, SynchronizationSummary, WorkflowInventory,
-    WorkflowRunLogsFailure,
+    DiscoveredChangeRequest, DiscoveredWorkflow, GetChangeRequestDetailsFailure,
+    ListChangeRequestsFailure, ListRepositoriesFailure, ListWorkflowsFailure,
+    MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
+    MIN_RECENT_RUNS_PER_WORKFLOW, MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings,
+    ReleaseUpdate, RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure,
+    SettingsFailure, SourceCapability as DomainSourceCapability, SourceRepositorySelection,
+    SourceState, SynchronizationFailure, SynchronizationStatus, SynchronizationSummary,
+    WorkflowInventory, WorkflowRunLogsFailure,
 };
 use crate::domain::{
     ChangeRequest as DomainChangeRequest,
     ChangeRequestCheckStatus as DomainChangeRequestCheckStatus,
+    ChangeRequestDetails as DomainChangeRequestDetails,
     ChangeRequestMergeStatus as DomainChangeRequestMergeStatus,
     ChangeRequestReviewStatus as DomainChangeRequestReviewStatus,
     ChangeRequestState as DomainChangeRequestState,
@@ -25,12 +26,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 13;
+pub const CONTRACT_VERSION: u8 = 15;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const UPDATE_STATUS_HTTP_PATH: &str = "/api/update-status";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
 pub const CHANGE_REQUESTS_HTTP_PATH: &str = "/api/change-requests";
+pub const CHANGE_REQUEST_DETAILS_HTTP_PATH: &str = "/api/change-request-details";
 pub const WORKFLOW_RUN_LOGS_HTTP_PATH: &str = "/api/workflow-run-logs";
 pub const SOURCES_HTTP_PATH: &str = "/api/sources";
 pub const CONNECTIONS_HTTP_PATH: &str = "/api/connections";
@@ -42,6 +44,7 @@ pub const HEALTH_DESKTOP_COMMAND: &str = "health";
 pub const UPDATE_STATUS_DESKTOP_COMMAND: &str = "update_status";
 pub const LIST_WORKFLOWS_DESKTOP_COMMAND: &str = "list_workflows";
 pub const LIST_CHANGE_REQUESTS_DESKTOP_COMMAND: &str = "list_change_requests";
+pub const CHANGE_REQUEST_DETAILS_DESKTOP_COMMAND: &str = "change_request_details";
 pub const WORKFLOW_RUN_LOGS_DESKTOP_COMMAND: &str = "workflow_run_logs";
 pub const LIST_SOURCES_DESKTOP_COMMAND: &str = "list_sources";
 pub const CONNECT_SOURCE_DESKTOP_COMMAND: &str = "connect_source";
@@ -509,6 +512,160 @@ impl ListChangeRequestsResponse {
                 .into_iter()
                 .map(ChangeRequestSummary::from)
                 .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestDetailsRequest {
+    pub source_id: String,
+    pub repository_id: String,
+    #[ts(type = "number")]
+    pub number: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestReviewSummary {
+    pub reviewer: Option<String>,
+    pub status: ChangeRequestReviewStatus,
+    pub submitted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestCheckSummary {
+    pub name: String,
+    pub status: ChangeRequestCheckStatus,
+    pub web_url: Option<String>,
+    pub workflow_run_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestCommitSummary {
+    pub sha: String,
+    pub title: String,
+    pub author: Option<String>,
+    pub committed_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestDetailsResponse {
+    pub body: Option<String>,
+    pub labels: Vec<String>,
+    pub reviews: Vec<ChangeRequestReviewSummary>,
+    pub checks: Vec<ChangeRequestCheckSummary>,
+    pub latest_commit: Option<ChangeRequestCommitSummary>,
+}
+
+impl From<DomainChangeRequestDetails> for ChangeRequestDetailsResponse {
+    fn from(details: DomainChangeRequestDetails) -> Self {
+        Self {
+            body: details.body,
+            labels: details.labels,
+            reviews: details
+                .reviews
+                .into_iter()
+                .map(|review| ChangeRequestReviewSummary {
+                    reviewer: review.reviewer,
+                    status: match review.status {
+                        DomainChangeRequestReviewStatus::Approved => {
+                            ChangeRequestReviewStatus::Approved
+                        }
+                        DomainChangeRequestReviewStatus::ChangesRequested => {
+                            ChangeRequestReviewStatus::ChangesRequested
+                        }
+                        DomainChangeRequestReviewStatus::ReviewRequired => {
+                            ChangeRequestReviewStatus::ReviewRequired
+                        }
+                        DomainChangeRequestReviewStatus::Unknown => {
+                            ChangeRequestReviewStatus::Unknown
+                        }
+                    },
+                    submitted_at: review.submitted_at,
+                })
+                .collect(),
+            checks: details
+                .checks
+                .into_iter()
+                .map(|check| ChangeRequestCheckSummary {
+                    name: check.name,
+                    status: match check.status {
+                        DomainChangeRequestCheckStatus::Passed => ChangeRequestCheckStatus::Passed,
+                        DomainChangeRequestCheckStatus::Failing => {
+                            ChangeRequestCheckStatus::Failing
+                        }
+                        DomainChangeRequestCheckStatus::Running => {
+                            ChangeRequestCheckStatus::Running
+                        }
+                        DomainChangeRequestCheckStatus::Unknown => {
+                            ChangeRequestCheckStatus::Unknown
+                        }
+                    },
+                    web_url: check.web_url,
+                    workflow_run_id: check.workflow_run_id,
+                })
+                .collect(),
+            latest_commit: details
+                .latest_commit
+                .map(|commit| ChangeRequestCommitSummary {
+                    sha: commit.sha,
+                    title: commit.title,
+                    author: commit.author,
+                    committed_at: commit.committed_at,
+                }),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestDetailsErrorResponse {
+    pub message: String,
+}
+
+impl From<GetChangeRequestDetailsFailure> for ChangeRequestDetailsErrorResponse {
+    fn from(failure: GetChangeRequestDetailsFailure) -> Self {
+        let message = match failure {
+            GetChangeRequestDetailsFailure::UnknownSource => {
+                "This source module is not registered."
+            }
+            GetChangeRequestDetailsFailure::SourceNotConnected => {
+                "This source is no longer connected."
+            }
+            GetChangeRequestDetailsFailure::Unsupported => {
+                "This source does not provide change request details."
+            }
+            GetChangeRequestDetailsFailure::RepositoryNotFound => {
+                "This repository is no longer available. Refresh the page."
+            }
+            GetChangeRequestDetailsFailure::ChangeRequestNotFound => {
+                "This change request is no longer available. Refresh the page."
+            }
+            GetChangeRequestDetailsFailure::InvalidCredentials => {
+                "The source rejected the stored credential."
+            }
+            GetChangeRequestDetailsFailure::PermissionDenied => {
+                "The source credential cannot read change request details."
+            }
+            GetChangeRequestDetailsFailure::RateLimited => {
+                "The source rate limit was reached. Try again later."
+            }
+            GetChangeRequestDetailsFailure::ProviderUnavailable => {
+                "The source could not be reached. Try again."
+            }
+            GetChangeRequestDetailsFailure::UnexpectedResponse => {
+                "The source returned change request details in an unexpected format."
+            }
+            GetChangeRequestDetailsFailure::StorageUnavailable => {
+                "The stored source data could not be read."
+            }
+        };
+        Self {
+            message: message.to_owned(),
         }
     }
 }
@@ -1054,6 +1211,12 @@ pub fn render_typescript_contract() -> String {
         ChangeRequestMergeStatus::decl(&config),
         ChangeRequestSummary::decl(&config),
         ListChangeRequestsResponse::decl(&config),
+        ChangeRequestDetailsRequest::decl(&config),
+        ChangeRequestReviewSummary::decl(&config),
+        ChangeRequestCheckSummary::decl(&config),
+        ChangeRequestCommitSummary::decl(&config),
+        ChangeRequestDetailsResponse::decl(&config),
+        ChangeRequestDetailsErrorResponse::decl(&config),
         WorkflowState::decl(&config),
         RunLifecycle::decl(&config),
         RunOutcome::decl(&config),
@@ -1076,7 +1239,7 @@ pub fn render_typescript_contract() -> String {
     ]
     .join("\n\nexport ");
     format!(
-        "// Generated from crates/opsscope-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const settingsLimits = {{\n  synchronizationIntervalSeconds: {{ min: {MIN_SYNCHRONIZATION_INTERVAL_SECONDS}, max: {MAX_SYNCHRONIZATION_INTERVAL_SECONDS} }},\n  recentRunsPerWorkflow: {{ min: {MIN_RECENT_RUNS_PER_WORKFLOW}, max: {MAX_RECENT_RUNS_PER_WORKFLOW} }},\n}} as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  updateStatus: \"{UPDATE_STATUS_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  changeRequests: \"{CHANGE_REQUESTS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  settings: \"{SETTINGS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  updateStatus: \"{UPDATE_STATUS_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  listChangeRequests: \"{LIST_CHANGE_REQUESTS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  getSettings: \"{GET_SETTINGS_DESKTOP_COMMAND}\",\n  updateSettings: \"{UPDATE_SETTINGS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  updateStatus(): Promise<UpdateStatusResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  listChangeRequests(): Promise<ListChangeRequestsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  getSettings(): Promise<MonitoringSettingsResponse>;\n  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
+        "// Generated from crates/opsscope-core/src/contracts.rs. Do not edit.\n\nexport {declarations}\n\nexport const applicationVersion = \"{APPLICATION_VERSION}\" as const;\n\nexport const settingsLimits = {{\n  synchronizationIntervalSeconds: {{ min: {MIN_SYNCHRONIZATION_INTERVAL_SECONDS}, max: {MAX_SYNCHRONIZATION_INTERVAL_SECONDS} }},\n  recentRunsPerWorkflow: {{ min: {MIN_RECENT_RUNS_PER_WORKFLOW}, max: {MAX_RECENT_RUNS_PER_WORKFLOW} }},\n}} as const;\n\nexport const httpRoutes = {{\n  health: \"{HEALTH_HTTP_PATH}\",\n  updateStatus: \"{UPDATE_STATUS_HTTP_PATH}\",\n  workflows: \"{WORKFLOWS_HTTP_PATH}\",\n  changeRequests: \"{CHANGE_REQUESTS_HTTP_PATH}\",\n  changeRequestDetails: \"{CHANGE_REQUEST_DETAILS_HTTP_PATH}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_HTTP_PATH}\",\n  synchronization: \"{SYNCHRONIZATION_HTTP_PATH}\",\n  settings: \"{SETTINGS_HTTP_PATH}\",\n  sources: \"{SOURCES_HTTP_PATH}\",\n  connections: \"{CONNECTIONS_HTTP_PATH}\",\n  repositories: \"{REPOSITORIES_HTTP_PATH}\",\n  repositorySelections: \"{REPOSITORY_SELECTIONS_HTTP_PATH}\",\n}} as const;\n\nexport const desktopCommands = {{\n  health: \"{HEALTH_DESKTOP_COMMAND}\",\n  updateStatus: \"{UPDATE_STATUS_DESKTOP_COMMAND}\",\n  listWorkflows: \"{LIST_WORKFLOWS_DESKTOP_COMMAND}\",\n  listChangeRequests: \"{LIST_CHANGE_REQUESTS_DESKTOP_COMMAND}\",\n  changeRequestDetails: \"{CHANGE_REQUEST_DETAILS_DESKTOP_COMMAND}\",\n  workflowRunLogs: \"{WORKFLOW_RUN_LOGS_DESKTOP_COMMAND}\",\n  synchronizeSources: \"{SYNCHRONIZE_SOURCES_DESKTOP_COMMAND}\",\n  synchronizationStatus: \"{SYNCHRONIZATION_STATUS_DESKTOP_COMMAND}\",\n  getSettings: \"{GET_SETTINGS_DESKTOP_COMMAND}\",\n  updateSettings: \"{UPDATE_SETTINGS_DESKTOP_COMMAND}\",\n  listSources: \"{LIST_SOURCES_DESKTOP_COMMAND}\",\n  connectSource: \"{CONNECT_SOURCE_DESKTOP_COMMAND}\",\n  disconnectSource: \"{DISCONNECT_SOURCE_DESKTOP_COMMAND}\",\n  listRepositories: \"{LIST_REPOSITORIES_DESKTOP_COMMAND}\",\n  saveRepositorySelection: \"{SAVE_REPOSITORY_SELECTION_DESKTOP_COMMAND}\",\n}} as const;\n\nexport interface ApplicationClient {{\n  health(): Promise<HealthResponse>;\n  updateStatus(): Promise<UpdateStatusResponse>;\n  listWorkflows(): Promise<ListWorkflowsResponse>;\n  listChangeRequests(): Promise<ListChangeRequestsResponse>;\n  changeRequestDetails(request: ChangeRequestDetailsRequest): Promise<ChangeRequestDetailsResponse>;\n  workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;\n  synchronizeSources(): Promise<SynchronizationResponse>;\n  synchronizationStatus(): Promise<SynchronizationStatusResponse>;\n  getSettings(): Promise<MonitoringSettingsResponse>;\n  updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;\n  listSources(): Promise<ListSourcesResponse>;\n  connectSource(request: ConnectSourceRequest): Promise<ConnectionSummary>;\n  disconnectSource(request: DisconnectSourceRequest): Promise<DisconnectSourceResponse>;\n  listRepositories(): Promise<ListRepositoriesResponse>;\n  saveRepositorySelection(request: SaveRepositorySelectionRequest): Promise<SaveRepositorySelectionResponse>;\n}}\n",
     )
 }
 

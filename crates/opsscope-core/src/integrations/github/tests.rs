@@ -230,6 +230,71 @@ fn github_change_request_maps_review_checks_and_merge_readiness()
 }
 
 #[test]
+fn change_request_details_request_targets_the_selected_pull_request()
+-> Result<(), Box<dyn std::error::Error>> {
+    let client = GitHubClient::new()?;
+    let token = ProviderToken::new("github_pat_test".to_owned());
+    let repository = Repository {
+        id: "1296269".to_owned(),
+        owner: "octocat".to_owned(),
+        name: "Hello-World".to_owned(),
+        description: None,
+        visibility: RepositoryVisibility::Public,
+        web_url: "https://github.com/octocat/Hello-World".to_owned(),
+    };
+    let request = client
+        .change_request_details_request(&github_com(), &token, &repository, 42)?
+        .build()?;
+    let body: serde_json::Value = serde_json::from_slice(
+        request
+            .body()
+            .and_then(reqwest::Body::as_bytes)
+            .expect("JSON body"),
+    )?;
+
+    assert_eq!(request.url().as_str(), "https://api.github.com/graphql");
+    assert_eq!(body["variables"]["number"], 42);
+    assert!(
+        body["query"]
+            .as_str()
+            .is_some_and(|query| query.contains("reviews(first: 100)"))
+    );
+    Ok(())
+}
+
+#[test]
+fn github_change_request_details_map_provider_independent_sections()
+-> Result<(), Box<dyn std::error::Error>> {
+    let change_request: GitHubChangeRequest = serde_json::from_str(
+        r#"{
+          "id":"PR_kwDOExample","number":42,"title":"Harden authentication",
+          "author":{"login":"octocat"},"headRefName":"auth-fix","baseRefName":"main",
+          "state":"OPEN","isDraft":false,"reviewDecision":"APPROVED",
+          "mergeStateStatus":"CLEAN","createdAt":"2026-09-26T18:00:00Z",
+          "updatedAt":"2026-09-27T18:00:00Z","url":"https://github.com/octocat/Hello-World/pull/42",
+          "body":"Improves token handling.","labels":{"nodes":[{"name":"security"}]},
+          "reviews":{"nodes":[{"author":{"login":"reviewer"},"state":"APPROVED","submittedAt":"2026-09-27T17:00:00Z"}]},
+          "commits":{"nodes":[{"commit":{"oid":"abcdef123456","messageHeadline":"Harden tokens","committedDate":"2026-09-27T16:00:00Z","author":{"name":"Octo Cat","user":{"login":"octocat"}},"statusCheckRollup":{"state":"SUCCESS","contexts":{"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/octocat/Hello-World/actions/runs/123456/job/789"}]}}}}]}
+        }"#,
+    )?;
+
+    let details = change_request.into_details();
+    assert_eq!(details.body.as_deref(), Some("Improves token handling."));
+    assert_eq!(details.labels, vec!["security"]);
+    assert_eq!(
+        details.reviews[0].status,
+        ChangeRequestReviewStatus::Approved
+    );
+    assert_eq!(details.checks[0].status, ChangeRequestCheckStatus::Passed);
+    assert_eq!(details.checks[0].workflow_run_id.as_deref(), Some("123456"));
+    assert_eq!(
+        details.latest_commit.expect("latest commit").sha,
+        "abcdef123456"
+    );
+    Ok(())
+}
+
+#[test]
 fn workflow_run_request_targets_selected_repository_with_required_headers()
 -> Result<(), Box<dyn std::error::Error>> {
     let client = GitHubClient::new()?;

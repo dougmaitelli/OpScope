@@ -170,6 +170,16 @@ impl SqliteDatabase {
                    PRIMARY KEY (source_id, account_id, repository_id, change_request_id),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS change_request_details (
+                   source_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   number INTEGER NOT NULL,
+                   refreshed_at INTEGER NOT NULL,
+                   payload TEXT NOT NULL,
+                   PRIMARY KEY (source_id, account_id, repository_id, number),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    event_type TEXT NOT NULL,

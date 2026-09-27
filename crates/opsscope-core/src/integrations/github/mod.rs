@@ -6,7 +6,8 @@ use crate::application::{
     ValidatedAccount, WorkflowRunLogsFailure,
 };
 use crate::domain::{
-    ChangeRequest, ChangeRequestCheckStatus, ChangeRequestMergeStatus, ChangeRequestReviewStatus,
+    ChangeRequest, ChangeRequestCheck, ChangeRequestCheckStatus, ChangeRequestCommit,
+    ChangeRequestDetails, ChangeRequestMergeStatus, ChangeRequestReview, ChangeRequestReviewStatus,
     ChangeRequestState, Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow,
     WorkflowRun, WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
@@ -231,6 +232,62 @@ impl GitHubClient {
                     "name": repository.name,
                     "first": CHANGE_REQUESTS_PER_PAGE,
                     "after": after,
+                }
+            })))
+    }
+
+    fn change_request_details_request(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        number: u64,
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        const QUERY: &str = r#"
+          query ChangeRequestDetails($owner: String!, $name: String!, $number: Int!) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                id number title state isDraft reviewDecision mergeStateStatus createdAt updatedAt url body
+                author { login }
+                headRefName
+                baseRefName
+                labels(first: 50) { nodes { name } }
+                reviews(first: 100) { nodes { author { login } state submittedAt } }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      oid messageHeadline committedDate
+                      author { name user { login } }
+                      statusCheckRollup {
+                        state
+                        contexts(first: 100) {
+                          nodes {
+                            __typename
+                            ... on CheckRun { name status conclusion detailsUrl }
+                            ... on StatusContext { context state targetUrl }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        "#;
+        Ok(self
+            .client
+            .post(Self::graphql_url(configuration)?)
+            .bearer_auth(token.expose())
+            .header(ACCEPT, ACCEPT_VALUE)
+            .header(USER_AGENT_HEADER, USER_AGENT)
+            .header("X-GitHub-Api-Version", API_VERSION)
+            .json(&serde_json::json!({
+                "query": QUERY,
+                "variables": {
+                    "owner": repository.owner,
+                    "name": repository.name,
+                    "number": number,
                 }
             })))
     }
@@ -507,6 +564,17 @@ struct GitHubChangeRequestData {
 }
 
 #[derive(Deserialize)]
+struct GitHubChangeRequestDetailsData {
+    repository: Option<GitHubChangeRequestDetailsRepository>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubChangeRequestDetailsRepository {
+    pull_request: Option<GitHubChangeRequest>,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GitHubChangeRequestRepository {
     pull_requests: GitHubChangeRequestConnection,
@@ -534,12 +602,56 @@ struct GitHubChangeRequestAuthor {
 #[derive(Deserialize)]
 struct GitHubStatusCheckRollup {
     state: String,
+    #[serde(default)]
+    contexts: Option<GitHubCheckContextConnection>,
+}
+
+#[derive(Deserialize)]
+struct GitHubCheckContextConnection {
+    nodes: Vec<Option<GitHubCheckContext>>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "__typename")]
+enum GitHubCheckContext {
+    CheckRun {
+        name: String,
+        status: String,
+        conclusion: Option<String>,
+        #[serde(rename = "detailsUrl")]
+        details_url: Option<String>,
+    },
+    StatusContext {
+        context: String,
+        state: String,
+        #[serde(rename = "targetUrl")]
+        target_url: Option<String>,
+    },
+}
+
+#[derive(Deserialize)]
+struct GitHubCommitAuthorUser {
+    login: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubCommitAuthor {
+    name: Option<String>,
+    user: Option<GitHubCommitAuthorUser>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GitHubCommit {
     status_check_rollup: Option<GitHubStatusCheckRollup>,
+    #[serde(default)]
+    oid: Option<String>,
+    #[serde(default)]
+    message_headline: Option<String>,
+    #[serde(default)]
+    committed_date: Option<String>,
+    #[serde(default)]
+    author: Option<GitHubCommitAuthor>,
 }
 
 #[derive(Deserialize)]
@@ -550,6 +662,29 @@ struct GitHubCommitNode {
 #[derive(Deserialize)]
 struct GitHubCommitConnection {
     nodes: Vec<Option<GitHubCommitNode>>,
+}
+
+#[derive(Deserialize)]
+struct GitHubLabel {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubLabelConnection {
+    nodes: Vec<Option<GitHubLabel>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubReview {
+    author: Option<GitHubChangeRequestAuthor>,
+    state: String,
+    submitted_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GitHubReviewConnection {
+    nodes: Vec<Option<GitHubReview>>,
 }
 
 #[derive(Deserialize)]
@@ -569,6 +704,12 @@ struct GitHubChangeRequest {
     created_at: String,
     updated_at: String,
     url: String,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
+    labels: Option<GitHubLabelConnection>,
+    #[serde(default)]
+    reviews: Option<GitHubReviewConnection>,
 }
 
 impl From<GitHubChangeRequest> for ChangeRequest {
@@ -622,6 +763,118 @@ impl From<GitHubChangeRequest> for ChangeRequest {
             web_url: change_request.url,
         }
     }
+}
+
+impl GitHubChangeRequest {
+    fn into_details(self) -> ChangeRequestDetails {
+        let labels = self.labels.as_ref().map_or_else(Vec::new, |labels| {
+            labels
+                .nodes
+                .iter()
+                .flatten()
+                .map(|label| label.name.clone())
+                .collect()
+        });
+        let reviews = self.reviews.as_ref().map_or_else(Vec::new, |reviews| {
+            reviews
+                .nodes
+                .iter()
+                .flatten()
+                .map(|review| ChangeRequestReview {
+                    reviewer: review.author.as_ref().map(|author| author.login.clone()),
+                    status: match review.state.as_str() {
+                        "APPROVED" => ChangeRequestReviewStatus::Approved,
+                        "CHANGES_REQUESTED" => ChangeRequestReviewStatus::ChangesRequested,
+                        "PENDING" => ChangeRequestReviewStatus::ReviewRequired,
+                        _ => ChangeRequestReviewStatus::Unknown,
+                    },
+                    submitted_at: review.submitted_at.clone(),
+                })
+                .collect()
+        });
+        let latest = self.commits.nodes.iter().rev().flatten().next();
+        let latest_commit = latest.and_then(|node| {
+            Some(ChangeRequestCommit {
+                sha: node.commit.oid.clone()?,
+                title: node.commit.message_headline.clone()?,
+                author: node.commit.author.as_ref().and_then(|author| {
+                    author
+                        .user
+                        .as_ref()
+                        .map(|user| user.login.clone())
+                        .or_else(|| author.name.clone())
+                }),
+                committed_at: node.commit.committed_date.clone()?,
+            })
+        });
+        let checks = latest
+            .and_then(|node| node.commit.status_check_rollup.as_ref())
+            .and_then(|rollup| rollup.contexts.as_ref())
+            .map_or_else(Vec::new, |contexts| {
+                contexts
+                    .nodes
+                    .iter()
+                    .flatten()
+                    .map(|context| match context {
+                        GitHubCheckContext::CheckRun {
+                            name,
+                            status,
+                            conclusion,
+                            details_url,
+                        } => ChangeRequestCheck {
+                            name: name.clone(),
+                            status: if status != "COMPLETED" {
+                                ChangeRequestCheckStatus::Running
+                            } else {
+                                match conclusion.as_deref() {
+                                    Some("SUCCESS" | "NEUTRAL" | "SKIPPED") => {
+                                        ChangeRequestCheckStatus::Passed
+                                    }
+                                    Some(
+                                        "FAILURE" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED"
+                                        | "STARTUP_FAILURE",
+                                    ) => ChangeRequestCheckStatus::Failing,
+                                    _ => ChangeRequestCheckStatus::Unknown,
+                                }
+                            },
+                            web_url: details_url.clone(),
+                            workflow_run_id: details_url.as_deref().and_then(github_actions_run_id),
+                        },
+                        GitHubCheckContext::StatusContext {
+                            context,
+                            state,
+                            target_url,
+                        } => ChangeRequestCheck {
+                            name: context.clone(),
+                            status: match state.as_str() {
+                                "SUCCESS" => ChangeRequestCheckStatus::Passed,
+                                "FAILURE" | "ERROR" => ChangeRequestCheckStatus::Failing,
+                                "PENDING" | "EXPECTED" => ChangeRequestCheckStatus::Running,
+                                _ => ChangeRequestCheckStatus::Unknown,
+                            },
+                            web_url: target_url.clone(),
+                            workflow_run_id: target_url.as_deref().and_then(github_actions_run_id),
+                        },
+                    })
+                    .collect()
+            });
+        let body = self.body.clone().filter(|body| !body.trim().is_empty());
+        ChangeRequestDetails {
+            change_request: ChangeRequest::from(self),
+            body,
+            labels,
+            reviews,
+            checks,
+            latest_commit,
+        }
+    }
+}
+
+fn github_actions_run_id(url: &str) -> Option<String> {
+    let (_, suffix) = url.split_once("/actions/runs/")?;
+    let run_id = suffix.split(['/', '?', '#']).next()?;
+    (!run_id.is_empty() && run_id.chars().all(|character| character.is_ascii_digit()))
+        .then(|| run_id.to_owned())
 }
 
 fn report_graphql_errors(errors: &[GitHubGraphQlError]) {
@@ -949,6 +1202,43 @@ impl SourceModule for GitHubClient {
             }
         }
         Err(ConnectionValidationFailure::UnexpectedResponse)
+    }
+
+    async fn change_request_details(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        number: u64,
+    ) -> Result<Option<ChangeRequestDetails>, ConnectionValidationFailure> {
+        let response = self
+            .change_request_details_request(configuration, token, repository, number)?
+            .send()
+            .await
+            .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
+        if matches!(
+            response.status(),
+            StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+        ) {
+            return Err(ConnectionValidationFailure::PermissionDenied);
+        }
+        if response.status() != StatusCode::OK {
+            return Err(response_failure(&response));
+        }
+        let response = response
+            .json::<GitHubGraphQlResponse<GitHubChangeRequestDetailsData>>()
+            .await
+            .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
+        if !response.errors.is_empty() {
+            report_graphql_errors(&response.errors);
+        }
+        let repository = response
+            .data
+            .and_then(|data| data.repository)
+            .ok_or_else(|| graphql_failure(&response.errors))?;
+        Ok(repository
+            .pull_request
+            .map(GitHubChangeRequest::into_details))
     }
 
     async fn workflow_run_logs(

@@ -3,14 +3,16 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use opsscope_core::application::{
     CheckForUpdates, ConnectSource, ConnectSourceFailure, ConnectionRepository,
-    ConnectionValidationFailure, DisconnectSource, GetMonitoringSettings, GetWorkflowRunLogs,
-    ListChangeRequests, ListChangeRequestsFailure, ListRepositories, ListRepositoriesFailure,
-    ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
-    RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
-    SecretStore, SettingsFailure, SettingsRepository, SourceRegistry, SynchronizeSources,
-    UpdateMonitoringSettings, WorkflowRunLogsFailure,
+    ConnectionValidationFailure, DisconnectSource, GetChangeRequestDetails,
+    GetChangeRequestDetailsFailure, GetMonitoringSettings, GetWorkflowRunLogs, ListChangeRequests,
+    ListChangeRequestsFailure, ListRepositories, ListRepositoriesFailure, ListSources,
+    ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures, RepositorySelectionRepository,
+    SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
+    SettingsRepository, SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
+    WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
+    ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
     DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListChangeRequestsResponse,
     ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
@@ -27,6 +29,7 @@ pub(crate) struct AppState {
     check_for_updates: CheckForUpdates,
     list_workflows: ListWorkflows,
     list_change_requests: ListChangeRequests,
+    change_request_details: GetChangeRequestDetails,
     workflow_run_logs: GetWorkflowRunLogs,
     connect_source: ConnectSource,
     list_sources: ListSources,
@@ -66,6 +69,7 @@ impl AppState {
                 source_data.clone(),
                 repository_selections.clone(),
             ),
+            change_request_details: GetChangeRequestDetails::new(source_data.clone()),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 registry.clone(),
@@ -99,6 +103,40 @@ impl AppState {
     pub(crate) fn settings_reader(&self) -> GetMonitoringSettings {
         self.get_settings.clone()
     }
+}
+
+pub(crate) async fn change_request_details(
+    State(state): State<AppState>,
+    Json(request): Json<ChangeRequestDetailsRequest>,
+) -> Result<Json<ChangeRequestDetailsResponse>, (StatusCode, Json<ChangeRequestDetailsErrorResponse>)>
+{
+    state
+        .change_request_details
+        .execute(&request.source_id, &request.repository_id, request.number)
+        .await
+        .map(ChangeRequestDetailsResponse::from)
+        .map(Json)
+        .map_err(http_change_request_details_error)
+}
+
+fn http_change_request_details_error(
+    failure: GetChangeRequestDetailsFailure,
+) -> (StatusCode, Json<ChangeRequestDetailsErrorResponse>) {
+    eprintln!("failed to load change request details: {failure}");
+    let status = match failure {
+        GetChangeRequestDetailsFailure::UnknownSource
+        | GetChangeRequestDetailsFailure::RepositoryNotFound
+        | GetChangeRequestDetailsFailure::ChangeRequestNotFound => StatusCode::NOT_FOUND,
+        GetChangeRequestDetailsFailure::SourceNotConnected
+        | GetChangeRequestDetailsFailure::Unsupported => StatusCode::CONFLICT,
+        GetChangeRequestDetailsFailure::InvalidCredentials => StatusCode::UNAUTHORIZED,
+        GetChangeRequestDetailsFailure::PermissionDenied => StatusCode::FORBIDDEN,
+        GetChangeRequestDetailsFailure::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+        GetChangeRequestDetailsFailure::ProviderUnavailable
+        | GetChangeRequestDetailsFailure::UnexpectedResponse => StatusCode::BAD_GATEWAY,
+        GetChangeRequestDetailsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
 }
 
 pub(crate) async fn list_change_requests(

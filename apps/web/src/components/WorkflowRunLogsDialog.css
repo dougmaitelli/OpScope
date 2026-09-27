@@ -67,27 +67,6 @@
   text-decoration: none;
 }
 
-.run-logs-close {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 19px;
-  line-height: 1;
-}
-
-.run-logs-close:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
-  background: var(--surface);
-}
-
 .run-logs-notice {
   margin: 0;
   padding: 7px 14px;

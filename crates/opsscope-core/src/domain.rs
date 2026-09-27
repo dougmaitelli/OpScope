@@ -1,5 +1,7 @@
 //! Provider-independent monitoring concepts.
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RepositoryVisibility {
     Public,
@@ -17,14 +19,14 @@ pub struct Repository {
     pub web_url: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestState {
     Open,
     Closed,
     Merged,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestReviewStatus {
     Approved,
     ChangesRequested,
@@ -32,7 +34,7 @@ pub enum ChangeRequestReviewStatus {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestCheckStatus {
     Passed,
     Failing,
@@ -40,7 +42,7 @@ pub enum ChangeRequestCheckStatus {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestMergeStatus {
     Ready,
     Blocked,
@@ -49,7 +51,7 @@ pub enum ChangeRequestMergeStatus {
 }
 
 /// A provider-independent proposed change to a repository.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ChangeRequest {
     pub id: String,
     pub number: u64,
@@ -65,6 +67,39 @@ pub struct ChangeRequest {
     pub created_at: String,
     pub updated_at: String,
     pub web_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ChangeRequestReview {
+    pub reviewer: Option<String>,
+    pub status: ChangeRequestReviewStatus,
+    pub submitted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ChangeRequestCheck {
+    pub name: String,
+    pub status: ChangeRequestCheckStatus,
+    pub web_url: Option<String>,
+    pub workflow_run_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ChangeRequestCommit {
+    pub sha: String,
+    pub title: String,
+    pub author: Option<String>,
+    pub committed_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ChangeRequestDetails {
+    pub change_request: ChangeRequest,
+    pub body: Option<String>,
+    pub labels: Vec<String>,
+    pub reviews: Vec<ChangeRequestReview>,
+    pub checks: Vec<ChangeRequestCheck>,
+    pub latest_commit: Option<ChangeRequestCommit>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

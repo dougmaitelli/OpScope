@@ -5,7 +5,8 @@ use crate::application::{
     SourceCapability, SourceDescriptor, SourceRepositorySelection,
 };
 use crate::domain::{
-    ChangeRequest, Repository, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs,
+    ChangeRequest, ChangeRequestDetails, Repository, RepositoryVisibility, Workflow, WorkflowRun,
+    WorkflowRunLogs,
 };
 use crate::source_data::{SourceDataFailure, WorkflowRunCollection};
 use async_trait::async_trait;
@@ -137,6 +138,17 @@ impl SourceData for RecordingSourceData {
         _repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
+        self.record(refresh);
+        Ok(None)
+    }
+
+    async fn change_request_details(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        _number: u64,
+        refresh: RefreshMode,
+    ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
         self.record(refresh);
         Ok(None)
     }

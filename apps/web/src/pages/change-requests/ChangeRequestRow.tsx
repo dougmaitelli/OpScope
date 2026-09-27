@@ -28,10 +28,15 @@ const mergeLabels: Record<ChangeRequestMergeStatus, string> = {
   unknown: "Unknown",
 };
 
-export function ChangeRequestRow({ changeRequest }: { changeRequest: ChangeRequestSummary }) {
-  const open = () => window.open(changeRequest.webUrl, "_blank", "noopener,noreferrer");
+export function ChangeRequestRow({
+  changeRequest,
+  onOpen,
+}: {
+  changeRequest: ChangeRequestSummary;
+  onOpen: () => void;
+}) {
   return (
-    <button className="change-request-row" type="button" onClick={open}>
+    <button className="change-request-row" type="button" onClick={onOpen}>
       <span className="change-request-primary">
         <span className="change-request-title">
           <span className="change-request-number">#{changeRequest.number}</span>

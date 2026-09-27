@@ -10,9 +10,9 @@ use opsscope_core::application::{
     SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
-    CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH,
-    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
-    ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
+    CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH,
+    ConnectionSummary, HEALTH_HTTP_PATH, ListChangeRequestsResponse, ListRepositoriesResponse,
+    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
@@ -517,6 +517,8 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
 
     for (method, path) in [
         (Method::GET, WORKFLOWS_HTTP_PATH),
+        (Method::GET, CHANGE_REQUESTS_HTTP_PATH),
+        (Method::POST, CHANGE_REQUEST_DETAILS_HTTP_PATH),
         (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),
         (Method::GET, SETTINGS_HTTP_PATH),
         (Method::PUT, SETTINGS_HTTP_PATH),

@@ -6,6 +6,7 @@ import type {
   WorkflowSummary,
 } from "../generated/contracts.ts";
 import { requestErrorMessage } from "../shared/errors.ts";
+import { DialogCloseButton } from "./DialogCloseButton.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
 import "./WorkflowRunLogsDialog.css";
 
@@ -104,14 +105,7 @@ export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLog
           >
             Open in {workflow.sourceName}
           </a>
-          <button
-            className="run-logs-close"
-            type="button"
-            aria-label="Close logs"
-            onClick={() => dialog.current?.close()}
-          >
-            ×
-          </button>
+          <DialogCloseButton label="Close logs" onClick={() => dialog.current?.close()} />
         </div>
       </header>
 
