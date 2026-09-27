@@ -44,14 +44,15 @@ visibly logged, limited to loopback, and unavailable in release configuration.
 
 ### Authentication credential disclosure
 
-- Passwords are hashed with Argon2id and unique salts.
-- Login passwords are never encryption keys or API bearer tokens.
+- The self-hosted edition uses the OIDC authorization-code flow with PKCE,
+  state, and nonce validation.
+- Provider access, refresh, and ID tokens are not returned to the browser or
+  retained after authentication.
 - Sessions use random opaque identifiers stored server-side.
-- Only a hash of a session identifier is stored in the database.
+- Only a hash of a session identifier is retained in process memory; restarting
+  the server invalidates existing sessions.
 - Cookies are `HttpOnly`, `Secure`, and `SameSite=Strict` in production.
 - Authentication responses and logs never contain reusable credentials.
-- Login attempts are rate limited without creating a trivial global denial of
-  service vector.
 
 ### Cross-site request forgery
 
@@ -77,7 +78,7 @@ cause state changes.
 - Desktop credentials live in the OS keychain.
 - Server credentials are encrypted with a random data-encryption key.
 - The server master key is supplied through a mounted secret file or equivalent
-  secret manager integration, never the web login password.
+  secret manager integration, never the OIDC client secret.
 - Secret values are zeroized where practical and excluded from debug output.
 - Credential replacement and deletion create audit events.
 
@@ -123,15 +124,13 @@ validation, DNS rebinding, redirect handling, and private-network policy.
 - Sign desktop installers and update artifacts.
 - Keep release signing keys outside ordinary development environments.
 
-## Self-hosted bootstrap
+## Self-hosted identity configuration
 
-Initial administration is created from a mounted secret file. The password is
-read once, validated, hashed, and never persisted in plaintext. Startup fails if
-the file has unsafe permissions where the platform permits checking them.
-
-Loopback-only interactive bootstrap may be designed later. A public first-user
-wins setup screen is prohibited because an attacker could claim an uninitialized
-deployment.
+OIDC issuer, client ID, client secret, and public origin are supplied through
+the deployment environment. Startup fails when required values are missing,
+discovery fails, or a non-loopback public origin does not use HTTPS. An optional
+subject allowlist provides application-side admission control; otherwise the
+administrator must restrict access through the provider's client policy.
 
 ## Future GitHub App and webhooks
 

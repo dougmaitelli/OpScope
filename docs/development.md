@@ -44,8 +44,22 @@ The other root commands are:
 | `npm run web:dev` | Run the browser frontend on port 1420 and proxy `/api` to the development server. |
 | `npm run desktop:dev` | Run the Tauri desktop shell and shared Vite frontend. |
 
-The current HTTP server has no authentication and therefore binds exclusively
-to `127.0.0.1`. It is not a deployable self-hosted edition.
+The HTTP server binds to `127.0.0.1` for direct development and is intended to
+sit behind the self-hosted reverse proxy later. It requires OIDC configuration
+at startup:
+
+| Variable | Purpose |
+| --- | --- |
+| `CIWATCHER_PUBLIC_URL` | Browser-visible origin. HTTPS is required except for loopback development. The callback is `<origin>/api/auth/callback`. |
+| `CIWATCHER_OIDC_ISSUER` | Exact issuer URL used for OIDC discovery and ID-token validation. |
+| `CIWATCHER_OIDC_CLIENT_ID` | Confidential web-client identifier. |
+| `CIWATCHER_OIDC_CLIENT_SECRET` | Confidential web-client secret. |
+| `CIWATCHER_OIDC_ALLOWED_SUBJECTS` | Optional comma-separated `sub` allowlist. When unset, provider-side client access policy controls admission. |
+
+For local development, register
+`http://127.0.0.1:1420/api/auth/callback` with the provider and set
+`CIWATCHER_PUBLIC_URL=http://127.0.0.1:1420`. Vite proxies the callback and API
+requests to the Rust server.
 
 The development server stores metadata and encrypted credentials under
 `.ciwatcher-data/`. It creates a 32-byte `master.key` with owner-only

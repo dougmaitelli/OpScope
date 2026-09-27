@@ -96,12 +96,41 @@
 
 .sidebar-footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin-top: auto;
   padding: 10px 8px 0;
   border-top: 1px solid var(--border);
   color: var(--subtle);
   font-size: 10px;
+}
+
+.sidebar-session {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.sidebar-session span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar-session button:hover {
+  color: var(--text);
 }
 
 .workspace {
@@ -143,8 +172,16 @@
   }
 
   .nav-item:disabled,
-  .nav-symbol,
+  .nav-symbol {
+    display: none;
+  }
+
   .sidebar-footer {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+  }
+
+  .sidebar-footer > span:last-child {
     display: none;
   }
 

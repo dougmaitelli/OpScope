@@ -74,14 +74,15 @@ successful snapshot retained during transient provider failures. Users can
 inspect workflow-run logs on demand without persisting them locally. Desktop
 credentials use the operating-system keychain, minimizes to the system tray,
 and delivers native failure notifications. The server encrypts credentials
-stored in SQLite and can deliver failure notifications through Apprise. Manual
-refresh uses a shared synchronization coordinator that
+stored in SQLite, authenticates browser sessions through OpenID Connect, and
+can deliver failure notifications through Apprise. Manual refresh uses a shared
+synchronization coordinator that
 bypasses cache TTLs, prevents overlapping work per source, and continues when an
 individual repository fails. Both editions also invoke the same coordinator on
 a 60-second background schedule, and the UI observes completed synchronization
 runs through lightweight status polling. Connections and discovery are driven
-through the source-module registry in both editions. The unauthenticated
-development server binds only to `127.0.0.1`.
+through the source-module registry in both editions. Every non-health server API
+requires an authenticated web session.
 
 ```sh
 npm install

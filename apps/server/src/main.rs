@@ -13,8 +13,8 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // This unauthenticated skeleton is deliberately loopback-only.
     let listener = TcpListener::bind("127.0.0.1:4317").await?;
+    let authentication = ciwatcher_server::auth::WebAuthentication::from_environment().await?;
     let sources = registered_sources()?;
     let data_dir = env::var_os("CIWATCHER_DATA_DIR")
         .map(PathBuf::from)
@@ -31,15 +31,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         database.clone(),
         ciwatcher_server::notifications::notification_sink_from_environment()?,
     );
-    let application = ciwatcher_server::application(
-        sources,
-        database.clone(),
-        Arc::new(secrets),
-        database.clone(),
-        database.clone(),
-        database,
+    let application = ciwatcher_server::application(ciwatcher_server::ServerDependencies {
+        registry: sources,
+        connections: database.clone(),
+        secrets: Arc::new(secrets),
+        repository_selections: database.clone(),
+        source_data_cache: database.clone(),
+        settings: database,
         failure_notifications,
-    );
+        authentication,
+    });
     let scheduler = tokio::spawn(run_synchronization_schedule(
         application.synchronizer,
         application.settings,

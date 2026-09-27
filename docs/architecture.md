@@ -88,12 +88,12 @@ desktop application does not start a loopback HTTP server.
 
 ## Credential separation
 
-Administrator password verification, browser sessions, provider credentials,
-server-side credential encryption, and future webhook verification use
-independent secrets and lifecycles. The desktop stores provider credentials in
-the operating-system keychain. The self-hosted server uses a separately managed
-encryption key; the administrator password is never an encryption key. See the
-[security model](security.md) for the complete controls.
+OIDC client authentication, browser sessions, provider credentials, server-side
+credential encryption, and future webhook verification use independent secrets
+and lifecycles. The desktop stores provider credentials in the operating-system
+keychain. The self-hosted server uses a separately managed encryption key; the
+OIDC client secret is never an encryption key. See the [security model](security.md)
+for the complete controls.
 
 ## Persistence model
 

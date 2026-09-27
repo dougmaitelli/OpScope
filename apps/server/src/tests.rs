@@ -1,7 +1,8 @@
-use super::router;
+use super::{ServerDependencies, router};
+use crate::auth::{AUTH_SESSION_PATH, CSRF_HEADER, TestSession, WebAuthentication};
 use async_trait::async_trait;
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use ciwatcher_core::application::{
     ConnectionValidationFailure, CredentialField, NoopNotificationSink, NotifyRepositoryFailures,
     ProviderToken, SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount,
@@ -144,19 +145,42 @@ fn test_failure_notifications(database: &SqliteDatabase) -> NotifyRepositoryFail
     NotifyRepositoryFailures::new(Arc::new(database.clone()), Arc::new(NoopNotificationSink))
 }
 
+fn test_dependencies(
+    database: &SqliteDatabase,
+    secrets: EncryptedSecretStore,
+    authentication: WebAuthentication,
+) -> ServerDependencies {
+    ServerDependencies {
+        registry: test_registry(),
+        connections: Arc::new(database.clone()),
+        secrets: Arc::new(secrets),
+        repository_selections: Arc::new(database.clone()),
+        source_data_cache: Arc::new(database.clone()),
+        settings: Arc::new(database.clone()),
+        failure_notifications: test_failure_notifications(database),
+        authentication,
+    }
+}
+
+fn authenticated(
+    mut request: axum::http::request::Builder,
+    session: &TestSession,
+    csrf: bool,
+) -> axum::http::request::Builder {
+    request = request.header(header::COOKIE, &session.cookie);
+    if csrf {
+        request = request.header(CSRF_HEADER, &session.csrf_token);
+    }
+    request
+}
+
 #[tokio::test]
 async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error::Error>> {
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
-    let app = router(
-        test_registry(),
-        Arc::new(database.clone()),
-        Arc::new(secrets),
-        Arc::new(database.clone()),
-        Arc::new(database.clone()),
-        Arc::new(database.clone()),
-        test_failure_notifications(&database),
-    );
+    let authentication = WebAuthentication::for_tests();
+    let session = authentication.issue_test_session();
+    let app = router(test_dependencies(&database, secrets, authentication));
 
     let health = app
         .clone()
@@ -166,7 +190,10 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
 
     let synchronization = app
         .clone()
-        .oneshot(Request::get(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(SYNCHRONIZATION_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
         .await?;
     assert_eq!(synchronization.status(), StatusCode::OK);
     let body = synchronization.into_body().collect().await?.to_bytes();
@@ -175,7 +202,9 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
     assert!(decoded.last_completed_at.is_none());
 
     let workflows = app
-        .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(WORKFLOWS_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
         .await?;
     assert_eq!(workflows.status(), StatusCode::OK);
     let body = workflows.into_body().collect().await?.to_bytes();
@@ -190,19 +219,13 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 -> Result<(), Box<dyn std::error::Error>> {
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
-    let app = router(
-        test_registry(),
-        Arc::new(database.clone()),
-        Arc::new(secrets),
-        Arc::new(database.clone()),
-        Arc::new(database.clone()),
-        Arc::new(database.clone()),
-        test_failure_notifications(&database),
-    );
+    let authentication = WebAuthentication::for_tests();
+    let session = authentication.issue_test_session();
+    let app = router(test_dependencies(&database, secrets, authentication));
     let response = app
         .clone()
         .oneshot(
-            Request::post(CONNECTIONS_HTTP_PATH)
+            authenticated(Request::post(CONNECTIONS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{"sourceId":"example","credential":"test_credential"}"#,
@@ -219,7 +242,9 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let saved = app
         .clone()
-        .oneshot(Request::get(SOURCES_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(SOURCES_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
         .await?;
     assert_eq!(saved.status(), StatusCode::OK);
     let body = saved.into_body().collect().await?.to_bytes();
@@ -236,7 +261,10 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let repositories = app
         .clone()
-        .oneshot(Request::get(REPOSITORIES_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(REPOSITORIES_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
         .await?;
     assert_eq!(repositories.status(), StatusCode::OK);
     let body = repositories.into_body().collect().await?.to_bytes();
@@ -248,18 +276,25 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let selection = app
         .clone()
         .oneshot(
-            Request::put(REPOSITORY_SELECTIONS_HTTP_PATH)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"sources":[{"sourceId":"example","repositoryIds":["repository-1"]}]}"#,
-                ))?,
+            authenticated(
+                Request::put(REPOSITORY_SELECTIONS_HTTP_PATH),
+                &session,
+                true,
+            )
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                r#"{"sources":[{"sourceId":"example","repositoryIds":["repository-1"]}]}"#,
+            ))?,
         )
         .await?;
     assert_eq!(selection.status(), StatusCode::OK);
 
     let synchronization = app
         .clone()
-        .oneshot(Request::post(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::post(SYNCHRONIZATION_HTTP_PATH), &session, true)
+                .body(Body::empty())?,
+        )
         .await?;
     assert_eq!(synchronization.status(), StatusCode::OK);
     let body = synchronization.into_body().collect().await?.to_bytes();
@@ -271,7 +306,9 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let settings = app
         .clone()
-        .oneshot(Request::get(SETTINGS_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(SETTINGS_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
         .await?;
     assert_eq!(settings.status(), StatusCode::OK);
     let body = settings.into_body().collect().await?.to_bytes();
@@ -282,7 +319,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let settings = app
         .clone()
         .oneshot(
-            Request::put(SETTINGS_HTTP_PATH)
+            authenticated(Request::put(SETTINGS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5}"#,
@@ -297,7 +334,10 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let synchronization = app
         .clone()
-        .oneshot(Request::get(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(SYNCHRONIZATION_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
         .await?;
     let body = synchronization.into_body().collect().await?.to_bytes();
     let decoded: SynchronizationStatusResponse = serde_json::from_slice(&body)?;
@@ -306,7 +346,10 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let repositories = app
         .clone()
-        .oneshot(Request::get(REPOSITORIES_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(REPOSITORIES_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
         .await?;
     let body = repositories.into_body().collect().await?.to_bytes();
     let decoded: ListRepositoriesResponse = serde_json::from_slice(&body)?;
@@ -314,7 +357,9 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
 
     let workflows = app
         .clone()
-        .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(WORKFLOWS_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
         .await?;
     assert_eq!(workflows.status(), StatusCode::OK);
     let body = workflows.into_body().collect().await?.to_bytes();
@@ -332,7 +377,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let logs = app
         .clone()
         .oneshot(
-            Request::post(WORKFLOW_RUN_LOGS_HTTP_PATH)
+            authenticated(Request::post(WORKFLOW_RUN_LOGS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     r#"{"sourceId":"example","repositoryId":"repository-1","runId":"run-1","attempt":1}"#,
@@ -349,7 +394,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let disconnected = app
         .clone()
         .oneshot(
-            Request::delete(CONNECTIONS_HTTP_PATH)
+            authenticated(Request::delete(CONNECTIONS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"sourceId":"example"}"#))?,
         )
@@ -357,10 +402,80 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(disconnected.status(), StatusCode::OK);
 
     let saved = app
-        .oneshot(Request::get(SOURCES_HTTP_PATH).body(Body::empty())?)
+        .oneshot(
+            authenticated(Request::get(SOURCES_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
         .await?;
     let body = saved.into_body().collect().await?.to_bytes();
     let decoded: ListSourcesResponse = serde_json::from_slice(&body)?;
     assert!(decoded.sources[0].connection.is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
+-> Result<(), Box<dyn std::error::Error>> {
+    let database = SqliteDatabase::in_memory()?;
+    let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+    let authentication = WebAuthentication::for_tests();
+    let session = authentication.issue_test_session();
+    let app = router(test_dependencies(&database, secrets, authentication));
+
+    for (method, path) in [
+        (Method::GET, WORKFLOWS_HTTP_PATH),
+        (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),
+        (Method::GET, SETTINGS_HTTP_PATH),
+        (Method::PUT, SETTINGS_HTTP_PATH),
+        (Method::GET, SYNCHRONIZATION_HTTP_PATH),
+        (Method::POST, SYNCHRONIZATION_HTTP_PATH),
+        (Method::POST, CONNECTIONS_HTTP_PATH),
+        (Method::DELETE, CONNECTIONS_HTTP_PATH),
+        (Method::GET, SOURCES_HTTP_PATH),
+        (Method::GET, REPOSITORIES_HTTP_PATH),
+        (Method::PUT, REPOSITORY_SELECTIONS_HTTP_PATH),
+        (Method::POST, crate::auth::AUTH_LOGOUT_PATH),
+    ] {
+        let anonymous = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED, "{path}");
+    }
+
+    let missing_csrf = app
+        .clone()
+        .oneshot(
+            authenticated(Request::post(SYNCHRONIZATION_HTTP_PATH), &session, false)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
+
+    let invalid_csrf = app
+        .clone()
+        .oneshot(
+            authenticated(Request::post(SYNCHRONIZATION_HTTP_PATH), &session, false)
+                .header(CSRF_HEADER, "invalid")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(invalid_csrf.status(), StatusCode::FORBIDDEN);
+
+    let auth_status = app
+        .oneshot(
+            authenticated(Request::get(AUTH_SESSION_PATH), &session, false).body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(auth_status.status(), StatusCode::OK);
+    let body = auth_status.into_body().collect().await?.to_bytes();
+    let decoded: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(decoded["authenticated"], true);
+    assert_eq!(decoded["user"]["subject"], "test-user");
+    assert_eq!(decoded["csrfToken"], session.csrf_token);
     Ok(())
 }

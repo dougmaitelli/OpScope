@@ -1,9 +1,12 @@
 //! Development-only HTTP composition. Authentication is added before exposure.
 
+pub mod auth;
 mod handlers;
 pub mod notifications;
 
+use auth::{AUTH_LOGOUT_PATH, WebAuthentication, logout, require_authenticated_session};
 use axum::Router;
+use axum::middleware;
 use axum::routing::{get, post, put};
 use ciwatcher_core::application::{
     ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
@@ -28,15 +31,28 @@ pub struct ServerApplication {
     pub settings: GetMonitoringSettings,
 }
 
-pub fn application(
-    registry: SourceRegistry,
-    connections: Arc<dyn ConnectionRepository>,
-    secrets: Arc<dyn SecretStore>,
-    repository_selections: Arc<dyn RepositorySelectionRepository>,
-    source_data_cache: Arc<dyn SourceDataCache>,
-    settings: Arc<dyn SettingsRepository>,
-    failure_notifications: NotifyRepositoryFailures,
-) -> ServerApplication {
+pub struct ServerDependencies {
+    pub registry: SourceRegistry,
+    pub connections: Arc<dyn ConnectionRepository>,
+    pub secrets: Arc<dyn SecretStore>,
+    pub repository_selections: Arc<dyn RepositorySelectionRepository>,
+    pub source_data_cache: Arc<dyn SourceDataCache>,
+    pub settings: Arc<dyn SettingsRepository>,
+    pub failure_notifications: NotifyRepositoryFailures,
+    pub authentication: WebAuthentication,
+}
+
+pub fn application(dependencies: ServerDependencies) -> ServerApplication {
+    let ServerDependencies {
+        registry,
+        connections,
+        secrets,
+        repository_selections,
+        source_data_cache,
+        settings,
+        failure_notifications,
+        authentication,
+    } = dependencies;
     let state = AppState::new(
         registry,
         connections,
@@ -49,8 +65,7 @@ pub fn application(
     let synchronizer = state.synchronizer();
     let settings = state.settings_reader();
 
-    let router = Router::new()
-        .route(HEALTH_HTTP_PATH, get(health))
+    let protected = Router::new()
         .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
         .route(WORKFLOW_RUN_LOGS_HTTP_PATH, post(workflow_run_logs))
         .route(SETTINGS_HTTP_PATH, get(get_settings).put(update_settings))
@@ -68,6 +83,16 @@ pub fn application(
             REPOSITORY_SELECTIONS_HTTP_PATH,
             put(save_repository_selection),
         )
+        .route(AUTH_LOGOUT_PATH, post(logout))
+        .route_layer(middleware::from_fn_with_state(
+            authentication.clone(),
+            require_authenticated_session,
+        ));
+    let router = Router::new()
+        .route(HEALTH_HTTP_PATH, get(health))
+        .merge(auth::routes())
+        .merge(protected)
+        .layer(axum::Extension(authentication))
         .with_state(state);
     ServerApplication {
         router,
@@ -76,25 +101,8 @@ pub fn application(
     }
 }
 
-pub fn router(
-    registry: SourceRegistry,
-    connections: Arc<dyn ConnectionRepository>,
-    secrets: Arc<dyn SecretStore>,
-    repository_selections: Arc<dyn RepositorySelectionRepository>,
-    source_data_cache: Arc<dyn SourceDataCache>,
-    settings: Arc<dyn SettingsRepository>,
-    failure_notifications: NotifyRepositoryFailures,
-) -> Router {
-    application(
-        registry,
-        connections,
-        secrets,
-        repository_selections,
-        source_data_cache,
-        settings,
-        failure_notifications,
-    )
-    .router
+pub fn router(dependencies: ServerDependencies) -> Router {
+    application(dependencies).router
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { applicationVersion } from "../generated/contracts.ts";
+import { useWebAuthentication } from "../auth/WebAuthentication.tsx";
 import "./AppShell.css";
 
 const pageTitles: Record<string, string> = {
@@ -13,6 +14,7 @@ const pageTitles: Record<string, string> = {
 
 export function AppShell() {
   const location = useLocation();
+  const authentication = useWebAuthentication();
 
   useEffect(() => {
     document.title = `${pageTitles[location.pathname] ?? "Overview"} · CI Watcher`;
@@ -53,7 +55,17 @@ export function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          Version {applicationVersion}
+          {authentication.webAuthentication ? (
+            <div className="sidebar-session">
+              <span title={authentication.user?.subject}>
+                {authentication.user?.email ?? authentication.user?.subject}
+              </span>
+              <button type="button" onClick={() => void authentication.logout()}>
+                Sign out
+              </button>
+            </div>
+          ) : null}
+          <span>Version {applicationVersion}</span>
         </div>
       </aside>
 

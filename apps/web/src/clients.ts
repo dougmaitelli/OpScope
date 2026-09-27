@@ -80,10 +80,16 @@ export class DesktopClient implements ApplicationClient {
 }
 
 export class HttpClient implements ApplicationClient {
+  private csrfToken: string | null = null;
+
   constructor(
     private readonly fetcher: typeof fetch = (input, init) =>
       globalThis.fetch(input, init),
   ) {}
+
+  setCsrfToken(csrfToken: string | null): void {
+    this.csrfToken = csrfToken;
+  }
 
   health(): Promise<HealthResponse> {
     return this.get<HealthResponse>(httpRoutes.health);
@@ -157,6 +163,7 @@ export class HttpClient implements ApplicationClient {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        ...this.csrfHeaders(),
       },
       credentials: "same-origin",
       body: JSON.stringify(body),
@@ -173,6 +180,7 @@ export class HttpClient implements ApplicationClient {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        ...this.csrfHeaders(),
       },
       credentials: "same-origin",
       body: JSON.stringify(body),
@@ -189,6 +197,7 @@ export class HttpClient implements ApplicationClient {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        ...this.csrfHeaders(),
       },
       credentials: "same-origin",
       body: JSON.stringify(body),
@@ -200,6 +209,9 @@ export class HttpClient implements ApplicationClient {
   }
 
   private async responseError(response: Response): Promise<Error> {
+    if (response.status === 401) {
+      globalThis.dispatchEvent(new Event("ciwatcher:unauthorized"));
+    }
     const fallback =
       response.status === 404
         ? "The application endpoint is unavailable. Restart the application service."
@@ -215,6 +227,10 @@ export class HttpClient implements ApplicationClient {
     } catch {
       return new Error(fallback);
     }
+  }
+
+  private csrfHeaders(): Record<string, string> {
+    return this.csrfToken ? { "X-CSRF-Token": this.csrfToken } : {};
   }
 
   private async readJson<T>(response: Response): Promise<T> {

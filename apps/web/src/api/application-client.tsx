@@ -8,9 +8,13 @@ declare global {
   }
 }
 
-const client: ApplicationClient = window.__TAURI_INTERNALS__
-  ? new DesktopClient()
-  : new HttpClient();
+export const isDesktopRuntime = Boolean(window.__TAURI_INTERNALS__);
+const httpClient = new HttpClient();
+const client: ApplicationClient = isDesktopRuntime ? new DesktopClient() : httpClient;
+
+export function setHttpCsrfToken(csrfToken: string | null): void {
+  httpClient.setCsrfToken(csrfToken);
+}
 
 const ApplicationClientContext = createContext<ApplicationClient | null>(null);
 
