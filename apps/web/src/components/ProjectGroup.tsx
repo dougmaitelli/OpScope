@@ -41,7 +41,7 @@ export function groupWorkflows(workflows: WorkflowSummary[]): WorkflowProject[] 
 export function ProjectGroup({ project }: { project: WorkflowProject }) {
   const active = project.workflows.filter((workflow) => workflow.state === "active").length;
   return (
-    <details className="project-group" open>
+    <details className="project-group">
       <summary className="project-header">
         <div className="project-identity">
           <span className="project-mark" aria-hidden="true">
