@@ -60,11 +60,10 @@ impl DesktopState {
                 failure_notifications,
             ),
             save_repository_selection: SaveRepositorySelection::new(
-                sources.clone(),
                 connections.clone(),
                 repository_selections,
             ),
-            disconnect_source: DisconnectSource::new(sources, connections, secrets),
+            disconnect_source: DisconnectSource::new(connections, secrets),
             get_settings: GetMonitoringSettings::new(settings.clone()),
             update_settings: UpdateMonitoringSettings::new(settings),
         }

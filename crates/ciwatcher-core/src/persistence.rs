@@ -48,6 +48,9 @@ impl SqliteDatabase {
                    display_name TEXT,
                    profile_url TEXT NOT NULL,
                    secret_reference TEXT NOT NULL,
+                   configuration TEXT NOT NULL DEFAULT '{}',
+                   connection_key TEXT NOT NULL DEFAULT '',
+                   connection_label TEXT NOT NULL DEFAULT '',
                    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
                  );
                  CREATE TABLE IF NOT EXISTS encrypted_secrets (
@@ -171,6 +174,29 @@ impl SqliteDatabase {
                  ",
             )
             .map_err(|_| PersistenceFailure)?;
+        ensure_connection_column(&connection, "configuration", "TEXT NOT NULL DEFAULT '{}'")?;
+        ensure_connection_column(&connection, "connection_key", "TEXT NOT NULL DEFAULT ''")?;
+        ensure_connection_column(&connection, "connection_label", "TEXT NOT NULL DEFAULT ''")?;
+        connection
+            .execute_batch(
+                "UPDATE connections
+                   SET configuration = CASE
+                         WHEN provider = 'github' THEN '{\"serverUrl\":\"https://github.com\"}'
+                         ELSE '{}'
+                       END,
+                       connection_key = CASE
+                         WHEN provider = 'github' THEN 'https://github.com'
+                         ELSE id
+                       END,
+                       connection_label = CASE
+                         WHEN provider = 'github' THEN 'GitHub.com'
+                         ELSE provider
+                       END
+                 WHERE connection_key = '';
+                 CREATE UNIQUE INDEX IF NOT EXISTS connections_provider_key
+                   ON connections(provider, connection_key);",
+            )
+            .map_err(|_| PersistenceFailure)?;
         connection
             .execute(
                 "INSERT OR IGNORE INTO monitoring_settings (
@@ -268,30 +294,64 @@ impl SqliteDatabase {
     }
 }
 
+fn ensure_connection_column(
+    connection: &Connection,
+    name: &str,
+    definition: &str,
+) -> Result<(), PersistenceFailure> {
+    let exists = connection
+        .query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM pragma_table_info('connections') WHERE name = ?1
+             )",
+            [name],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|_| PersistenceFailure)?;
+    if !exists {
+        connection
+            .execute_batch(&format!(
+                "ALTER TABLE connections ADD COLUMN {name} {definition}"
+            ))
+            .map_err(|_| PersistenceFailure)?;
+    }
+    Ok(())
+}
+
 impl ConnectionRepository for SqliteDatabase {
     fn save(&self, connection: &StoredConnection) -> Result<(), PersistenceFailure> {
+        let configuration =
+            serde_json::to_string(&connection.configuration).map_err(|_| PersistenceFailure)?;
         let mut database = self.lock()?;
         let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
         transaction
             .execute(
                 "INSERT INTO connections (
                    id, provider, account_id, login, display_name, profile_url,
-                   secret_reference, updated_at
-                 ) VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6, unixepoch())
+                   secret_reference, configuration, connection_key, connection_label, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, unixepoch())
                  ON CONFLICT(id) DO UPDATE SET
+                   provider = excluded.provider,
                    account_id = excluded.account_id,
                    login = excluded.login,
                    display_name = excluded.display_name,
                    profile_url = excluded.profile_url,
                    secret_reference = excluded.secret_reference,
+                   configuration = excluded.configuration,
+                   connection_key = excluded.connection_key,
+                   connection_label = excluded.connection_label,
                    updated_at = unixepoch()",
                 params![
+                    connection.id,
                     connection.source_id,
                     connection.account.external_id,
                     connection.account.handle.as_deref().unwrap_or(""),
                     connection.account.name,
                     connection.account.profile_url.as_deref().unwrap_or(""),
                     connection.secret_reference.expose(),
+                    configuration,
+                    connection.unique_key,
+                    connection.label,
                 ],
             )
             .map_err(|_| PersistenceFailure)?;
@@ -299,55 +359,96 @@ impl ConnectionRepository for SqliteDatabase {
             .execute(
                 "INSERT INTO audit_events (event_type, connection_id)
                  VALUES ('connection_saved', ?1)",
-                [&connection.source_id],
+                [&connection.id],
             )
             .map_err(|_| PersistenceFailure)?;
         transaction.commit().map_err(|_| PersistenceFailure)
     }
 
-    fn get(&self, source_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure> {
+    fn get(&self, connection_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure> {
         self.lock()?
             .query_row(
-                "SELECT account_id, login, display_name, profile_url, secret_reference
-                 FROM connections WHERE id = ?1 AND provider = ?1",
-                [source_id],
-                |row| {
-                    let handle: String = row.get(1)?;
-                    let profile_url: String = row.get(3)?;
-                    Ok(StoredConnection {
-                        source_id: source_id.to_owned(),
-                        account: ValidatedAccount {
-                            external_id: row.get(0)?,
-                            name: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                            handle: (!handle.is_empty()).then_some(handle),
-                            profile_url: (!profile_url.is_empty()).then_some(profile_url),
-                        },
-                        secret_reference: SecretReference::from_stored(row.get(4)?),
-                    })
-                },
+                "SELECT id, provider, connection_key, connection_label, configuration,
+                        account_id, login, display_name, profile_url, secret_reference
+                 FROM connections WHERE id = ?1",
+                [connection_id],
+                stored_connection,
             )
             .optional()
             .map_err(|_| PersistenceFailure)
     }
 
-    fn delete(&self, source_id: &str) -> Result<(), PersistenceFailure> {
+    fn find(
+        &self,
+        source_id: &str,
+        unique_key: &str,
+    ) -> Result<Option<StoredConnection>, PersistenceFailure> {
+        self.lock()?
+            .query_row(
+                "SELECT id, provider, connection_key, connection_label, configuration,
+                        account_id, login, display_name, profile_url, secret_reference
+                 FROM connections WHERE provider = ?1 AND connection_key = ?2",
+                params![source_id, unique_key],
+                stored_connection,
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn list(&self) -> Result<Vec<StoredConnection>, PersistenceFailure> {
+        let database = self.lock()?;
+        let mut statement = database
+            .prepare(
+                "SELECT id, provider, connection_key, connection_label, configuration,
+                        account_id, login, display_name, profile_url, secret_reference
+                 FROM connections ORDER BY provider, connection_label, id",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map([], stored_connection)
+            .map_err(|_| PersistenceFailure)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn delete(&self, connection_id: &str) -> Result<(), PersistenceFailure> {
         let mut database = self.lock()?;
         let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
         transaction
-            .execute(
-                "DELETE FROM connections WHERE id = ?1 AND provider = ?1",
-                [source_id],
-            )
+            .execute("DELETE FROM connections WHERE id = ?1", [connection_id])
             .map_err(|_| PersistenceFailure)?;
         transaction
             .execute(
                 "INSERT INTO audit_events (event_type, connection_id)
                  VALUES ('connection_deleted', ?1)",
-                [source_id],
+                [connection_id],
             )
             .map_err(|_| PersistenceFailure)?;
         transaction.commit().map_err(|_| PersistenceFailure)
     }
+}
+
+fn stored_connection(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredConnection> {
+    let configuration_json: String = row.get(4)?;
+    let configuration = serde_json::from_str(&configuration_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    let handle: String = row.get(6)?;
+    let profile_url: String = row.get(8)?;
+    Ok(StoredConnection {
+        id: row.get(0)?,
+        source_id: row.get(1)?,
+        unique_key: row.get(2)?,
+        label: row.get(3)?,
+        configuration,
+        account: ValidatedAccount {
+            external_id: row.get(5)?,
+            handle: (!handle.is_empty()).then_some(handle),
+            name: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+            profile_url: (!profile_url.is_empty()).then_some(profile_url),
+        },
+        secret_reference: SecretReference::from_stored(row.get(9)?),
+    })
 }
 
 impl RepositorySelectionRepository for SqliteDatabase {
@@ -751,14 +852,18 @@ mod tests {
 
     fn test_connection() -> StoredConnection {
         StoredConnection {
+            id: "example".to_owned(),
             source_id: "example".to_owned(),
+            unique_key: "example".to_owned(),
+            label: "Example".to_owned(),
+            configuration: Default::default(),
             account: ValidatedAccount {
                 external_id: "42".to_owned(),
                 name: "The Octocat".to_owned(),
                 handle: Some("octocat".to_owned()),
                 profile_url: Some("https://example.com/octocat".to_owned()),
             },
-            secret_reference: SecretReference::for_source("example", "42"),
+            secret_reference: SecretReference::for_connection("example", "test"),
         }
     }
 
@@ -773,11 +878,74 @@ mod tests {
     }
 
     #[test]
+    fn connection_keys_are_unique_within_a_source_module() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let database = SqliteDatabase::in_memory()?;
+        let first = test_connection();
+        let mut second = test_connection();
+        second.id = "enterprise".to_owned();
+        second.unique_key = "https://github.example.com".to_owned();
+        second.label = "github.example.com".to_owned();
+        database.save(&first)?;
+        database.save(&second)?;
+
+        assert_eq!(ConnectionRepository::list(&database)?.len(), 2);
+        assert_eq!(
+            database
+                .find("example", "https://github.example.com")?
+                .map(|connection| connection.id),
+            Some("enterprise".to_owned())
+        );
+
+        let mut duplicate = second;
+        duplicate.id = "duplicate".to_owned();
+        assert!(database.save(&duplicate).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_github_connection_is_migrated_to_the_default_server()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempdir()?;
+        let database_path = directory.path().join("legacy.sqlite3");
+        let legacy = Connection::open(&database_path)?;
+        legacy.execute_batch(
+            "CREATE TABLE connections (
+               id TEXT PRIMARY KEY,
+               provider TEXT NOT NULL,
+               account_id TEXT NOT NULL,
+               login TEXT NOT NULL,
+               display_name TEXT,
+               profile_url TEXT NOT NULL,
+               secret_reference TEXT NOT NULL,
+               updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+             );
+             INSERT INTO connections (
+               id, provider, account_id, login, display_name, profile_url, secret_reference
+             ) VALUES (
+               'github', 'github', '42', 'octocat', 'The Octocat',
+               'https://github.com/octocat', 'github:42'
+             );",
+        )?;
+        drop(legacy);
+
+        let database = SqliteDatabase::open(&database_path)?;
+        let migrated = database.get("github")?.expect("migrated connection");
+        assert_eq!(migrated.unique_key, "https://github.com");
+        assert_eq!(migrated.label, "GitHub.com");
+        assert_eq!(
+            migrated.configuration.get("serverUrl").map(String::as_str),
+            Some("https://github.com")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn encrypted_secret_round_trips_without_plaintext_storage()
     -> Result<(), Box<dyn std::error::Error>> {
         let database = SqliteDatabase::in_memory()?;
         let store = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
-        let reference = SecretReference::for_source("example", "42");
+        let reference = SecretReference::for_connection("example", "test");
         let plaintext = "github_pat_super_secret";
 
         store.store(&reference, &ProviderToken::new(plaintext.to_owned()))?;
@@ -799,7 +967,7 @@ mod tests {
         let directory = tempdir()?;
         let database_path = directory.path().join("ciwatcher.sqlite3");
         let key_path = directory.path().join("master.key");
-        let reference = SecretReference::for_source("example", "42");
+        let reference = SecretReference::for_connection("example", "test");
 
         {
             let database = SqliteDatabase::open(&database_path)?;
@@ -836,9 +1004,9 @@ mod tests {
         }
 
         let database = SqliteDatabase::open(&database_path)?;
-        assert_eq!(database.list()?.len(), 2);
+        assert_eq!(RepositorySelectionRepository::list(&database)?.len(), 2);
         database.delete("example")?;
-        assert!(database.list()?.is_empty());
+        assert!(RepositorySelectionRepository::list(&database)?.is_empty());
         Ok(())
     }
 

@@ -1,8 +1,8 @@
 //! Transparent access to provider data with optional persistent read-through caching.
 
 use crate::application::{
-    ConnectionRepository, ConnectionValidationFailure, PersistenceFailure, SecretStore,
-    SourceDescriptor, SourceRegistry, WorkflowRunLogsFailure,
+    ConnectedSource, ConnectionRepository, ConnectionValidationFailure, PersistenceFailure,
+    SecretStore, SourceRegistry, StoredConnection, WorkflowRunLogsFailure,
 };
 use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use async_trait::async_trait;
@@ -145,7 +145,7 @@ impl Error for SourceDataFailure {}
 
 #[async_trait]
 pub trait SourceData: Send + Sync {
-    fn sources(&self) -> Vec<SourceDescriptor>;
+    fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure>;
 
     async fn repositories(
         &self,
@@ -227,12 +227,48 @@ impl ReadThroughSourceData {
     fn is_fresh(refreshed_at: u64, now: u64, max_age: Duration) -> bool {
         now.saturating_sub(refreshed_at) < max_age.as_secs()
     }
+
+    fn connection(
+        &self,
+        connection_id: &str,
+    ) -> Result<(StoredConnection, Arc<dyn crate::application::SourceModule>), SourceDataFailure>
+    {
+        let connection = self
+            .connections
+            .get(connection_id)
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?
+            .ok_or(SourceDataFailure::StorageUnavailable)?;
+        let module = self
+            .registry
+            .get(&connection.source_id)
+            .ok_or(SourceDataFailure::Source(
+                ConnectionValidationFailure::UnexpectedResponse,
+            ))?;
+        Ok((connection, module))
+    }
 }
 
 #[async_trait]
 impl SourceData for ReadThroughSourceData {
-    fn sources(&self) -> Vec<SourceDescriptor> {
-        self.registry.descriptors()
+    fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure> {
+        self.connections
+            .list()
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?
+            .into_iter()
+            .map(|connection| {
+                let descriptor =
+                    self.registry
+                        .get(&connection.source_id)
+                        .ok_or(SourceDataFailure::Source(
+                            ConnectionValidationFailure::UnexpectedResponse,
+                        ))?;
+                Ok(ConnectedSource {
+                    id: connection.id,
+                    descriptor: descriptor.descriptor(),
+                    label: connection.label,
+                })
+            })
+            .collect()
     }
 
     async fn repositories(
@@ -240,18 +276,10 @@ impl SourceData for ReadThroughSourceData {
         source_id: &str,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<Repository>>, SourceDataFailure> {
-        let module = self
-            .registry
-            .get(source_id)
-            .ok_or(SourceDataFailure::Source(
-                ConnectionValidationFailure::UnexpectedResponse,
-            ))?;
-        let Some(connection) = self
-            .connections
-            .get(source_id)
-            .map_err(|_| SourceDataFailure::StorageUnavailable)?
-        else {
-            return Ok(None);
+        let (connection, module) = match self.connection(source_id) {
+            Ok(connection) => connection,
+            Err(SourceDataFailure::StorageUnavailable) => return Ok(None),
+            Err(failure) => return Err(failure),
         };
         let now = Self::now();
 
@@ -273,7 +301,10 @@ impl SourceData for ReadThroughSourceData {
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let repositories = match module.list_repositories(&token).await {
+        let repositories = match module
+            .list_repositories(&connection.configuration, &token)
+            .await
+        {
             Ok(repositories) => repositories,
             Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
                 return Ok(cached.map(|snapshot| snapshot.repositories));
@@ -301,17 +332,7 @@ impl SourceData for ReadThroughSourceData {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Vec<Workflow>, SourceDataFailure> {
-        let module = self
-            .registry
-            .get(source_id)
-            .ok_or(SourceDataFailure::Source(
-                ConnectionValidationFailure::UnexpectedResponse,
-            ))?;
-        let connection = self
-            .connections
-            .get(source_id)
-            .map_err(|_| SourceDataFailure::StorageUnavailable)?
-            .ok_or(SourceDataFailure::StorageUnavailable)?;
+        let (connection, module) = self.connection(source_id)?;
         let now = Self::now();
 
         let cached = self.cache.as_ref().and_then(|cache| {
@@ -332,7 +353,10 @@ impl SourceData for ReadThroughSourceData {
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let workflows = match module.list_workflows(&token, repository).await {
+        let workflows = match module
+            .list_workflows(&connection.configuration, &token, repository)
+            .await
+        {
             Ok(workflows) => workflows,
             Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
                 return Ok(cached.map_or_else(Vec::new, |snapshot| snapshot.workflows));
@@ -361,17 +385,7 @@ impl SourceData for ReadThroughSourceData {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure> {
-        let module = self
-            .registry
-            .get(source_id)
-            .ok_or(SourceDataFailure::Source(
-                ConnectionValidationFailure::UnexpectedResponse,
-            ))?;
-        let connection = self
-            .connections
-            .get(source_id)
-            .map_err(|_| SourceDataFailure::StorageUnavailable)?
-            .ok_or(SourceDataFailure::StorageUnavailable)?;
+        let (connection, module) = self.connection(source_id)?;
         let now = Self::now();
         let cached = self.cache.as_ref().and_then(|cache| {
             cache
@@ -404,7 +418,10 @@ impl SourceData for ReadThroughSourceData {
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        match module.list_workflow_runs(&token, repository).await {
+        match module
+            .list_workflow_runs(&connection.configuration, &token, repository)
+            .await
+        {
             Ok(runs) => {
                 let completed_at = Self::now();
                 if let Some(cache) = &self.cache {
@@ -469,21 +486,23 @@ impl SourceData for ReadThroughSourceData {
         repository: &Repository,
         run: &WorkflowRun,
     ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
-        let module = self
-            .registry
-            .get(source_id)
-            .ok_or(WorkflowRunLogsFailure::UnknownSource)?;
         let connection = self
             .connections
             .get(source_id)
             .map_err(|_| WorkflowRunLogsFailure::StorageUnavailable)?
             .ok_or(WorkflowRunLogsFailure::SourceNotConnected)?;
+        let module = self
+            .registry
+            .get(&connection.source_id)
+            .ok_or(WorkflowRunLogsFailure::UnknownSource)?;
         let token = self
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| WorkflowRunLogsFailure::StorageUnavailable)?;
 
-        module.workflow_run_logs(&token, repository, run).await
+        module
+            .workflow_run_logs(&connection.configuration, &token, repository, run)
+            .await
     }
 }
 

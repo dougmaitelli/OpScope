@@ -75,11 +75,10 @@ impl AppState {
                 failure_notifications,
             ),
             save_repository_selection: SaveRepositorySelection::new(
-                registry.clone(),
                 connections.clone(),
                 repository_selections,
             ),
-            disconnect_source: DisconnectSource::new(registry, connections, secrets),
+            disconnect_source: DisconnectSource::new(connections, secrets),
             get_settings: GetMonitoringSettings::new(settings.clone()),
             update_settings: UpdateMonitoringSettings::new(settings),
         }
@@ -211,7 +210,12 @@ pub(crate) async fn connect_source(
     let credential = std::mem::take(&mut request.credential);
     state
         .connect_source
-        .execute(&request.source_id, credential)
+        .execute(
+            &request.source_id,
+            request.connection_id.as_deref(),
+            &request.configuration,
+            credential,
+        )
         .await
         .map(ConnectionSummary::from)
         .map(Json)
@@ -222,7 +226,12 @@ fn http_validation_error(
     failure: ConnectSourceFailure,
 ) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
     let status = match failure {
-        ConnectSourceFailure::UnknownSource => StatusCode::BAD_REQUEST,
+        ConnectSourceFailure::UnknownSource
+        | ConnectSourceFailure::UnknownConnection
+        | ConnectSourceFailure::DuplicateConnection
+        | ConnectSourceFailure::Validation(
+            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration,
+        ) => StatusCode::BAD_REQUEST,
         ConnectSourceFailure::Validation(
             ciwatcher_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
@@ -278,7 +287,8 @@ fn http_repository_error(
             ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListRepositoriesFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
+            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
             | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListRepositoriesFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -300,7 +310,8 @@ fn http_workflow_error(
             ciwatcher_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListWorkflowsFailure::Source(
-            ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
+            ciwatcher_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | ciwatcher_core::application::ConnectionValidationFailure::ProviderUnavailable
             | ciwatcher_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListWorkflowsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -337,7 +348,7 @@ pub(crate) async fn disconnect_source(
 ) -> Result<Json<DisconnectSourceResponse>, StatusCode> {
     state
         .disconnect_source
-        .execute(&request.source_id)
+        .execute(&request.connection_id)
         .map(|disconnected| Json(DisconnectSourceResponse { disconnected }))
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)
 }

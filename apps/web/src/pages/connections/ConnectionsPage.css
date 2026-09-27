@@ -20,6 +20,21 @@
   font-weight: 650;
 }
 
+.connection-field {
+  display: grid;
+  gap: 8px;
+}
+
+.connection-field .field-help {
+  margin-bottom: 2px;
+}
+
+.connection-form input:disabled {
+  color: var(--muted);
+  background: #151a22;
+  cursor: not-allowed;
+}
+
 .connection-form input {
   width: 100%;
   height: 32px;

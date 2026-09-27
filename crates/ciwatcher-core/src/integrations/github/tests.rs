@@ -3,15 +3,70 @@ use reqwest::header::AUTHORIZATION;
 use std::io::Write;
 use zip::write::SimpleFileOptions;
 
+fn github_com() -> ConnectionConfiguration {
+    [(SERVER_URL_KEY.to_owned(), DEFAULT_SERVER_URL.to_owned())]
+        .into_iter()
+        .collect()
+}
+
+#[test]
+fn enterprise_server_is_normalized_and_uses_the_api_v3_prefix()
+-> Result<(), Box<dyn std::error::Error>> {
+    let client = GitHubClient::new()?;
+    let configured = client.configure(
+        &[(
+            SERVER_URL_KEY.to_owned(),
+            "https://GitHub.EXAMPLE.com/".to_owned(),
+        )]
+        .into_iter()
+        .collect(),
+    )?;
+    let token = ProviderToken::new("enterprise_token".to_owned());
+    let request = client
+        .validation_request(&configured.configuration, &token)?
+        .build()?;
+
+    assert_eq!(configured.unique_key, "https://github.example.com");
+    assert_eq!(configured.label, "github.example.com");
+    assert_eq!(
+        request.url().as_str(),
+        "https://github.example.com/api/v3/user"
+    );
+    Ok(())
+}
+
+#[test]
+fn github_configuration_rejects_paths_and_insecure_remote_servers()
+-> Result<(), Box<dyn std::error::Error>> {
+    let client = GitHubClient::new()?;
+    for value in [
+        "https://github.example.com/team",
+        "http://github.example.com",
+        "https://user:password@github.example.com",
+        "https://github.example.com?tenant=one",
+    ] {
+        let result = client.configure(
+            &[(SERVER_URL_KEY.to_owned(), value.to_owned())]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(
+            result,
+            Err(ConnectionValidationFailure::InvalidConfiguration)
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn validation_request_targets_only_github_with_required_headers()
 -> Result<(), Box<dyn std::error::Error>> {
     let client = GitHubClient::new()?;
     let token = ProviderToken::new("github_pat_test".to_owned());
-    let request = client.validation_request(&token).build()?;
+    let request = client.validation_request(&github_com(), &token)?.build()?;
 
     assert_eq!(request.method(), reqwest::Method::GET);
-    assert_eq!(request.url().as_str(), USER_API_URL);
+    assert_eq!(request.url().as_str(), "https://api.github.com/user");
     assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
     assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
     assert_eq!(request.headers()[USER_AGENT_HEADER], USER_AGENT);
@@ -40,7 +95,9 @@ fn github_response_maps_to_a_non_secret_identity() -> Result<(), Box<dyn std::er
 fn repository_request_is_authenticated_and_paginated() -> Result<(), Box<dyn std::error::Error>> {
     let client = GitHubClient::new()?;
     let token = ProviderToken::new("github_pat_test".to_owned());
-    let request = client.repositories_request(&token, 2).build()?;
+    let request = client
+        .repositories_request(&github_com(), &token, 2)?
+        .build()?;
 
     assert_eq!(request.method(), reqwest::Method::GET);
     assert_eq!(request.url().path(), "/user/repos");
@@ -76,7 +133,9 @@ fn workflow_request_targets_selected_repository_with_required_headers()
         visibility: RepositoryVisibility::Public,
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
-    let request = client.workflows_request(&token, &repository, 2).build()?;
+    let request = client
+        .workflows_request(&github_com(), &token, &repository, 2)?
+        .build()?;
 
     assert_eq!(
         request.url().path(),
@@ -114,7 +173,7 @@ fn workflow_run_request_targets_selected_repository_with_required_headers()
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let request = client
-        .workflow_runs_request(&token, &repository, 2)
+        .workflow_runs_request(&github_com(), &token, &repository, 2)?
         .build()?;
 
     assert_eq!(
@@ -161,7 +220,7 @@ fn workflow_run_log_request_targets_the_selected_attempt() -> Result<(), Box<dyn
         provider_conclusion: Some("success".to_owned()),
     };
     let request = client
-        .workflow_run_logs_request(&token, &repository, &run)
+        .workflow_run_logs_request(&github_com(), &token, &repository, &run)?
         .build()?;
 
     assert_eq!(

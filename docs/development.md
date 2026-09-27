@@ -106,6 +106,10 @@ Source modules are added to the central compiled catalog in
 `integrations/mod.rs`. The shared registry exposes them to both editions
 through generic list, connect, and disconnect contracts, so the frontend
 renders new registered sources without provider-specific UI code.
+Modules also declare their connection fields and own their validation and
+normalization. The GitHub module defaults its server URL to `https://github.com`;
+an enterprise origin such as `https://github.example.com` uses the REST prefix
+`/api/v3`.
 
 These are module-level rules rather than separate compilation units. If an
 integration later requires enough isolated dependencies or conditional builds

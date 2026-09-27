@@ -52,8 +52,7 @@
 
 .source-identity,
 .source-state,
-.source-actions,
-.disconnect-confirmation > div {
+.source-actions {
   display: flex;
   align-items: center;
 }
@@ -98,78 +97,21 @@
   gap: 8px;
 }
 
-.connected-account {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin: 0 16px 13px;
-  padding: 9px 11px;
-  border: 1px solid #2e7551;
-  border-radius: 4px;
-  background: #12251d;
+.source-connections {
+  border-top: 1px solid var(--border);
 }
 
-.secure-label {
-  flex: 0 1 auto;
-  margin-left: auto;
-  color: var(--success);
-  font-size: 10px;
-  line-height: 1.35;
-  text-align: right;
-}
-
-.account-mark {
-  display: grid;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border: 1px solid #39795a;
-  border-radius: 4px;
-  color: var(--success);
-  font-size: 8px;
-  font-weight: 750;
-}
-
-.connected-account div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.connected-account strong {
-  overflow-wrap: anywhere;
-  font-size: 11px;
-}
-
-.connected-account div span {
-  color: var(--muted);
-  font-size: 9px;
-}
-
-.disconnect-confirmation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 16px 13px;
-  padding: 10px 11px;
-  border: 1px solid #723d44;
-  border-radius: 4px;
-  background: #24171a;
-}
-
-.disconnect-confirmation p {
+.no-connections {
   margin: 0;
-  color: var(--text);
+  padding: 10px 16px;
+  color: var(--subtle);
+  background: #121923;
   font-size: 10px;
 }
 
 @media (max-width: 700px) {
   .source-row,
-  .source-state,
-  .disconnect-confirmation {
+  .source-state {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -184,13 +126,4 @@
     padding: 14px;
   }
 
-  .connected-account,
-  .disconnect-confirmation {
-    margin-right: 14px;
-    margin-left: 14px;
-  }
-
-  .secure-label {
-    display: none;
-  }
 }

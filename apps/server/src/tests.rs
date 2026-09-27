@@ -4,13 +4,13 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use ciwatcher_core::application::{
-    ConnectionValidationFailure, CredentialField, NoopNotificationSink, NotifyRepositoryFailures,
-    ProviderToken, SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount,
-    WorkflowRunLogsFailure,
+    ConfiguredSource, ConnectionConfiguration, ConnectionValidationFailure, CredentialField,
+    NoopNotificationSink, NotifyRepositoryFailures, ProviderToken, SourceDescriptor, SourceModule,
+    SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use ciwatcher_core::contracts::{
-    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ListRepositoriesResponse, ListSourcesResponse,
-    ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
+    CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH, ListRepositoriesResponse,
+    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
@@ -40,11 +40,24 @@ impl SourceModule for TestSourceModule {
                 placeholder: "token_…".to_owned(),
                 help: "Use a read-only token.".to_owned(),
             },
+            connection_fields: Vec::new(),
         }
+    }
+
+    fn configure(
+        &self,
+        configuration: &ConnectionConfiguration,
+    ) -> Result<ConfiguredSource, ConnectionValidationFailure> {
+        Ok(ConfiguredSource {
+            unique_key: "example".to_owned(),
+            label: "Example".to_owned(),
+            configuration: configuration.clone(),
+        })
     }
 
     async fn validate(
         &self,
+        _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<ValidatedAccount, ConnectionValidationFailure> {
         assert_eq!(token.expose(), "test_credential");
@@ -58,6 +71,7 @@ impl SourceModule for TestSourceModule {
 
     async fn list_repositories(
         &self,
+        _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<Vec<Repository>, ConnectionValidationFailure> {
         assert_eq!(token.expose(), "test_credential");
@@ -73,6 +87,7 @@ impl SourceModule for TestSourceModule {
 
     async fn list_workflows(
         &self,
+        _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<Workflow>, ConnectionValidationFailure> {
@@ -90,6 +105,7 @@ impl SourceModule for TestSourceModule {
 
     async fn list_workflow_runs(
         &self,
+        _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
@@ -120,6 +136,7 @@ impl SourceModule for TestSourceModule {
 
     async fn workflow_run_logs(
         &self,
+        _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         run: &WorkflowRun,
@@ -228,7 +245,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
             authenticated(Request::post(CONNECTIONS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"sourceId":"example","credential":"test_credential"}"#,
+                    r#"{"sourceId":"example","configuration":{},"credential":"test_credential"}"#,
                 ))?,
         )
         .await?;
@@ -239,6 +256,20 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert!(text.contains("example-user"));
     assert!(!text.contains("test_credential"));
     assert!(!text.contains("token"));
+    let connected: ConnectionSummary = serde_json::from_slice(&body)?;
+    let connection_id = connected.id;
+
+    let duplicate = app
+        .clone()
+        .oneshot(
+            authenticated(Request::post(CONNECTIONS_HTTP_PATH), &session, true)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"sourceId":"example","configuration":{},"credential":"test_credential"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(duplicate.status(), StatusCode::BAD_REQUEST);
 
     let saved = app
         .clone()
@@ -250,12 +281,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let body = saved.into_body().collect().await?.to_bytes();
     let decoded: ListSourcesResponse = serde_json::from_slice(&body)?;
     assert_eq!(
-        decoded.sources[0]
-            .connection
-            .as_ref()
-            .expect("saved connection")
-            .handle
-            .as_deref(),
+        decoded.sources[0].connections[0].handle.as_deref(),
         Some("example-user")
     );
 
@@ -269,7 +295,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(repositories.status(), StatusCode::OK);
     let body = repositories.into_body().collect().await?.to_bytes();
     let decoded: ListRepositoriesResponse = serde_json::from_slice(&body)?;
-    assert_eq!(decoded.sources[0].id, "example");
+    assert_eq!(decoded.sources[0].id, connection_id);
     assert_eq!(decoded.sources[0].repositories[0].name, "example-project");
     assert!(!decoded.sources[0].repositories[0].selected);
 
@@ -283,7 +309,13 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
             )
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
-                r#"{"sources":[{"sourceId":"example","repositoryIds":["repository-1"]}]}"#,
+                serde_json::json!({
+                    "sources": [{
+                        "sourceId": connection_id,
+                        "repositoryIds": ["repository-1"]
+                    }]
+                })
+                .to_string(),
             ))?,
         )
         .await?;
@@ -380,7 +412,13 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
             authenticated(Request::post(WORKFLOW_RUN_LOGS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"sourceId":"example","repositoryId":"repository-1","runId":"run-1","attempt":1}"#,
+                    serde_json::json!({
+                        "sourceId": connection_id,
+                        "repositoryId": "repository-1",
+                        "runId": "run-1",
+                        "attempt": 1
+                    })
+                    .to_string(),
                 ))?,
         )
         .await?;
@@ -396,7 +434,9 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         .oneshot(
             authenticated(Request::delete(CONNECTIONS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"sourceId":"example"}"#))?,
+                .body(Body::from(
+                    serde_json::json!({"connectionId": connection_id}).to_string(),
+                ))?,
         )
         .await?;
     assert_eq!(disconnected.status(), StatusCode::OK);
@@ -408,7 +448,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         .await?;
     let body = saved.into_body().collect().await?.to_bytes();
     let decoded: ListSourcesResponse = serde_json::from_slice(&body)?;
-    assert!(decoded.sources[0].connection.is_none());
+    assert!(decoded.sources[0].connections.is_empty());
     Ok(())
 }
 

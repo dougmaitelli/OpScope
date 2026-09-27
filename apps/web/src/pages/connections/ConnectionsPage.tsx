@@ -4,7 +4,7 @@ import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { SourceCard } from "../../components/SourceCard.tsx";
-import type { SourceSummary } from "../../generated/contracts.ts";
+import type { ConnectionSummary, SourceSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import "./ConnectionsPage.css";
 
@@ -14,9 +14,11 @@ export function ConnectionsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+  const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
   const [pendingDisconnectId, setPendingDisconnectId] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [credential, setCredential] = useState("");
+  const [configuration, setConfiguration] = useState<Record<string, string>>({});
   const [connecting, setConnecting] = useState(false);
   const [note, setNote] = useState("");
   const [noteError, setNoteError] = useState(false);
@@ -39,12 +41,22 @@ export function ConnectionsPage() {
   }, [load]);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
-  const connectedCount = sources.filter((source) => source.connection !== null).length;
+  const activeConnection = activeSource?.connections.find(
+    (connection) => connection.id === activeConnectionId,
+  ) ?? null;
+  const connectedCount = sources.reduce((total, source) => total + source.connections.length, 0);
 
-  const openEditor = (source: SourceSummary) => {
+  const openEditor = (source: SourceSummary, connection?: ConnectionSummary) => {
     setActiveSourceId(source.id);
+    setActiveConnectionId(connection?.id ?? null);
     setPendingDisconnectId(null);
     setCredential("");
+    setConfiguration(
+      connection?.configuration
+      ?? Object.fromEntries(
+        source.connectionFields.map((field) => [field.key, field.defaultValue]),
+      ),
+    );
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -59,16 +71,28 @@ export function ConnectionsPage() {
     try {
       const connection = await client.connectSource({
         sourceId: activeSource.id,
+        connectionId: activeConnection?.id ?? null,
+        configuration,
         credential: value,
       });
       setSources((current) =>
         current.map((source) =>
-          source.id === activeSource.id ? { ...source, connection } : source,
+          source.id === activeSource.id
+            ? {
+                ...source,
+                connections: activeConnection
+                  ? source.connections.map((candidate) =>
+                      candidate.id === connection.id ? connection : candidate)
+                  : [...source.connections, connection],
+              }
+            : source,
         ),
       );
       setActiveSourceId(null);
+      setActiveConnectionId(null);
       setCredential("");
-      setNote(`${activeSource.name} connected.`);
+      setConfiguration({});
+      setNote(`${connection.label} connected.`);
     } catch (error: unknown) {
       setNoteError(true);
       setNote(requestErrorMessage(error));
@@ -77,18 +101,25 @@ export function ConnectionsPage() {
     }
   };
 
-  const disconnect = async (source: SourceSummary) => {
-    setDisconnectingId(source.id);
+  const disconnect = async (connection: ConnectionSummary) => {
+    setDisconnectingId(connection.id);
     setNoteError(false);
     try {
-      await client.disconnectSource({ sourceId: source.id });
+      await client.disconnectSource({ connectionId: connection.id });
       setSources((current) =>
-        current.map((candidate) =>
-          candidate.id === source.id ? { ...candidate, connection: null } : candidate,
+        current.map((source) =>
+          source.connections.some((candidate) => candidate.id === connection.id)
+            ? {
+                ...source,
+                connections: source.connections.filter(
+                  (candidate) => candidate.id !== connection.id,
+                ),
+              }
+            : source,
         ),
       );
       setPendingDisconnectId(null);
-      setNote(`${source.name} disconnected and its credential removed.`);
+      setNote(`${connection.label} disconnected and its credential removed.`);
     } catch (error: unknown) {
       setNoteError(true);
       setNote(requestErrorMessage(error));
@@ -123,12 +154,13 @@ export function ConnectionsPage() {
               <SourceCard
                 key={source.id}
                 source={source}
-                awaitingDisconnect={pendingDisconnectId === source.id}
-                disconnecting={disconnectingId === source.id}
+                pendingDisconnectId={pendingDisconnectId}
+                disconnectingId={disconnectingId}
                 onConfigure={openEditor}
-                onRequestDisconnect={(selected) => {
-                  setPendingDisconnectId(selected.id);
+                onRequestDisconnect={(connection) => {
+                  setPendingDisconnectId(connection.id);
                   setActiveSourceId(null);
+                  setActiveConnectionId(null);
                 }}
                 onCancelDisconnect={() => setPendingDisconnectId(null)}
                 onDisconnect={disconnect}
@@ -150,13 +182,34 @@ export function ConnectionsPage() {
           <div className="editor-copy">
             <p className="section-label">Source credential</p>
             <h2 id="connection-heading">
-              {activeSource.connection
-                ? `Replace ${activeSource.name} credential`
-                : `Connect ${activeSource.name}`}
+              {activeConnection
+                ? `Replace ${activeConnection?.label} credential`
+                : `Add ${activeSource.name} connection`}
             </h2>
             <p>CI Watcher validates the account before storing the credential securely.</p>
           </div>
           <form className="connection-form" aria-busy={connecting} onSubmit={(event) => void submit(event)}>
+            {activeSource.connectionFields.map((field) => (
+              <div className="connection-field" key={field.key}>
+                <label htmlFor={`source-${field.key}`}>{field.label}</label>
+                <input
+                  id={`source-${field.key}`}
+                  type="url"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  disabled={activeConnection !== null}
+                  placeholder={field.placeholder}
+                  value={configuration[field.key] ?? ""}
+                  onChange={(event) => setConfiguration((current) => ({
+                    ...current,
+                    [field.key]: event.currentTarget.value,
+                  }))}
+                />
+                <p className="field-help">{field.help}</p>
+              </div>
+            ))}
             <label htmlFor="source-credential">{activeSource.credential.label}</label>
             <input
               id="source-credential"
@@ -179,7 +232,9 @@ export function ConnectionsPage() {
                 type="button"
                 onClick={() => {
                   setActiveSourceId(null);
+                  setActiveConnectionId(null);
                   setCredential("");
+                  setConfiguration({});
                 }}
               >
                 Cancel
@@ -187,9 +242,9 @@ export function ConnectionsPage() {
               <button className="primary-button" type="submit" disabled={connecting}>
                 {connecting
                   ? "Connecting…"
-                  : activeSource.connection
+                  : activeConnection
                     ? "Replace credential"
-                    : `Connect ${activeSource.name}`}
+                    : "Add connection"}
               </button>
             </div>
           </form>

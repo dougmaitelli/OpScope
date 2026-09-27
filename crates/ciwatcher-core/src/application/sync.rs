@@ -99,7 +99,11 @@ impl SynchronizeSources {
             ..SynchronizationSummary::default()
         };
 
-        for source in self.source_data.sources() {
+        for source in self
+            .source_data
+            .sources()
+            .map_err(|_| SynchronizationFailure::StorageUnavailable)?
+        {
             let selected_ids = selections
                 .iter()
                 .filter(|selection| selection.source_id == source.id)
@@ -220,7 +224,7 @@ const fn nonzero_timestamp(timestamp: u64) -> Option<u64> {
 mod tests {
     use super::*;
     use crate::application::{
-        ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
+        ConnectedSource, ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
         NoopNotificationSink, NotificationStateRepository, PersistenceFailure, RepositorySelection,
         SourceDescriptor, SourceRepositorySelection,
     };
@@ -288,18 +292,23 @@ mod tests {
 
     #[async_trait]
     impl SourceData for RecordingSourceData {
-        fn sources(&self) -> Vec<SourceDescriptor> {
-            vec![SourceDescriptor {
+        fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure> {
+            Ok(vec![ConnectedSource {
                 id: "source".to_owned(),
-                name: "Source".to_owned(),
-                description: "Test source".to_owned(),
-                abbreviation: "SO".to_owned(),
-                credential: CredentialField {
-                    label: "Token".to_owned(),
-                    placeholder: "token".to_owned(),
-                    help: "Test token".to_owned(),
+                label: "Source".to_owned(),
+                descriptor: SourceDescriptor {
+                    id: "module".to_owned(),
+                    name: "Source".to_owned(),
+                    description: "Test source".to_owned(),
+                    abbreviation: "SO".to_owned(),
+                    credential: CredentialField {
+                        label: "Token".to_owned(),
+                        placeholder: "token".to_owned(),
+                        help: "Test token".to_owned(),
+                    },
+                    connection_fields: Vec::new(),
                 },
-            }]
+            }])
         }
 
         async fn repositories(

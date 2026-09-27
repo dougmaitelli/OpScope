@@ -24,6 +24,7 @@ impl GetWorkflowRunLogs {
         if !self
             .source_data
             .sources()
+            .map_err(source_data_failure)?
             .iter()
             .any(|source| source.id == source_id)
         {
@@ -61,6 +62,9 @@ fn source_data_failure(failure: SourceDataFailure) -> WorkflowRunLogsFailure {
     match failure {
         SourceDataFailure::StorageUnavailable => WorkflowRunLogsFailure::StorageUnavailable,
         SourceDataFailure::Source(failure) => match failure {
+            super::ConnectionValidationFailure::InvalidConfiguration => {
+                WorkflowRunLogsFailure::UnexpectedResponse
+            }
             super::ConnectionValidationFailure::InvalidCredentials => {
                 WorkflowRunLogsFailure::InvalidCredentials
             }

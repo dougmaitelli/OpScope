@@ -94,9 +94,14 @@ claim to protect credentials after complete compromise of the running host.
 
 ### Server-side request forgery
 
-Version one supports only `github.com` and does not accept an arbitrary API base
-URL. GitHub Enterprise support requires a separate design for destination
-validation, DNS rebinding, redirect handling, and private-network policy.
+GitHub connections accept a server origin, not an arbitrary API endpoint.
+Remote origins require HTTPS; loopback HTTP is accepted only for development.
+Origins containing credentials, paths, query strings, or fragments are rejected
+and normalized before duplicate detection. Authenticated API requests never
+follow redirects, which prevents a configured server from redirecting a token
+to another destination. Private-network origins remain available because they
+are a normal GitHub Enterprise deployment target and must therefore be treated
+as administrator-controlled configuration.
 
 ### Synchronization abuse and provider rate limits
 

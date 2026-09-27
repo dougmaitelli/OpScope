@@ -26,7 +26,7 @@ pub use sync::{
 use crate::domain::{Repository, Workflow, WorkflowRun, WorkflowRunLogs};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
 use async_trait::async_trait;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -72,16 +72,36 @@ pub struct CredentialField {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConnectionField {
+    pub key: String,
+    pub label: String,
+    pub placeholder: String,
+    pub help: String,
+    pub default_value: String,
+}
+
+pub type ConnectionConfiguration = BTreeMap<String, String>;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConfiguredSource {
+    pub unique_key: String,
+    pub label: String,
+    pub configuration: ConnectionConfiguration,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceDescriptor {
     pub id: String,
     pub name: String,
     pub description: String,
     pub abbreviation: String,
     pub credential: CredentialField,
+    pub connection_fields: Vec<ConnectionField>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConnectionValidationFailure {
+    InvalidConfiguration,
     InvalidCredentials,
     PermissionDenied,
     RateLimited,
@@ -92,6 +112,7 @@ pub enum ConnectionValidationFailure {
 impl Display for ConnectionValidationFailure {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
+            Self::InvalidConfiguration => "source configuration is invalid",
             Self::InvalidCredentials => "provider rejected the credential",
             Self::PermissionDenied => "provider credential lacks required permission",
             Self::RateLimited => "provider rate limit reached",
@@ -144,30 +165,40 @@ impl Error for WorkflowRunLogsFailure {}
 pub trait SourceModule: Send + Sync {
     fn descriptor(&self) -> SourceDescriptor;
 
+    fn configure(
+        &self,
+        configuration: &ConnectionConfiguration,
+    ) -> Result<ConfiguredSource, ConnectionValidationFailure>;
+
     async fn validate(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<ValidatedAccount, ConnectionValidationFailure>;
 
     async fn list_repositories(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<Vec<Repository>, ConnectionValidationFailure>;
 
     async fn list_workflows(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<Workflow>, ConnectionValidationFailure>;
 
     async fn list_workflow_runs(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure>;
 
     async fn workflow_run_logs(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         run: &WorkflowRun,
@@ -191,13 +222,6 @@ impl SourceRegistry {
             .find(|module| module.descriptor().id == source_id)
             .cloned()
     }
-
-    pub(crate) fn descriptors(&self) -> Vec<SourceDescriptor> {
-        self.modules
-            .iter()
-            .map(|module| module.descriptor())
-            .collect()
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -205,8 +229,8 @@ pub struct SecretReference(String);
 
 impl SecretReference {
     #[must_use]
-    pub fn for_source(source_id: &str, external_id: &str) -> Self {
-        Self(format!("{source_id}:{external_id}"))
+    pub fn for_connection(connection_id: &str, nonce: &str) -> Self {
+        Self(format!("connection:{connection_id}:{nonce}"))
     }
 
     #[must_use]
@@ -222,7 +246,11 @@ impl SecretReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredConnection {
+    pub id: String,
     pub source_id: String,
+    pub unique_key: String,
+    pub label: String,
+    pub configuration: ConnectionConfiguration,
     pub account: ValidatedAccount,
     pub secret_reference: SecretReference,
 }
@@ -240,8 +268,14 @@ impl Error for PersistenceFailure {}
 
 pub trait ConnectionRepository: Send + Sync {
     fn save(&self, connection: &StoredConnection) -> Result<(), PersistenceFailure>;
-    fn get(&self, source_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure>;
-    fn delete(&self, source_id: &str) -> Result<(), PersistenceFailure>;
+    fn get(&self, connection_id: &str) -> Result<Option<StoredConnection>, PersistenceFailure>;
+    fn find(
+        &self,
+        source_id: &str,
+        unique_key: &str,
+    ) -> Result<Option<StoredConnection>, PersistenceFailure>;
+    fn list(&self) -> Result<Vec<StoredConnection>, PersistenceFailure>;
+    fn delete(&self, connection_id: &str) -> Result<(), PersistenceFailure>;
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -277,6 +311,8 @@ pub trait SecretStore: Send + Sync {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConnectSourceFailure {
     UnknownSource,
+    UnknownConnection,
+    DuplicateConnection,
     Validation(ConnectionValidationFailure),
     StorageUnavailable,
 }
@@ -285,6 +321,8 @@ impl Display for ConnectSourceFailure {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnknownSource => formatter.write_str("source module is not registered"),
+            Self::UnknownConnection => formatter.write_str("source connection does not exist"),
+            Self::DuplicateConnection => formatter.write_str("source connection already exists"),
             Self::Validation(failure) => Display::fmt(failure, formatter),
             Self::StorageUnavailable => formatter.write_str("connection storage unavailable"),
         }
@@ -317,35 +355,76 @@ impl ConnectSource {
     pub async fn execute(
         &self,
         source_id: &str,
+        connection_id: Option<&str>,
+        configuration: &ConnectionConfiguration,
         token: String,
-    ) -> Result<ValidatedAccount, ConnectSourceFailure> {
+    ) -> Result<ConnectionState, ConnectSourceFailure> {
         let module = self
             .registry
             .get(source_id)
             .ok_or(ConnectSourceFailure::UnknownSource)?;
+        let configured = module
+            .configure(configuration)
+            .map_err(ConnectSourceFailure::Validation)?;
         if token.trim().is_empty() {
             return Err(ConnectSourceFailure::Validation(
                 ConnectionValidationFailure::InvalidCredentials,
             ));
         }
 
+        let old_connection = if let Some(connection_id) = connection_id {
+            let connection = self
+                .connections
+                .get(connection_id)
+                .map_err(|_| ConnectSourceFailure::StorageUnavailable)?
+                .ok_or(ConnectSourceFailure::UnknownConnection)?;
+            if connection.source_id != source_id {
+                return Err(ConnectSourceFailure::UnknownConnection);
+            }
+            Some(connection)
+        } else {
+            None
+        };
+        if old_connection
+            .as_ref()
+            .is_some_and(|connection| connection.unique_key != configured.unique_key)
+        {
+            return Err(ConnectSourceFailure::Validation(
+                ConnectionValidationFailure::InvalidConfiguration,
+            ));
+        }
+        if self
+            .connections
+            .find(source_id, &configured.unique_key)
+            .map_err(|_| ConnectSourceFailure::StorageUnavailable)?
+            .is_some_and(|existing| Some(existing.id.as_str()) != connection_id)
+        {
+            return Err(ConnectSourceFailure::DuplicateConnection);
+        }
+
         let token = ProviderToken::new(token);
         let account = module
-            .validate(&token)
+            .validate(&configured.configuration, &token)
             .await
             .map_err(ConnectSourceFailure::Validation)?;
-        let old_connection = self
-            .connections
-            .get(source_id)
+        let connection_id = old_connection
+            .as_ref()
+            .map_or_else(random_connection_id, |connection| Ok(connection.id.clone()))
             .map_err(|_| ConnectSourceFailure::StorageUnavailable)?;
-        let secret_reference = SecretReference::for_source(source_id, &account.external_id);
+        let secret_nonce =
+            random_identifier().map_err(|_| ConnectSourceFailure::StorageUnavailable)?;
+        let secret_reference = SecretReference::for_connection(&connection_id, &secret_nonce);
 
         self.secrets
             .store(&secret_reference, &token)
             .map_err(|_| ConnectSourceFailure::StorageUnavailable)?;
 
         let connection = StoredConnection {
+            id: connection_id,
             source_id: source_id.to_owned(),
+            unique_key: configured.unique_key,
+            label: configured.label,
+            configuration: configured.configuration,
             account: account.clone(),
             secret_reference: secret_reference.clone(),
         };
@@ -365,14 +444,43 @@ impl ConnectSource {
             _ = self.secrets.delete(&old.secret_reference);
         }
 
-        Ok(account)
+        Ok(ConnectionState::from(connection))
+    }
+}
+
+fn random_connection_id() -> Result<String, PersistenceFailure> {
+    random_identifier().map(|identifier| format!("source-{identifier}"))
+}
+
+fn random_identifier() -> Result<String, PersistenceFailure> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).map_err(|_| PersistenceFailure)?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConnectionState {
+    pub id: String,
+    pub label: String,
+    pub configuration: ConnectionConfiguration,
+    pub account: ValidatedAccount,
+}
+
+impl From<StoredConnection> for ConnectionState {
+    fn from(connection: StoredConnection) -> Self {
+        Self {
+            id: connection.id,
+            label: connection.label,
+            configuration: connection.configuration,
+            account: connection.account,
+        }
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceState {
     pub descriptor: SourceDescriptor,
-    pub account: Option<ValidatedAccount>,
+    pub connections: Vec<ConnectionState>,
 }
 
 #[derive(Clone)]
@@ -391,25 +499,38 @@ impl ListSources {
     }
 
     pub fn execute(&self) -> Result<Vec<SourceState>, PersistenceFailure> {
-        self.registry
+        let connections = self.connections.list()?;
+        Ok(self
+            .registry
             .modules
             .iter()
             .map(|module| {
                 let descriptor = module.descriptor();
-                self.connections
-                    .get(&descriptor.id)
-                    .map(|connection| SourceState {
-                        descriptor,
-                        account: connection.map(|stored| stored.account),
-                    })
+                let source_connections = connections
+                    .iter()
+                    .filter(|connection| connection.source_id == descriptor.id)
+                    .cloned()
+                    .map(ConnectionState::from)
+                    .collect();
+                SourceState {
+                    descriptor,
+                    connections: source_connections,
+                }
             })
-            .collect()
+            .collect())
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConnectedSource {
+    pub id: String,
+    pub descriptor: SourceDescriptor,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RepositoryCatalog {
-    pub source: SourceDescriptor,
+    pub source: ConnectedSource,
     pub repositories: Vec<RepositoryState>,
 }
 
@@ -462,7 +583,11 @@ impl ListRepositories {
             .map_err(|_| ListRepositoriesFailure::StorageUnavailable)?
             .into_iter()
             .collect::<HashSet<_>>();
-        for source in self.source_data.sources() {
+        for source in self
+            .source_data
+            .sources()
+            .map_err(list_repositories_failure)?
+        {
             let Some(repositories) = self
                 .source_data
                 .repositories(&source.id, RefreshMode::IfStale)
@@ -521,7 +646,6 @@ impl Error for SaveRepositorySelectionFailure {}
 
 #[derive(Clone)]
 pub struct SaveRepositorySelection {
-    registry: SourceRegistry,
     connections: Arc<dyn ConnectionRepository>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
@@ -529,12 +653,10 @@ pub struct SaveRepositorySelection {
 impl SaveRepositorySelection {
     #[must_use]
     pub fn new(
-        registry: SourceRegistry,
         connections: Arc<dyn ConnectionRepository>,
         selections: Arc<dyn RepositorySelectionRepository>,
     ) -> Self {
         Self {
-            registry,
             connections,
             selections,
         }
@@ -547,7 +669,6 @@ impl SaveRepositorySelection {
         let mut source_ids = HashSet::new();
         for selection in selections {
             if !source_ids.insert(&selection.source_id)
-                || self.registry.get(&selection.source_id).is_none()
                 || selection.repository_ids.iter().any(String::is_empty)
                 || selection
                     .repository_ids
@@ -580,7 +701,7 @@ impl SaveRepositorySelection {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveredWorkflow {
-    pub source: SourceDescriptor,
+    pub source: ConnectedSource,
     pub repository: Repository,
     pub workflow: Workflow,
     pub runs: Vec<WorkflowRun>,
@@ -653,7 +774,7 @@ impl ListWorkflows {
         let mut stale = false;
         let mut sync_error = None;
 
-        for source in self.source_data.sources() {
+        for source in self.source_data.sources().map_err(list_workflows_failure)? {
             let selected_ids = selections
                 .iter()
                 .filter(|selection| selection.source_id == source.id)
@@ -735,34 +856,25 @@ fn list_workflows_failure(failure: SourceDataFailure) -> ListWorkflowsFailure {
 
 #[derive(Clone)]
 pub struct DisconnectSource {
-    registry: SourceRegistry,
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
 }
 
 impl DisconnectSource {
     #[must_use]
-    pub fn new(
-        registry: SourceRegistry,
-        connections: Arc<dyn ConnectionRepository>,
-        secrets: Arc<dyn SecretStore>,
-    ) -> Self {
+    pub fn new(connections: Arc<dyn ConnectionRepository>, secrets: Arc<dyn SecretStore>) -> Self {
         Self {
-            registry,
             connections,
             secrets,
         }
     }
 
-    pub fn execute(&self, source_id: &str) -> Result<bool, PersistenceFailure> {
-        if self.registry.get(source_id).is_none() {
-            return Ok(false);
-        }
-        let Some(connection) = self.connections.get(source_id)? else {
+    pub fn execute(&self, connection_id: &str) -> Result<bool, PersistenceFailure> {
+        let Some(connection) = self.connections.get(connection_id)? else {
             return Ok(false);
         };
         self.secrets.delete(&connection.secret_reference)?;
-        self.connections.delete(source_id)?;
+        self.connections.delete(connection_id)?;
         Ok(true)
     }
 }

@@ -1,12 +1,13 @@
 //! Data transfer objects shared by HTTP and desktop IPC.
 
 use crate::application::{
-    ConnectSourceFailure, ConnectionValidationFailure, DiscoveredWorkflow, ListRepositoriesFailure,
-    ListWorkflowsFailure, MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
-    MIN_RECENT_RUNS_PER_WORKFLOW, MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings,
-    RepositoryCatalog, RepositoryState, SaveRepositorySelectionFailure, SettingsFailure,
-    SourceRepositorySelection, SourceState, SynchronizationFailure, SynchronizationStatus,
-    SynchronizationSummary, ValidatedAccount, WorkflowInventory, WorkflowRunLogsFailure,
+    ConnectSourceFailure, ConnectionState, ConnectionValidationFailure, DiscoveredWorkflow,
+    ListRepositoriesFailure, ListWorkflowsFailure, MAX_RECENT_RUNS_PER_WORKFLOW,
+    MAX_SYNCHRONIZATION_INTERVAL_SECONDS, MIN_RECENT_RUNS_PER_WORKFLOW,
+    MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings, RepositoryCatalog, RepositoryState,
+    SaveRepositorySelectionFailure, SettingsFailure, SourceRepositorySelection, SourceState,
+    SynchronizationFailure, SynchronizationStatus, SynchronizationSummary, WorkflowInventory,
+    WorkflowRunLogsFailure,
 };
 use crate::domain::{
     RepositoryVisibility as DomainRepositoryVisibility, RunLifecycle as DomainRunLifecycle,
@@ -14,9 +15,10 @@ use crate::domain::{
     WorkflowRunLogs as DomainWorkflowRunLogs, WorkflowState as DomainWorkflowState,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 9;
+pub const CONTRACT_VERSION: u8 = 10;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const WORKFLOWS_HTTP_PATH: &str = "/api/workflows";
@@ -66,12 +68,17 @@ impl HealthResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectSourceRequest {
     pub source_id: String,
+    pub connection_id: Option<String>,
+    pub configuration: BTreeMap<String, String>,
     pub credential: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionSummary {
+    pub id: String,
+    pub label: String,
+    pub configuration: BTreeMap<String, String>,
     pub external_id: String,
     pub name: String,
     pub handle: Option<String>,
@@ -79,13 +86,16 @@ pub struct ConnectionSummary {
     pub credential_stored: bool,
 }
 
-impl From<ValidatedAccount> for ConnectionSummary {
-    fn from(account: ValidatedAccount) -> Self {
+impl From<ConnectionState> for ConnectionSummary {
+    fn from(connection: ConnectionState) -> Self {
         Self {
-            external_id: account.external_id,
-            name: account.name,
-            handle: account.handle,
-            profile_url: account.profile_url,
+            id: connection.id,
+            label: connection.label,
+            configuration: connection.configuration,
+            external_id: connection.account.external_id,
+            name: connection.account.name,
+            handle: connection.account.handle,
+            profile_url: connection.account.profile_url,
             credential_stored: true,
         }
     }
@@ -101,13 +111,24 @@ pub struct CredentialFieldSummary {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+pub struct ConnectionFieldSummary {
+    pub key: String,
+    pub label: String,
+    pub placeholder: String,
+    pub help: String,
+    pub default_value: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct SourceSummary {
     pub id: String,
     pub name: String,
     pub description: String,
     pub abbreviation: String,
     pub credential: CredentialFieldSummary,
-    pub connection: Option<ConnectionSummary>,
+    pub connection_fields: Vec<ConnectionFieldSummary>,
+    pub connections: Vec<ConnectionSummary>,
 }
 
 impl From<SourceState> for SourceSummary {
@@ -122,7 +143,23 @@ impl From<SourceState> for SourceSummary {
                 placeholder: source.descriptor.credential.placeholder,
                 help: source.descriptor.credential.help,
             },
-            connection: source.account.map(ConnectionSummary::from),
+            connection_fields: source
+                .descriptor
+                .connection_fields
+                .into_iter()
+                .map(|field| ConnectionFieldSummary {
+                    key: field.key,
+                    label: field.label,
+                    placeholder: field.placeholder,
+                    help: field.help,
+                    default_value: field.default_value,
+                })
+                .collect(),
+            connections: source
+                .connections
+                .into_iter()
+                .map(ConnectionSummary::from)
+                .collect(),
         }
     }
 }
@@ -255,8 +292,8 @@ impl From<RepositoryCatalog> for RepositorySourceSummary {
     fn from(catalog: RepositoryCatalog) -> Self {
         Self {
             id: catalog.source.id,
-            name: catalog.source.name,
-            abbreviation: catalog.source.abbreviation,
+            name: catalog.source.label,
+            abbreviation: catalog.source.descriptor.abbreviation,
             repositories: catalog
                 .repositories
                 .into_iter()
@@ -488,8 +525,8 @@ impl From<DiscoveredWorkflow> for WorkflowSummary {
             state: discovered.workflow.state.into(),
             web_url: discovered.workflow.web_url,
             source_id: discovered.source.id,
-            source_name: discovered.source.name,
-            source_abbreviation: discovered.source.abbreviation,
+            source_name: discovered.source.label,
+            source_abbreviation: discovered.source.descriptor.abbreviation,
             repository_id: discovered.repository.id,
             repository_owner: discovered.repository.owner,
             repository_name: discovered.repository.name,
@@ -647,7 +684,7 @@ impl ListRepositoriesResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DisconnectSourceRequest {
-    pub source_id: String,
+    pub connection_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
@@ -659,6 +696,7 @@ pub struct DisconnectSourceResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionValidationErrorCode {
+    InvalidConfiguration,
     InvalidCredentials,
     PermissionDenied,
     RateLimited,
@@ -666,6 +704,8 @@ pub enum ConnectionValidationErrorCode {
     UnexpectedResponse,
     StorageUnavailable,
     UnknownSource,
+    UnknownConnection,
+    DuplicateConnection,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
@@ -678,6 +718,10 @@ pub struct ConnectionValidationErrorResponse {
 impl From<ConnectionValidationFailure> for ConnectionValidationErrorResponse {
     fn from(failure: ConnectionValidationFailure) -> Self {
         let (code, message) = match failure {
+            ConnectionValidationFailure::InvalidConfiguration => (
+                ConnectionValidationErrorCode::InvalidConfiguration,
+                "The source configuration is invalid. Check the server URL and try again.",
+            ),
             ConnectionValidationFailure::InvalidCredentials => (
                 ConnectionValidationErrorCode::InvalidCredentials,
                 "The source rejected this credential. Check it and try again.",
@@ -713,6 +757,15 @@ impl From<ConnectSourceFailure> for ConnectionValidationErrorResponse {
             ConnectSourceFailure::UnknownSource => Self {
                 code: ConnectionValidationErrorCode::UnknownSource,
                 message: "This source module is not registered.".to_owned(),
+            },
+            ConnectSourceFailure::UnknownConnection => Self {
+                code: ConnectionValidationErrorCode::UnknownConnection,
+                message: "This source connection no longer exists. Refresh and try again."
+                    .to_owned(),
+            },
+            ConnectSourceFailure::DuplicateConnection => Self {
+                code: ConnectionValidationErrorCode::DuplicateConnection,
+                message: "A connection for this source and server already exists.".to_owned(),
             },
             ConnectSourceFailure::Validation(failure) => failure.into(),
             ConnectSourceFailure::StorageUnavailable => Self {
@@ -766,6 +819,7 @@ pub fn render_typescript_contract() -> String {
         ConnectSourceRequest::decl(&config),
         ConnectionSummary::decl(&config),
         CredentialFieldSummary::decl(&config),
+        ConnectionFieldSummary::decl(&config),
         SourceSummary::decl(&config),
         ListSourcesResponse::decl(&config),
         DisconnectSourceRequest::decl(&config),
@@ -805,20 +859,25 @@ pub fn render_typescript_contract() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::SourceDescriptor;
+    use crate::application::{ConnectedSource, SourceDescriptor, ValidatedAccount};
 
     #[test]
     fn maps_domain_values_without_exposing_infrastructure() {
         let response = WorkflowSummary::from(DiscoveredWorkflow {
-            source: SourceDescriptor {
+            source: ConnectedSource {
                 id: "source".to_owned(),
-                name: "Source".to_owned(),
-                description: "Source description".to_owned(),
-                abbreviation: "SO".to_owned(),
-                credential: crate::application::CredentialField {
-                    label: "Token".to_owned(),
-                    placeholder: "token".to_owned(),
-                    help: "Help".to_owned(),
+                label: "Source instance".to_owned(),
+                descriptor: SourceDescriptor {
+                    id: "module".to_owned(),
+                    name: "Source".to_owned(),
+                    description: "Source description".to_owned(),
+                    abbreviation: "SO".to_owned(),
+                    credential: crate::application::CredentialField {
+                        label: "Token".to_owned(),
+                        placeholder: "token".to_owned(),
+                        help: "Help".to_owned(),
+                    },
+                    connection_fields: Vec::new(),
                 },
             },
             repository: crate::domain::Repository {
@@ -846,11 +905,16 @@ mod tests {
 
     #[test]
     fn validation_response_contains_identity_and_status_but_no_secret() {
-        let response = ConnectionSummary::from(ValidatedAccount {
-            external_id: "42".to_owned(),
-            name: "The Octocat".to_owned(),
-            handle: Some("octocat".to_owned()),
-            profile_url: Some("https://example.com/octocat".to_owned()),
+        let response = ConnectionSummary::from(ConnectionState {
+            id: "connection".to_owned(),
+            label: "Example".to_owned(),
+            configuration: BTreeMap::new(),
+            account: ValidatedAccount {
+                external_id: "42".to_owned(),
+                name: "The Octocat".to_owned(),
+                handle: Some("octocat".to_owned()),
+                profile_url: Some("https://example.com/octocat".to_owned()),
+            },
         });
         let serialized = serde_json::to_string(&response).expect("response serializes");
 

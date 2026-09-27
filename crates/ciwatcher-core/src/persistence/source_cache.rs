@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 
 fn validation_failure_name(failure: ConnectionValidationFailure) -> &'static str {
     match failure {
+        ConnectionValidationFailure::InvalidConfiguration => "invalid_configuration",
         ConnectionValidationFailure::InvalidCredentials => "invalid_credentials",
         ConnectionValidationFailure::PermissionDenied => "permission_denied",
         ConnectionValidationFailure::RateLimited => "rate_limited",
@@ -23,6 +24,7 @@ fn parse_validation_failure(
     value: &str,
 ) -> Result<ConnectionValidationFailure, PersistenceFailure> {
     match value {
+        "invalid_configuration" => Ok(ConnectionValidationFailure::InvalidConfiguration),
         "invalid_credentials" => Ok(ConnectionValidationFailure::InvalidCredentials),
         "permission_denied" => Ok(ConnectionValidationFailure::PermissionDenied),
         "rate_limited" => Ok(ConnectionValidationFailure::RateLimited),
@@ -493,14 +495,18 @@ mod tests {
 
     fn test_connection() -> StoredConnection {
         StoredConnection {
+            id: "example".to_owned(),
             source_id: "example".to_owned(),
+            unique_key: "example".to_owned(),
+            label: "Example".to_owned(),
+            configuration: Default::default(),
             account: ValidatedAccount {
                 external_id: "42".to_owned(),
                 name: "The Octocat".to_owned(),
                 handle: Some("octocat".to_owned()),
                 profile_url: Some("https://example.com/octocat".to_owned()),
             },
-            secret_reference: SecretReference::for_source("example", "42"),
+            secret_reference: SecretReference::for_connection("example", "test"),
         }
     }
 

@@ -2,21 +2,23 @@
 
 export type HealthResponse = { status: string, service: string, contractVersion: number, };
 
-export type ConnectSourceRequest = { sourceId: string, credential: string, };
+export type ConnectSourceRequest = { sourceId: string, connectionId: string | null, configuration: { [key in string]: string }, credential: string, };
 
-export type ConnectionSummary = { externalId: string, name: string, handle: string | null, profileUrl: string | null, credentialStored: boolean, };
+export type ConnectionSummary = { id: string, label: string, configuration: { [key in string]: string }, externalId: string, name: string, handle: string | null, profileUrl: string | null, credentialStored: boolean, };
 
 export type CredentialFieldSummary = { label: string, placeholder: string, help: string, };
 
-export type SourceSummary = { id: string, name: string, description: string, abbreviation: string, credential: CredentialFieldSummary, connection: ConnectionSummary | null, };
+export type ConnectionFieldSummary = { key: string, label: string, placeholder: string, help: string, defaultValue: string, };
+
+export type SourceSummary = { id: string, name: string, description: string, abbreviation: string, credential: CredentialFieldSummary, connectionFields: Array<ConnectionFieldSummary>, connections: Array<ConnectionSummary>, };
 
 export type ListSourcesResponse = { sources: Array<SourceSummary>, };
 
-export type DisconnectSourceRequest = { sourceId: string, };
+export type DisconnectSourceRequest = { connectionId: string, };
 
 export type DisconnectSourceResponse = { disconnected: boolean, };
 
-export type ConnectionValidationErrorCode = "invalidCredentials" | "permissionDenied" | "rateLimited" | "providerUnavailable" | "unexpectedResponse" | "storageUnavailable" | "unknownSource";
+export type ConnectionValidationErrorCode = "invalidConfiguration" | "invalidCredentials" | "permissionDenied" | "rateLimited" | "providerUnavailable" | "unexpectedResponse" | "storageUnavailable" | "unknownSource" | "unknownConnection" | "duplicateConnection";
 
 export type ConnectionValidationErrorResponse = { code: ConnectionValidationErrorCode, message: string, };
 

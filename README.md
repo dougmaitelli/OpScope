@@ -21,7 +21,8 @@ displayed information is.
 
 Version one includes:
 
-- One GitHub connection using a fine-grained personal access token.
+- Multiple GitHub.com and GitHub Enterprise Server connections using personal
+  access tokens.
 - Repository and GitHub Actions workflow discovery.
 - Current and recent workflow-run state across selected repositories.
 - On-demand workflow-run logs with links back to the source provider.
@@ -33,8 +34,7 @@ Version one includes:
 - Configurable local history stored in SQLite.
 - Native desktop and single-administrator self-hosted editions.
 
-It does not include write actions, artifacts, GitHub Enterprise Server,
-multiple GitHub connections, multiple users,
+It does not include write actions, artifacts, multiple users,
 PostgreSQL, other providers, runtime plugins, mobile applications, or a hosted
 service.
 
@@ -67,7 +67,7 @@ Provider-native values are retained alongside normalized values.
 
 The workspace currently provides the shared Rust core, Axum server, Tauri
 desktop shell, generated TypeScript contracts, and the GitHub source module.
-GitHub account validation, credential persistence, repository selection,
+GitHub account validation, multi-server connection persistence, repository selection,
 workflow discovery, and recent workflow-run monitoring are implemented. Run
 activity and synchronization freshness are cached in SQLite, with the last
 successful snapshot retained during transient provider failures. Users can

@@ -114,6 +114,12 @@ Likely version-one tables are:
 Records use internal UUIDs and store provider-issued durable numeric IDs where
 available. Mutable names, slugs, and URLs are not identities.
 
+A source module describes a provider type, while a connection is one configured
+instance of that module. Connections have independent internal IDs and carry
+module-owned normalized configuration. The persistence layer enforces uniqueness
+on the module ID plus the module's stable connection key; for GitHub this key is
+the normalized server origin.
+
 Provider-specific details use versioned payloads only where a common column is
 not meaningful. Fields that are filtered, sorted, constrained, or joined belong
 in typed columns rather than opaque JSON.

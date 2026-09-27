@@ -1,8 +1,9 @@
 //! GitHub source module for connection, repository, and workflow discovery.
 
 use crate::application::{
-    ConnectionValidationFailure, CredentialField, ProviderToken, SourceDescriptor, SourceModule,
-    ValidatedAccount, WorkflowRunLogsFailure,
+    ConfiguredSource, ConnectionConfiguration, ConnectionField, ConnectionValidationFailure,
+    CredentialField, ProviderToken, SourceDescriptor, SourceModule, ValidatedAccount,
+    WorkflowRunLogsFailure,
 };
 use crate::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
@@ -16,8 +17,9 @@ use std::io::{Cursor, Read};
 use std::net::IpAddr;
 use std::time::Duration;
 
-const USER_API_URL: &str = "https://api.github.com/user";
-const REPOSITORIES_API_URL: &str = "https://api.github.com/user/repos";
+const DEFAULT_SERVER_URL: &str = "https://github.com";
+const DEFAULT_API_URL: &str = "https://api.github.com/";
+const SERVER_URL_KEY: &str = "serverUrl";
 const API_VERSION: &str = "2026-03-10";
 const ACCEPT_VALUE: &str = "application/vnd.github+json";
 const USER_AGENT: &str = "CI-Watcher/0.1";
@@ -48,81 +50,134 @@ impl GitHubClient {
             .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)
     }
 
-    fn validation_request(&self, token: &ProviderToken) -> reqwest::RequestBuilder {
-        self.client
-            .get(USER_API_URL)
+    fn api_url(
+        configuration: &ConnectionConfiguration,
+        path: &str,
+    ) -> Result<reqwest::Url, ConnectionValidationFailure> {
+        let server_url = configuration
+            .get(SERVER_URL_KEY)
+            .ok_or(ConnectionValidationFailure::InvalidConfiguration)?;
+        let base = if server_url == DEFAULT_SERVER_URL {
+            reqwest::Url::parse(DEFAULT_API_URL)
+        } else {
+            reqwest::Url::parse(&format!("{server_url}/api/v3/"))
+        }
+        .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)?;
+        base.join(path)
+            .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)
+    }
+
+    fn validation_request(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        Ok(self
+            .client
+            .get(Self::api_url(configuration, "user")?)
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("X-GitHub-Api-Version", API_VERSION))
     }
 
-    fn repositories_request(&self, token: &ProviderToken, page: usize) -> reqwest::RequestBuilder {
-        let url = format!("{REPOSITORIES_API_URL}?per_page={REPOSITORIES_PER_PAGE}&page={page}");
-        self.client
+    fn repositories_request(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        page: usize,
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        let mut url = Self::api_url(configuration, "user/repos")?;
+        url.query_pairs_mut()
+            .append_pair("per_page", &REPOSITORIES_PER_PAGE.to_string())
+            .append_pair("page", &page.to_string());
+        Ok(self
+            .client
             .get(url)
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("X-GitHub-Api-Version", API_VERSION))
     }
 
     fn workflows_request(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         page: usize,
-    ) -> reqwest::RequestBuilder {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/actions/workflows?per_page={WORKFLOWS_PER_PAGE}&page={page}",
-            repository.owner, repository.name
-        );
-        self.client
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        let mut url = Self::api_url(
+            configuration,
+            &format!(
+                "repos/{}/{}/actions/workflows",
+                repository.owner, repository.name
+            ),
+        )?;
+        url.query_pairs_mut()
+            .append_pair("per_page", &WORKFLOWS_PER_PAGE.to_string())
+            .append_pair("page", &page.to_string());
+        Ok(self
+            .client
             .get(url)
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("X-GitHub-Api-Version", API_VERSION))
     }
 
     fn workflow_runs_request(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         page: usize,
-    ) -> reqwest::RequestBuilder {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/actions/runs?per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
-            repository.owner, repository.name
-        );
-        self.client
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        let mut url = Self::api_url(
+            configuration,
+            &format!(
+                "repos/{}/{}/actions/runs",
+                repository.owner, repository.name
+            ),
+        )?;
+        url.query_pairs_mut()
+            .append_pair("per_page", &WORKFLOW_RUNS_PER_PAGE.to_string())
+            .append_pair("page", &page.to_string());
+        Ok(self
+            .client
             .get(url)
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("X-GitHub-Api-Version", API_VERSION))
     }
 
     fn workflow_run_logs_request(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         run: &WorkflowRun,
-    ) -> reqwest::RequestBuilder {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/actions/runs/{}/attempts/{}/logs",
-            repository.owner, repository.name, run.id, run.attempt
-        );
-        self.client
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        let url = Self::api_url(
+            configuration,
+            &format!(
+                "repos/{}/{}/actions/runs/{}/attempts/{}/logs",
+                repository.owner, repository.name, run.id, run.attempt
+            ),
+        )?;
+        Ok(self
+            .client
             .get(url)
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("X-GitHub-Api-Version", API_VERSION))
     }
 
     async fn download_log_archive(
         &self,
+        configuration: &ConnectionConfiguration,
         location: &str,
     ) -> Result<Vec<u8>, WorkflowRunLogsFailure> {
         let url = reqwest::Url::parse(location)
@@ -130,11 +185,18 @@ impl GitHubClient {
         let host = url
             .host_str()
             .ok_or(WorkflowRunLogsFailure::UnexpectedResponse)?;
+        let configured_host = configuration
+            .get(SERVER_URL_KEY)
+            .and_then(|value| reqwest::Url::parse(value).ok())
+            .and_then(|url| url.host_str().map(str::to_owned));
+        let is_configured_host =
+            configured_host.is_some_and(|configured| configured.eq_ignore_ascii_case(host));
         if url.scheme() != "https"
-            || host.eq_ignore_ascii_case("localhost")
-            || host.ends_with(".localhost")
-            || host.ends_with(".local")
-            || host.parse::<IpAddr>().is_ok()
+            || (!is_configured_host
+                && (host.eq_ignore_ascii_case("localhost")
+                    || host.ends_with(".localhost")
+                    || host.ends_with(".local")
+                    || host.parse::<IpAddr>().is_ok()))
         {
             return Err(WorkflowRunLogsFailure::UnexpectedResponse);
         }
@@ -411,15 +473,79 @@ impl SourceModule for GitHubClient {
                 help: "Use a repository-scoped token with Metadata and Actions read access."
                     .to_owned(),
             },
+            connection_fields: vec![ConnectionField {
+                key: SERVER_URL_KEY.to_owned(),
+                label: "Server URL".to_owned(),
+                placeholder: DEFAULT_SERVER_URL.to_owned(),
+                help: "Use GitHub.com or the origin of a GitHub Enterprise Server instance."
+                    .to_owned(),
+                default_value: DEFAULT_SERVER_URL.to_owned(),
+            }],
         }
+    }
+
+    fn configure(
+        &self,
+        configuration: &ConnectionConfiguration,
+    ) -> Result<ConfiguredSource, ConnectionValidationFailure> {
+        if configuration.keys().any(|key| key != SERVER_URL_KEY) {
+            return Err(ConnectionValidationFailure::InvalidConfiguration);
+        }
+        let value = configuration
+            .get(SERVER_URL_KEY)
+            .map_or(DEFAULT_SERVER_URL, String::as_str)
+            .trim();
+        let value = if value.is_empty() {
+            DEFAULT_SERVER_URL
+        } else {
+            value
+        };
+        let mut url = reqwest::Url::parse(value)
+            .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)?;
+        let host = url
+            .host_str()
+            .ok_or(ConnectionValidationFailure::InvalidConfiguration)?
+            .to_owned();
+        let loopback = host.eq_ignore_ascii_case("localhost")
+            || host.ends_with(".localhost")
+            || host
+                .parse::<IpAddr>()
+                .is_ok_and(|address| address.is_loopback());
+        if (url.scheme() != "https" && !(url.scheme() == "http" && loopback))
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.path() != "/"
+        {
+            return Err(ConnectionValidationFailure::InvalidConfiguration);
+        }
+        url.set_path("");
+        let server_url = url.as_str().trim_end_matches('/').to_owned();
+        let label = if server_url == DEFAULT_SERVER_URL {
+            "GitHub.com".to_owned()
+        } else {
+            match url.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host,
+            }
+        };
+        Ok(ConfiguredSource {
+            unique_key: server_url.clone(),
+            label,
+            configuration: [(SERVER_URL_KEY.to_owned(), server_url)]
+                .into_iter()
+                .collect(),
+        })
     }
 
     async fn validate(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<ValidatedAccount, ConnectionValidationFailure> {
         let response = self
-            .validation_request(token)
+            .validation_request(configuration, token)?
             .send()
             .await
             .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -444,12 +570,13 @@ impl SourceModule for GitHubClient {
 
     async fn list_repositories(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
     ) -> Result<Vec<Repository>, ConnectionValidationFailure> {
         let mut repositories = Vec::new();
         for page in 1..=MAX_REPOSITORY_PAGES {
             let response = self
-                .repositories_request(token, page)
+                .repositories_request(configuration, token, page)?
                 .send()
                 .await
                 .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -472,13 +599,14 @@ impl SourceModule for GitHubClient {
 
     async fn list_workflows(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<Workflow>, ConnectionValidationFailure> {
         let mut workflows = Vec::new();
         for page in 1..=MAX_WORKFLOW_PAGES {
             let response = self
-                .workflows_request(token, repository, page)
+                .workflows_request(configuration, token, repository, page)?
                 .send()
                 .await
                 .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -507,13 +635,14 @@ impl SourceModule for GitHubClient {
 
     async fn list_workflow_runs(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
         let mut runs = Vec::new();
         for page in 1..=MAX_WORKFLOW_RUN_PAGES {
             let response = self
-                .workflow_runs_request(token, repository, page)
+                .workflow_runs_request(configuration, token, repository, page)?
                 .send()
                 .await
                 .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -542,12 +671,14 @@ impl SourceModule for GitHubClient {
 
     async fn workflow_run_logs(
         &self,
+        configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         run: &WorkflowRun,
     ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
         let response = self
-            .workflow_run_logs_request(token, repository, run)
+            .workflow_run_logs_request(configuration, token, repository, run)
+            .map_err(|_| WorkflowRunLogsFailure::UnexpectedResponse)?
             .send()
             .await
             .map_err(|_| WorkflowRunLogsFailure::ProviderUnavailable)?;
@@ -559,7 +690,7 @@ impl SourceModule for GitHubClient {
             .get(LOCATION)
             .and_then(|value| value.to_str().ok())
             .ok_or(WorkflowRunLogsFailure::UnexpectedResponse)?;
-        let bytes = self.download_log_archive(location).await?;
+        let bytes = self.download_log_archive(configuration, location).await?;
         read_log_archive(bytes)
     }
 }

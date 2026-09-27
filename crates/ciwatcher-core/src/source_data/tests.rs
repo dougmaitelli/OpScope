@@ -1,7 +1,7 @@
 use super::*;
 use crate::application::{
-    CredentialField, ProviderToken, SecretReference, SourceModule, StoredConnection,
-    ValidatedAccount, WorkflowRunLogsFailure,
+    ConfiguredSource, ConnectionConfiguration, CredentialField, ProviderToken, SecretReference,
+    SourceDescriptor, SourceModule, StoredConnection, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use crate::domain::{
     RepositoryVisibility, RunLifecycle, RunOutcome, WorkflowRun, WorkflowRunLogs, WorkflowState,
@@ -30,11 +30,24 @@ impl SourceModule for CountingSourceModule {
                 placeholder: "token".to_owned(),
                 help: "Test token".to_owned(),
             },
+            connection_fields: Vec::new(),
         }
+    }
+
+    fn configure(
+        &self,
+        configuration: &ConnectionConfiguration,
+    ) -> Result<ConfiguredSource, ConnectionValidationFailure> {
+        Ok(ConfiguredSource {
+            unique_key: "example".to_owned(),
+            label: "Example".to_owned(),
+            configuration: configuration.clone(),
+        })
     }
 
     async fn validate(
         &self,
+        _configuration: &ConnectionConfiguration,
         _token: &ProviderToken,
     ) -> Result<ValidatedAccount, ConnectionValidationFailure> {
         unreachable!("validation is not part of source data loading")
@@ -42,6 +55,7 @@ impl SourceModule for CountingSourceModule {
 
     async fn list_repositories(
         &self,
+        _configuration: &ConnectionConfiguration,
         _token: &ProviderToken,
     ) -> Result<Vec<Repository>, ConnectionValidationFailure> {
         self.repository_requests.fetch_add(1, Ordering::SeqCst);
@@ -50,6 +64,7 @@ impl SourceModule for CountingSourceModule {
 
     async fn list_workflows(
         &self,
+        _configuration: &ConnectionConfiguration,
         _token: &ProviderToken,
         _repository: &Repository,
     ) -> Result<Vec<Workflow>, ConnectionValidationFailure> {
@@ -65,6 +80,7 @@ impl SourceModule for CountingSourceModule {
 
     async fn list_workflow_runs(
         &self,
+        _configuration: &ConnectionConfiguration,
         _token: &ProviderToken,
         _repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure> {
@@ -78,6 +94,7 @@ impl SourceModule for CountingSourceModule {
 
     async fn workflow_run_logs(
         &self,
+        _configuration: &ConnectionConfiguration,
         _token: &ProviderToken,
         _repository: &Repository,
         _run: &WorkflowRun,
@@ -144,9 +161,13 @@ fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
         fail_workflow_runs: fail_workflow_runs.clone(),
     })]);
     let database = SqliteDatabase::in_memory()?;
-    let reference = SecretReference::for_source("example", "42");
+    let reference = SecretReference::for_connection("example", "test");
     database.save(&StoredConnection {
+        id: "example".to_owned(),
         source_id: "example".to_owned(),
+        unique_key: "example".to_owned(),
+        label: "Example".to_owned(),
+        configuration: ConnectionConfiguration::new(),
         account: ValidatedAccount {
             external_id: "42".to_owned(),
             name: "Example Account".to_owned(),

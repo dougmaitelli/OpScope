@@ -95,7 +95,12 @@ pub(crate) async fn connect_source(
     let credential = std::mem::take(&mut request.credential);
     state
         .connect_source
-        .execute(&request.source_id, credential)
+        .execute(
+            &request.source_id,
+            request.connection_id.as_deref(),
+            &request.configuration,
+            credential,
+        )
         .await
         .map(ConnectionSummary::from)
         .map_err(ConnectionValidationErrorResponse::from)
@@ -141,7 +146,7 @@ pub(crate) fn disconnect_source(
 ) -> Result<DisconnectSourceResponse, String> {
     state
         .disconnect_source
-        .execute(&request.source_id)
+        .execute(&request.connection_id)
         .map(|disconnected| DisconnectSourceResponse { disconnected })
         .map_err(|_| "connection storage unavailable".to_owned())
 }
