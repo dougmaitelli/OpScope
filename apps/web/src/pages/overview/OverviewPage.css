@@ -97,8 +97,16 @@
   color: var(--danger);
 }
 
+.health-stat-link-running {
+  color: var(--warning);
+}
+
 .health-stat-link-failing:hover {
   color: #ff9b9e;
+}
+
+.health-stat-link-running:hover {
+  color: #f4d58b;
 }
 
 .overview-content {

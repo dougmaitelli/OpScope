@@ -241,7 +241,22 @@ export function OverviewPage() {
           </div>
           <div>
             <dt>Running</dt>
-            <dd>{error ? "—" : running}</dd>
+            <dd>
+              {!error && running > 0 ? (
+                <button
+                  className="health-stat-link health-stat-link-running"
+                  type="button"
+                  aria-label={`Show ${running} running workflow${running === 1 ? "" : "s"}`}
+                  onClick={() => updateFilters("", "running")}
+                >
+                  {running}
+                </button>
+              ) : error ? (
+                "—"
+              ) : (
+                running
+              )}
+            </dd>
           </div>
           <div>
             <dt>Failing</dt>
