@@ -60,7 +60,9 @@ export function ProjectGroup({ project }: { project: WorkflowProject }) {
         <div className="project-metadata">
           <span>{active} active</span>
           <span className="project-chevron" aria-hidden="true">
-            ⌄
+            <svg viewBox="0 0 16 16">
+              <path d="m4.5 6 3.5 3.5L11.5 6" />
+            </svg>
           </span>
         </div>
       </summary>
