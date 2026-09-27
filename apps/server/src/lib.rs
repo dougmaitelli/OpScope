@@ -10,20 +10,21 @@ use axum::http::StatusCode;
 use axum::middleware;
 use axum::routing::{any, get, post, put};
 use handlers::{
-    AppState, change_request_details, connect_source, disconnect_source, get_settings, health,
-    list_change_requests, list_repositories, list_sources, list_workflows,
-    save_repository_selection, synchronization_status, synchronize_sources, update_settings,
-    update_status, workflow_run_logs,
+    AppState, AppStateDependencies, change_request_details, connect_source, disconnect_source,
+    get_settings, health, list_activity, list_change_requests, list_repositories, list_sources,
+    list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
+    update_settings, update_status, workflow_run_logs,
 };
 use opsscope_core::application::{
-    ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
+    ActivityEventRepository, ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
     RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
 };
 use opsscope_core::contracts::{
-    CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH,
-    HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH,
-    SOURCES_HTTP_PATH, SYNCHRONIZATION_HTTP_PATH, UPDATE_STATUS_HTTP_PATH,
-    WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH,
+    ACTIVITY_HTTP_PATH, CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH,
+    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
+    REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
+    SYNCHRONIZATION_HTTP_PATH, UPDATE_STATUS_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH,
+    WORKFLOWS_HTTP_PATH,
 };
 use opsscope_core::source_data::SourceDataCache;
 use std::path::Path;
@@ -43,6 +44,7 @@ pub struct ServerDependencies {
     pub repository_selections: Arc<dyn RepositorySelectionRepository>,
     pub source_data_cache: Arc<dyn SourceDataCache>,
     pub settings: Arc<dyn SettingsRepository>,
+    pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
     pub authentication: WebAuthentication,
 }
@@ -55,24 +57,27 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
         repository_selections,
         source_data_cache,
         settings,
+        activity_events,
         failure_notifications,
         authentication,
     } = dependencies;
-    let state = AppState::new(
+    let state = AppState::new(AppStateDependencies {
         registry,
         connections,
         secrets,
         repository_selections,
         source_data_cache,
         settings,
+        activity_events,
         failure_notifications,
-    );
+    });
     let synchronizer = state.synchronizer();
     let settings = state.settings_reader();
 
     let protected = Router::new()
         .route(UPDATE_STATUS_HTTP_PATH, get(update_status))
         .route(WORKFLOWS_HTTP_PATH, get(list_workflows))
+        .route(ACTIVITY_HTTP_PATH, get(list_activity))
         .route(CHANGE_REQUESTS_HTTP_PATH, get(list_change_requests))
         .route(
             CHANGE_REQUEST_DETAILS_HTTP_PATH,

@@ -2,24 +2,25 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use opsscope_core::application::{
-    CheckForUpdates, ConnectSource, ConnectSourceFailure, ConnectionRepository,
-    ConnectionValidationFailure, DisconnectSource, GetChangeRequestDetails,
-    GetChangeRequestDetailsFailure, GetMonitoringSettings, GetWorkflowRunLogs, ListChangeRequests,
-    ListChangeRequestsFailure, ListRepositories, ListRepositoriesFailure, ListSources,
-    ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures, RepositorySelectionRepository,
-    SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
-    SettingsRepository, SourceRegistry, SynchronizeSources, UpdateMonitoringSettings,
-    WorkflowRunLogsFailure,
+    ActivityEventRepository, CheckForUpdates, ConnectSource, ConnectSourceFailure,
+    ConnectionRepository, ConnectionValidationFailure, DisconnectSource, GetChangeRequestDetails,
+    GetChangeRequestDetailsFailure, GetMonitoringSettings, GetWorkflowRunLogs, ListActivity,
+    ListChangeRequests, ListChangeRequestsFailure, ListRepositories, ListRepositoriesFailure,
+    ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
+    RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
+    SecretStore, SettingsFailure, SettingsRepository, SourceRegistry, SynchronizeSources,
+    TrackChangeRequestActivity, UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
     ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListChangeRequestsResponse,
-    ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
-    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
-    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListActivityResponse,
+    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
+    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -29,6 +30,7 @@ pub(crate) struct AppState {
     check_for_updates: CheckForUpdates,
     list_workflows: ListWorkflows,
     list_change_requests: ListChangeRequests,
+    list_activity: ListActivity,
     change_request_details: GetChangeRequestDetails,
     workflow_run_logs: GetWorkflowRunLogs,
     connect_source: ConnectSource,
@@ -41,16 +43,29 @@ pub(crate) struct AppState {
     update_settings: UpdateMonitoringSettings,
 }
 
+pub(crate) struct AppStateDependencies {
+    pub registry: SourceRegistry,
+    pub connections: Arc<dyn ConnectionRepository>,
+    pub secrets: Arc<dyn SecretStore>,
+    pub repository_selections: Arc<dyn RepositorySelectionRepository>,
+    pub source_data_cache: Arc<dyn SourceDataCache>,
+    pub settings: Arc<dyn SettingsRepository>,
+    pub activity_events: Arc<dyn ActivityEventRepository>,
+    pub failure_notifications: NotifyRepositoryFailures,
+}
+
 impl AppState {
-    pub(crate) fn new(
-        registry: SourceRegistry,
-        connections: Arc<dyn ConnectionRepository>,
-        secrets: Arc<dyn SecretStore>,
-        repository_selections: Arc<dyn RepositorySelectionRepository>,
-        source_data_cache: Arc<dyn SourceDataCache>,
-        settings: Arc<dyn SettingsRepository>,
-        failure_notifications: NotifyRepositoryFailures,
-    ) -> Self {
+    pub(crate) fn new(dependencies: AppStateDependencies) -> Self {
+        let AppStateDependencies {
+            registry,
+            connections,
+            secrets,
+            repository_selections,
+            source_data_cache,
+            settings,
+            activity_events,
+            failure_notifications,
+        } = dependencies;
         let source_data = Arc::new(ReadThroughSourceData::cached(
             registry.clone(),
             connections.clone(),
@@ -69,6 +84,10 @@ impl AppState {
                 source_data.clone(),
                 repository_selections.clone(),
             ),
+            list_activity: ListActivity::new(
+                activity_events.clone(),
+                repository_selections.clone(),
+            ),
             change_request_details: GetChangeRequestDetails::new(source_data.clone()),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
@@ -85,6 +104,7 @@ impl AppState {
                 source_data,
                 repository_selections.clone(),
                 failure_notifications,
+                TrackChangeRequestActivity::new(activity_events),
             ),
             save_repository_selection: SaveRepositorySelection::new(
                 connections.clone(),
@@ -150,6 +170,22 @@ pub(crate) async fn list_change_requests(
         .map(ListChangeRequestsResponse::from_domain)
         .map(Json)
         .map_err(http_change_requests_error)
+}
+
+pub(crate) async fn list_activity(
+    State(state): State<AppState>,
+) -> Result<Json<ListActivityResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
+    state
+        .list_activity
+        .execute()
+        .map(ListActivityResponse::from_domain)
+        .map(Json)
+        .map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ListWorkflowsFailure::StorageUnavailable.into()),
+            )
+        })
 }
 
 fn http_change_requests_error(

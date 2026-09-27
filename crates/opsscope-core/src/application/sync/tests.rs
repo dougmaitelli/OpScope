@@ -1,8 +1,9 @@
 use super::*;
 use crate::application::{
-    ConnectedSource, ConnectionValidationFailure, CredentialField, LatestRunNotificationState,
-    NoopNotificationSink, NotificationStateRepository, PersistenceFailure, RepositorySelection,
-    SourceCapability, SourceDescriptor, SourceRepositorySelection,
+    ActivityEventRepository, ChangeRequestActivityEvent, ConnectedSource,
+    ConnectionValidationFailure, CredentialField, LatestRunNotificationState, NoopNotificationSink,
+    NotificationStateRepository, PersistenceFailure, RepositorySelection, SourceCapability,
+    SourceDescriptor, SourceRepositorySelection, TrackChangeRequestActivity,
 };
 use crate::domain::{
     ChangeRequest, ChangeRequestDetails, Repository, RepositoryVisibility, Workflow, WorkflowRun,
@@ -12,6 +13,34 @@ use crate::source_data::{SourceDataFailure, WorkflowRunCollection};
 use async_trait::async_trait;
 
 struct TestSelections(Vec<RepositorySelection>);
+
+struct TestActivityEvents;
+
+impl ActivityEventRepository for TestActivityEvents {
+    fn load_change_request_state(
+        &self,
+        _source_id: &str,
+        _repository_id: &str,
+    ) -> Result<Option<Vec<ChangeRequest>>, PersistenceFailure> {
+        Ok(None)
+    }
+
+    fn save_change_request_observation(
+        &self,
+        _source_id: &str,
+        _repository_id: &str,
+        _observed: &[ChangeRequest],
+        _events: &[ChangeRequestActivityEvent],
+    ) -> Result<(), PersistenceFailure> {
+        Ok(())
+    }
+
+    fn list_change_request_events(
+        &self,
+    ) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
+        Ok(Vec::new())
+    }
+}
 
 impl RepositorySelectionRepository for TestSelections {
     fn list(&self) -> Result<Vec<RepositorySelection>, PersistenceFailure> {
@@ -153,6 +182,15 @@ impl SourceData for RecordingSourceData {
         Ok(None)
     }
 
+    async fn workflow_run(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        _run_id: &str,
+    ) -> Result<Option<WorkflowRun>, SourceDataFailure> {
+        unreachable!("synchronization does not load individual runs")
+    }
+
     async fn workflow_run_logs(
         &self,
         _source_id: &str,
@@ -217,6 +255,7 @@ async fn synchronization_forces_each_selected_repository_and_continues_after_fai
             Arc::new(TestNotificationStates::default()),
             Arc::new(NoopNotificationSink),
         ),
+        TrackChangeRequestActivity::new(Arc::new(TestActivityEvents)),
     );
     assert_eq!(synchronize.status().last_completed_at, None);
 

@@ -193,6 +193,32 @@ impl GitHubClient {
             .header("X-GitHub-Api-Version", API_VERSION))
     }
 
+    fn workflow_run_request(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        run_id: &str,
+    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+        if run_id.is_empty() || !run_id.chars().all(|character| character.is_ascii_digit()) {
+            return Err(ConnectionValidationFailure::UnexpectedResponse);
+        }
+        let url = Self::api_url(
+            configuration,
+            &format!(
+                "repos/{}/{}/actions/runs/{run_id}",
+                repository.owner, repository.name
+            ),
+        )?;
+        Ok(self
+            .client
+            .get(url)
+            .bearer_auth(token.expose())
+            .header(ACCEPT, ACCEPT_VALUE)
+            .header(USER_AGENT_HEADER, USER_AGENT)
+            .header("X-GitHub-Api-Version", API_VERSION))
+    }
+
     fn change_requests_request(
         &self,
         configuration: &ConnectionConfiguration,
@@ -263,7 +289,10 @@ impl GitHubClient {
                         contexts(first: 100) {
                           nodes {
                             __typename
-                            ... on CheckRun { name status conclusion detailsUrl }
+                            ... on CheckRun {
+                              name status conclusion detailsUrl
+                              checkSuite { workflowRun { databaseId } }
+                            }
                             ... on StatusContext { context state targetUrl }
                           }
                         }
@@ -612,6 +641,18 @@ struct GitHubCheckContextConnection {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubCheckSuite {
+    workflow_run: Option<GitHubGraphQlWorkflowRun>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitHubGraphQlWorkflowRun {
+    database_id: Option<u64>,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "__typename")]
 enum GitHubCheckContext {
     CheckRun {
@@ -620,6 +661,8 @@ enum GitHubCheckContext {
         conclusion: Option<String>,
         #[serde(rename = "detailsUrl")]
         details_url: Option<String>,
+        #[serde(rename = "checkSuite")]
+        check_suite: Option<GitHubCheckSuite>,
     },
     StatusContext {
         context: String,
@@ -821,6 +864,7 @@ impl GitHubChangeRequest {
                             status,
                             conclusion,
                             details_url,
+                            check_suite,
                         } => ChangeRequestCheck {
                             name: name.clone(),
                             status: if status != "COMPLETED" {
@@ -838,7 +882,12 @@ impl GitHubChangeRequest {
                                 }
                             },
                             web_url: details_url.clone(),
-                            workflow_run_id: details_url.as_deref().and_then(github_actions_run_id),
+                            workflow_run_id: check_suite
+                                .as_ref()
+                                .and_then(|suite| suite.workflow_run.as_ref())
+                                .and_then(|run| run.database_id)
+                                .map(|run_id| run_id.to_string())
+                                .or_else(|| details_url.as_deref().and_then(github_actions_run_id)),
                         },
                         GitHubCheckContext::StatusContext {
                             context,
@@ -1239,6 +1288,32 @@ impl SourceModule for GitHubClient {
         Ok(repository
             .pull_request
             .map(GitHubChangeRequest::into_details))
+    }
+
+    async fn workflow_run(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        run_id: &str,
+    ) -> Result<Option<WorkflowRun>, ConnectionValidationFailure> {
+        let response = self
+            .workflow_run_request(configuration, token, repository, run_id)?
+            .send()
+            .await
+            .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if response.status() != StatusCode::OK {
+            return Err(response_failure(&response));
+        }
+        response
+            .json::<GitHubWorkflowRun>()
+            .await
+            .map(WorkflowRun::from)
+            .map(Some)
+            .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)
     }
 
     async fn workflow_run_logs(

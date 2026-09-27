@@ -10,9 +10,10 @@ use opsscope_core::application::{
     SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
-    CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH,
-    ConnectionSummary, HEALTH_HTTP_PATH, ListChangeRequestsResponse, ListRepositoriesResponse,
-    ListSourcesResponse, ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
+    ACTIVITY_HTTP_PATH, CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH,
+    CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH, ListActivityResponse,
+    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsResponse, REPOSITORIES_HTTP_PATH,
     REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
@@ -38,7 +39,10 @@ impl SourceModule for TestSourceModule {
             name: "Example".to_owned(),
             description: "Example monitoring source".to_owned(),
             abbreviation: "EX".to_owned(),
-            capabilities: vec![SourceCapability::Workflows],
+            capabilities: vec![
+                SourceCapability::Workflows,
+                SourceCapability::ChangeRequests,
+            ],
             credential: CredentialField {
                 label: "Access token".to_owned(),
                 placeholder: "token_…".to_owned(),
@@ -138,6 +142,70 @@ impl SourceModule for TestSourceModule {
             .collect())
     }
 
+    async fn workflow_run(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        run_id: &str,
+    ) -> Result<Option<WorkflowRun>, ConnectionValidationFailure> {
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        if run_id != "run-archived" {
+            return Ok(None);
+        }
+        Ok(Some(WorkflowRun {
+            id: run_id.to_owned(),
+            workflow_id: "workflow-1".to_owned(),
+            run_number: 1,
+            attempt: 2,
+            title: "Archived pull request".to_owned(),
+            lifecycle: RunLifecycle::Completed,
+            outcome: RunOutcome::Failure,
+            branch: Some("feature/archived".to_owned()),
+            commit_sha: "123456abcdef".to_owned(),
+            actor: Some("example-user".to_owned()),
+            trigger: "pull_request".to_owned(),
+            created_at: "2026-08-01T18:00:00Z".to_owned(),
+            started_at: Some("2026-08-01T18:00:02Z".to_owned()),
+            updated_at: "2026-08-01T18:03:00Z".to_owned(),
+            web_url: "https://example.com/runs/archived".to_owned(),
+            provider_status: "completed".to_owned(),
+            provider_conclusion: Some("failure".to_owned()),
+        }))
+    }
+
+    async fn list_change_requests(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Option<Vec<opsscope_core::domain::ChangeRequest>>, ConnectionValidationFailure>
+    {
+        use opsscope_core::domain::{
+            ChangeRequest, ChangeRequestCheckStatus, ChangeRequestMergeStatus,
+            ChangeRequestReviewStatus, ChangeRequestState,
+        };
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        Ok(Some(vec![ChangeRequest {
+            id: "pr-1".to_owned(),
+            number: 1,
+            title: "Add activity".to_owned(),
+            author: Some("example-user".to_owned()),
+            source_branch: "activity".to_owned(),
+            target_branch: "main".to_owned(),
+            state: ChangeRequestState::Open,
+            draft: false,
+            review_status: ChangeRequestReviewStatus::ReviewRequired,
+            check_status: ChangeRequestCheckStatus::Running,
+            merge_status: ChangeRequestMergeStatus::Ready,
+            created_at: "2026-09-26T17:00:00Z".to_owned(),
+            updated_at: "2026-09-26T17:00:00Z".to_owned(),
+            web_url: "https://example.com/pulls/1".to_owned(),
+        }]))
+    }
+
     async fn workflow_run_logs(
         &self,
         _configuration: &ConnectionConfiguration,
@@ -147,7 +215,7 @@ impl SourceModule for TestSourceModule {
     ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
         assert_eq!(token.expose(), "test_credential");
         assert_eq!(repository.id, "repository-1");
-        assert_eq!(run.id, "run-1");
+        assert!(matches!(run.id.as_str(), "run-1" | "run-archived"));
         Ok(WorkflowRunLogs {
             files: vec![WorkflowRunLog {
                 name: "build.txt".to_owned(),
@@ -178,6 +246,7 @@ fn test_dependencies(
         repository_selections: Arc::new(database.clone()),
         source_data_cache: Arc::new(database.clone()),
         settings: Arc::new(database.clone()),
+        activity_events: Arc::new(database.clone()),
         failure_notifications: test_failure_notifications(database),
         authentication,
     }
@@ -233,6 +302,17 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
     let decoded: ListWorkflowsResponse = serde_json::from_slice(&body)?;
     assert_eq!(decoded.selected_repository_count, 0);
     assert!(decoded.workflows.is_empty());
+
+    let activity = app
+        .clone()
+        .oneshot(
+            authenticated(Request::get(ACTIVITY_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(activity.status(), StatusCode::OK);
+    let body = activity.into_body().collect().await?.to_bytes();
+    let decoded: ListActivityResponse = serde_json::from_slice(&body)?;
+    assert!(decoded.change_request_events.is_empty());
 
     let change_requests = app
         .oneshot(
@@ -460,6 +540,18 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
         opsscope_core::contracts::RunOutcome::Success
     );
 
+    let activity = app
+        .clone()
+        .oneshot(
+            authenticated(Request::get(ACTIVITY_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(activity.status(), StatusCode::OK);
+    let body = activity.into_body().collect().await?.to_bytes();
+    let decoded: ListActivityResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.change_request_events.len(), 1);
+    assert_eq!(decoded.change_request_events[0].change_request.number, 1);
+
     let logs = app
         .clone()
         .oneshot(
@@ -482,6 +574,29 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.files[0].name, "build.txt");
     assert_eq!(decoded.files[0].content, "Build completed");
     assert!(!decoded.truncated);
+
+    let archived_logs = app
+        .clone()
+        .oneshot(
+            authenticated(Request::post(WORKFLOW_RUN_LOGS_HTTP_PATH), &session, true)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "sourceId": connection_id,
+                        "repositoryId": "repository-1",
+                        "runId": "run-archived",
+                        "attempt": null
+                    })
+                    .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(archived_logs.status(), StatusCode::OK);
+    let body = archived_logs.into_body().collect().await?.to_bytes();
+    let decoded: WorkflowRunLogsResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.run.id, "run-archived");
+    assert_eq!(decoded.run.attempt, 2);
+    assert_eq!(decoded.files[0].name, "build.txt");
 
     let disconnected = app
         .clone()
@@ -517,6 +632,7 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
 
     for (method, path) in [
         (Method::GET, WORKFLOWS_HTTP_PATH),
+        (Method::GET, ACTIVITY_HTTP_PATH),
         (Method::GET, CHANGE_REQUESTS_HTTP_PATH),
         (Method::POST, CHANGE_REQUEST_DETAILS_HTTP_PATH),
         (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),

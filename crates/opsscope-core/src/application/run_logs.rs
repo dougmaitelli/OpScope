@@ -1,11 +1,17 @@
 use super::WorkflowRunLogsFailure;
-use crate::domain::WorkflowRunLogs;
+use crate::domain::{WorkflowRun, WorkflowRunLogs};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct GetWorkflowRunLogs {
     source_data: Arc<dyn SourceData>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedWorkflowRunLogs {
+    pub run: WorkflowRun,
+    pub logs: WorkflowRunLogs,
 }
 
 impl GetWorkflowRunLogs {
@@ -19,8 +25,8 @@ impl GetWorkflowRunLogs {
         source_id: &str,
         repository_id: &str,
         run_id: &str,
-        attempt: u64,
-    ) -> Result<WorkflowRunLogs, WorkflowRunLogsFailure> {
+        attempt: Option<u64>,
+    ) -> Result<ResolvedWorkflowRunLogs, WorkflowRunLogsFailure> {
         if !self
             .source_data
             .sources()
@@ -46,15 +52,28 @@ impl GetWorkflowRunLogs {
             .workflow_runs(source_id, &repository, RefreshMode::CacheFirst)
             .await
             .map_err(source_data_failure)?;
-        let run = runs
+        let cached_run = runs
             .runs
             .into_iter()
-            .find(|run| run.id == run_id && run.attempt == attempt)
-            .ok_or(WorkflowRunLogsFailure::RunNotFound)?;
+            .find(|run| run.id == run_id && attempt.is_none_or(|attempt| run.attempt == attempt));
+        let mut run = match cached_run {
+            Some(run) => run,
+            None => self
+                .source_data
+                .workflow_run(source_id, &repository, run_id)
+                .await
+                .map_err(source_data_failure)?
+                .ok_or(WorkflowRunLogsFailure::RunNotFound)?,
+        };
+        if let Some(attempt) = attempt {
+            run.attempt = attempt;
+        }
 
-        self.source_data
+        let logs = self
+            .source_data
             .workflow_run_logs(source_id, &repository, &run)
-            .await
+            .await?;
+        Ok(ResolvedWorkflowRunLogs { run, logs })
     }
 }
 

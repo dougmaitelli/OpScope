@@ -1,4 +1,8 @@
 use super::*;
+use crate::domain::{
+    ChangeRequest, ChangeRequestCheckStatus, ChangeRequestMergeStatus, ChangeRequestReviewStatus,
+    ChangeRequestState,
+};
 use tempfile::tempdir;
 
 fn test_connection() -> StoredConnection {
@@ -25,6 +29,62 @@ fn connection_metadata_round_trips_through_sqlite() -> Result<(), Box<dyn std::e
     database.save(&expected)?;
     assert_eq!(database.get("example")?, Some(expected));
     assert_eq!(database.audit_event_count()?, 1);
+    Ok(())
+}
+
+#[test]
+fn change_request_activity_is_deduplicated_persisted_and_removed_with_its_source()
+-> Result<(), Box<dyn std::error::Error>> {
+    let database = SqliteDatabase::in_memory()?;
+    database.save(&test_connection())?;
+    let event = ChangeRequestActivityEvent {
+        id: "example:repository-1:pr-1:Opened:2026-09-26T10:00:00Z".to_owned(),
+        kind: crate::application::ChangeRequestActivityKind::Opened,
+        occurred_at: "2026-09-26T10:00:00Z".to_owned(),
+        source_id: "example".to_owned(),
+        source_name: "Example".to_owned(),
+        source_abbreviation: "EX".to_owned(),
+        repository_id: "repository-1".to_owned(),
+        repository_owner: "owner".to_owned(),
+        repository_name: "project".to_owned(),
+        change_request: ChangeRequest {
+            id: "pr-1".to_owned(),
+            number: 1,
+            title: "Add activity".to_owned(),
+            author: Some("octocat".to_owned()),
+            source_branch: "activity".to_owned(),
+            target_branch: "main".to_owned(),
+            state: ChangeRequestState::Open,
+            draft: false,
+            review_status: ChangeRequestReviewStatus::ReviewRequired,
+            check_status: ChangeRequestCheckStatus::Running,
+            merge_status: ChangeRequestMergeStatus::Ready,
+            created_at: "2026-09-26T10:00:00Z".to_owned(),
+            updated_at: "2026-09-26T10:00:00Z".to_owned(),
+            web_url: "https://example.com/pull/1".to_owned(),
+        },
+    };
+
+    database.save_change_request_observation(
+        "example",
+        "repository-1",
+        std::slice::from_ref(&event.change_request),
+        std::slice::from_ref(&event),
+    )?;
+    database.save_change_request_observation(
+        "example",
+        "repository-1",
+        std::slice::from_ref(&event.change_request),
+        std::slice::from_ref(&event),
+    )?;
+    assert_eq!(
+        database.load_change_request_state("example", "repository-1")?,
+        Some(vec![event.change_request.clone()])
+    );
+    assert_eq!(database.list_change_request_events()?, vec![event]);
+
+    database.delete("example")?;
+    assert!(database.list_change_request_events()?.is_empty());
     Ok(())
 }
 

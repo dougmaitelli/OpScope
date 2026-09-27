@@ -8,7 +8,7 @@ mod state;
 mod tray;
 
 use crate::commands::{
-    change_request_details, connect_source, disconnect_source, get_settings, health,
+    change_request_details, connect_source, disconnect_source, get_settings, health, list_activity,
     list_change_requests, list_repositories, list_sources, list_workflows,
     save_repository_selection, synchronization_status, synchronize_sources, update_settings,
     update_status, workflow_run_logs,
@@ -16,7 +16,7 @@ use crate::commands::{
 use crate::keyring::KeyringSecretStore;
 use crate::notifications::DesktopNotificationSink;
 use crate::scheduler::SynchronizationScheduler;
-use crate::state::DesktopState;
+use crate::state::{DesktopState, DesktopStateDependencies};
 use opsscope_core::application::NotifyRepositoryFailures;
 use opsscope_core::integrations::registered_sources;
 use opsscope_core::persistence::SqliteDatabase;
@@ -38,15 +38,16 @@ fn main() {
                 database.clone(),
                 Arc::new(DesktopNotificationSink::new(app.handle().clone())),
             );
-            let state = DesktopState::new(
+            let state = DesktopState::new(DesktopStateDependencies {
                 sources,
-                database.clone(),
+                connections: database.clone(),
                 secrets,
-                database.clone(),
-                database.clone(),
-                database,
+                repository_selections: database.clone(),
+                source_data_cache: database.clone(),
+                settings: database.clone(),
+                activity_events: database,
                 failure_notifications,
-            );
+            });
             let scheduler = SynchronizationScheduler::start(
                 state.synchronize_sources.clone(),
                 state.get_settings.clone(),
@@ -60,6 +61,7 @@ fn main() {
             update_status,
             list_workflows,
             list_change_requests,
+            list_activity,
             change_request_details,
             workflow_run_logs,
             synchronize_sources,

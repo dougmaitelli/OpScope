@@ -42,7 +42,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         secrets: Arc::new(secrets),
         repository_selections: database.clone(),
         source_data_cache: database.clone(),
-        settings: database,
+        settings: database.clone(),
+        activity_events: database,
         failure_notifications,
         authentication,
     });

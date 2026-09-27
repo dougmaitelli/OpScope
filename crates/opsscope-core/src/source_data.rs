@@ -221,6 +221,13 @@ pub trait SourceData: Send + Sync {
         refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure>;
 
+    async fn workflow_run(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        run_id: &str,
+    ) -> Result<Option<WorkflowRun>, SourceDataFailure>;
+
     async fn change_requests(
         &self,
         source_id: &str,
@@ -697,6 +704,23 @@ impl SourceData for ReadThroughSourceData {
     ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
         self.load_change_request_details(source_id, repository, number, refresh)
             .await
+    }
+
+    async fn workflow_run(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        run_id: &str,
+    ) -> Result<Option<WorkflowRun>, SourceDataFailure> {
+        let (connection, module) = self.connection(source_id)?;
+        let token = self
+            .secrets
+            .retrieve(&connection.secret_reference)
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?;
+        module
+            .workflow_run(&connection.configuration, &token, repository, run_id)
+            .await
+            .map_err(SourceDataFailure::Source)
     }
 
     async fn workflow_run_logs(

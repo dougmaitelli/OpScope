@@ -1,4 +1,5 @@
-use super::{NotifyRepositoryFailures, RepositorySelectionRepository};
+use super::{NotifyRepositoryFailures, RepositorySelectionRepository, TrackChangeRequestActivity};
+use crate::domain::ChangeRequestState;
 use crate::source_data::{RefreshMode, SourceData};
 use std::collections::HashSet;
 use std::error::Error;
@@ -57,6 +58,7 @@ pub struct SynchronizeSources {
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
     failure_notifications: NotifyRepositoryFailures,
+    change_request_activity: TrackChangeRequestActivity,
     active_sources: Arc<Mutex<HashSet<String>>>,
     last_completed_at: Arc<AtomicU64>,
     last_failed_repository_count: Arc<AtomicUsize>,
@@ -68,11 +70,13 @@ impl SynchronizeSources {
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
         failure_notifications: NotifyRepositoryFailures,
+        change_request_activity: TrackChangeRequestActivity,
     ) -> Self {
         Self {
             source_data,
             selections,
             failure_notifications,
+            change_request_activity,
             active_sources: Arc::new(Mutex::new(HashSet::new())),
             last_completed_at: Arc::new(AtomicU64::new(0)),
             last_failed_repository_count: Arc::new(AtomicUsize::new(0)),
@@ -149,10 +153,47 @@ impl SynchronizeSources {
                     .descriptor
                     .supports(super::SourceCapability::ChangeRequests)
                 {
-                    _ = self
+                    let previous = self
+                        .change_request_activity
+                        .previous(&source.id, &repository.id)
+                        .ok()
+                        .flatten();
+                    if let Ok(Some(current)) = self
                         .source_data
                         .change_requests(&source.id, &repository, RefreshMode::Force)
-                        .await;
+                        .await
+                    {
+                        let current_ids = current
+                            .iter()
+                            .map(|change_request| change_request.id.as_str())
+                            .collect::<HashSet<_>>();
+                        let mut departed = Vec::new();
+                        if let Some(previous) = &previous {
+                            for change_request in previous.iter().filter(|change_request| {
+                                !current_ids.contains(change_request.id.as_str())
+                            }) {
+                                if let Ok(Some(details)) = self
+                                    .source_data
+                                    .change_request_details(
+                                        &source.id,
+                                        &repository,
+                                        change_request.number,
+                                        RefreshMode::Force,
+                                    )
+                                    .await
+                                    && details.change_request.state != ChangeRequestState::Open
+                                {
+                                    departed.push(details.change_request);
+                                }
+                            }
+                        }
+                        _ = self.change_request_activity.observe(
+                            &source,
+                            &repository,
+                            &current,
+                            &departed,
+                        );
+                    }
                 }
                 let workflows = self
                     .source_data

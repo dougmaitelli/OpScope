@@ -5,7 +5,10 @@ import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { WorkflowRunLogsDialog } from "../../components/WorkflowRunLogsDialog.tsx";
+import { ChangeRequestDetailsDialog } from "../change-requests/ChangeRequestDetailsDialog.tsx";
 import type {
+  ChangeRequestActivitySummary,
+  ListActivityResponse,
   ListWorkflowsResponse,
   WorkflowRunSummary,
   WorkflowSummary,
@@ -15,8 +18,10 @@ import {
   type ActivityFilterValues,
   type ActivityRangeFilter,
   type ActivityStatusFilter,
+  type ActivityTypeFilter,
 } from "./ActivityFilters.tsx";
 import { ActivityRow, type WorkflowActivity } from "./ActivityRow.tsx";
+import { ChangeRequestActivityRow } from "./ChangeRequestActivityRow.tsx";
 import "./ActivityPage.css";
 
 const STATUS_FILTERS = new Set<ActivityStatusFilter>([
@@ -27,6 +32,18 @@ const STATUS_FILTERS = new Set<ActivityStatusFilter>([
   "other",
 ]);
 const RANGE_FILTERS = new Set<ActivityRangeFilter>(["all", "day", "week", "month"]);
+const TYPE_FILTERS = new Set<ActivityTypeFilter>(["all", "workflows", "pullRequests"]);
+
+type TimelineActivity =
+  | WorkflowActivity
+  | {
+      type: "pullRequest";
+      id: string;
+      occurredAt: string;
+      repositoryId: string;
+      repositoryLabel: string;
+      event: ChangeRequestActivitySummary;
+    };
 
 function matchesStatus(run: WorkflowRunSummary, status: ActivityStatusFilter): boolean {
   if (status === "all") return true;
@@ -37,6 +54,24 @@ function matchesStatus(run: WorkflowRunSummary, status: ActivityStatusFilter): b
   if (status === "failing") return failing;
   if (status === "successful") return successful;
   return !running && !failing && !successful;
+}
+
+function matchesChangeRequestStatus(
+  event: ChangeRequestActivitySummary,
+  status: ActivityStatusFilter,
+): boolean {
+  if (status === "all") return true;
+  const failing = new Set(["changesRequested", "checksFailed", "conflictDetected"]).has(event.kind);
+  const successful = new Set([
+    "reviewApproved",
+    "checksRecovered",
+    "conflictResolved",
+    "merged",
+  ]).has(event.kind);
+  if (status === "failing") return failing;
+  if (status === "successful") return successful;
+  if (status === "running") return false;
+  return !failing && !successful;
 }
 
 function rangeCutoff(range: ActivityRangeFilter): number | null {
@@ -51,19 +86,24 @@ export function ActivityPage() {
   const client = useApplicationClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
+  const [persistedActivity, setPersistedActivity] = useState<ListActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<{
     workflow: WorkflowSummary;
     run: WorkflowRunSummary;
   } | null>(null);
+  const [selectedChangeRequest, setSelectedChangeRequest] =
+    useState<ChangeRequestActivitySummary | null>(null);
 
   useEffect(() => {
     let active = true;
-    client
-      .listWorkflows()
-      .then((response) => {
-        if (active) setInventory(response);
+    Promise.all([client.listWorkflows(), client.listActivity()])
+      .then(([workflowResponse, activityResponse]) => {
+        if (active) {
+          setInventory(workflowResponse);
+          setPersistedActivity(activityResponse);
+        }
       })
       .catch(() => {
         if (active) setError(true);
@@ -76,26 +116,41 @@ export function ActivityPage() {
     };
   }, [client]);
 
-  const activities = useMemo(
-    () =>
-      (inventory?.workflows ?? [])
-        .flatMap((workflow) =>
-          workflow.runs.map((run): WorkflowActivity => ({
-            id: `${workflow.sourceId}:${workflow.repositoryId}:${run.id}:${run.attempt}`,
-            repositoryId: `${workflow.sourceId}:${workflow.repositoryId}`,
-            repositoryLabel: `${workflow.repositoryOwner}/${workflow.repositoryName}`,
-            workflow,
-            run,
-          })),
-        )
-        .sort((left, right) => Date.parse(right.run.createdAt) - Date.parse(left.run.createdAt)),
-    [inventory],
-  );
+  const activities = useMemo(() => {
+    const workflows: WorkflowActivity[] = (inventory?.workflows ?? []).flatMap((workflow) =>
+      workflow.runs.map((run): WorkflowActivity => ({
+        type: "workflow",
+        id: `${workflow.sourceId}:${workflow.repositoryId}:${run.id}:${run.attempt}`,
+        occurredAt: run.createdAt,
+        repositoryId: `${workflow.sourceId}:${workflow.repositoryId}`,
+        repositoryLabel: `${workflow.repositoryOwner}/${workflow.repositoryName}`,
+        workflow,
+        run,
+      })),
+    );
+    const changeRequests: TimelineActivity[] = (persistedActivity?.changeRequestEvents ?? []).map(
+      (event) => ({
+        type: "pullRequest",
+        id: event.id,
+        occurredAt: event.occurredAt,
+        repositoryId: `${event.changeRequest.sourceId}:${event.changeRequest.repositoryId}`,
+        repositoryLabel: `${event.changeRequest.repositoryOwner}/${event.changeRequest.repositoryName}`,
+        event,
+      }),
+    );
+    return ([...workflows, ...changeRequests] as TimelineActivity[]).sort(
+      (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt),
+    );
+  }, [inventory, persistedActivity]);
 
   const requestedStatus = searchParams.get("status") ?? "all";
   const requestedRange = searchParams.get("range") ?? "all";
+  const requestedType = searchParams.get("type") ?? "all";
   const filters: ActivityFilterValues = {
     query: searchParams.get("q") ?? "",
+    type: TYPE_FILTERS.has(requestedType as ActivityTypeFilter)
+      ? (requestedType as ActivityTypeFilter)
+      : "all",
     status: STATUS_FILTERS.has(requestedStatus as ActivityStatusFilter)
       ? (requestedStatus as ActivityStatusFilter)
       : "all",
@@ -116,36 +171,60 @@ export function ActivityPage() {
       .sort((left, right) => left.label.localeCompare(right.label));
   }, [activities]);
   const triggers = useMemo(
-    () => [...new Set(activities.map((activity) => activity.run.trigger))].sort(),
+    () =>
+      [
+        ...new Set(
+          activities
+            .filter((activity): activity is WorkflowActivity => activity.type === "workflow")
+            .map((activity) => activity.run.trigger),
+        ),
+      ].sort(),
     [activities],
   );
 
   const normalizedQuery = filters.query.trim().toLocaleLowerCase();
   const cutoff = rangeCutoff(filters.range);
   const filteredActivities = activities.filter((activity) => {
-    const { workflow, run } = activity;
-    const searchable = [
-      activity.repositoryLabel,
-      workflow.name,
-      run.title,
-      run.branch,
-      run.commitSha,
-      run.actor,
-      run.trigger,
-    ]
+    const searchable = (
+      activity.type === "workflow"
+        ? [
+            activity.repositoryLabel,
+            activity.workflow.name,
+            activity.run.title,
+            activity.run.branch,
+            activity.run.commitSha,
+            activity.run.actor,
+            activity.run.trigger,
+          ]
+        : [
+            activity.repositoryLabel,
+            activity.event.changeRequest.title,
+            activity.event.changeRequest.author,
+            activity.event.changeRequest.sourceBranch,
+            activity.event.changeRequest.targetBranch,
+            activity.event.kind,
+          ]
+    )
       .filter(Boolean)
       .join(" ")
       .toLocaleLowerCase();
     return (
       searchable.includes(normalizedQuery) &&
-      matchesStatus(run, filters.status) &&
+      (filters.type === "all" ||
+        (filters.type === "workflows" && activity.type === "workflow") ||
+        (filters.type === "pullRequests" && activity.type === "pullRequest")) &&
+      (activity.type === "workflow"
+        ? matchesStatus(activity.run, filters.status)
+        : matchesChangeRequestStatus(activity.event, filters.status)) &&
       (filters.repository.length === 0 || activity.repositoryId === filters.repository) &&
-      (filters.trigger.length === 0 || run.trigger === filters.trigger) &&
-      (cutoff === null || Date.parse(run.createdAt) >= cutoff)
+      (filters.trigger.length === 0 ||
+        (activity.type === "workflow" && activity.run.trigger === filters.trigger)) &&
+      (cutoff === null || Date.parse(activity.occurredAt) >= cutoff)
     );
   });
   const filtersActive =
     normalizedQuery.length > 0 ||
+    filters.type !== "all" ||
     filters.status !== "all" ||
     filters.repository.length > 0 ||
     filters.trigger.length > 0 ||
@@ -154,6 +233,7 @@ export function ActivityPage() {
   const updateFilters = (values: ActivityFilterValues) => {
     const next = new URLSearchParams();
     if (values.query.trim().length > 0) next.set("q", values.query);
+    if (values.type !== "all") next.set("type", values.type);
     if (values.status !== "all") next.set("status", values.status);
     if (values.repository.length > 0) next.set("repository", values.repository);
     if (values.trigger.length > 0) next.set("trigger", values.trigger);
@@ -164,22 +244,22 @@ export function ActivityPage() {
   return (
     <section className="page-view" aria-labelledby="activity-title">
       <PageHeader
-        eyebrow="Workflow runs"
+        eyebrow="Operations timeline"
         title="Activity"
-        description="Recent activity across all monitored repositories."
+        description="Workflow runs and pull request transitions across monitored repositories."
       />
 
       <section className="panel activity-panel" aria-labelledby="activity-list-title">
         <PanelHeader
           label="Timeline"
-          title="Recent workflow activity"
+          title="Recent activity"
           metadata={
             <span className="panel-badge">
               {error
                 ? "Unavailable"
                 : filtersActive
-                  ? `${filteredActivities.length} of ${activities.length} runs`
-                  : `${activities.length} run${activities.length === 1 ? "" : "s"}`}
+                  ? `${filteredActivities.length} of ${activities.length} events`
+                  : `${activities.length} event${activities.length === 1 ? "" : "s"}`}
             </span>
           }
         />
@@ -193,6 +273,7 @@ export function ActivityPage() {
               onClear={() =>
                 updateFilters({
                   query: "",
+                  type: "all",
                   status: "all",
                   repository: "",
                   trigger: "",
@@ -202,8 +283,8 @@ export function ActivityPage() {
             />
             <div className="activity-list-header" aria-hidden="true">
               <span>Status</span>
-              <span>Run</span>
-              <span>Project / workflow</span>
+              <span>Activity</span>
+              <span>Project / context</span>
               <span className="activity-ref-heading">Ref</span>
               <span className="activity-actor-heading">Actor / trigger</span>
               <span />
@@ -216,17 +297,25 @@ export function ActivityPage() {
           ) : error ? (
             <EmptyState message="The activity timeline could not be loaded." error />
           ) : activities.length === 0 ? (
-            <EmptyState message="No workflow activity has been cached yet." />
+            <EmptyState message="No activity has been cached yet." />
           ) : filteredActivities.length === 0 ? (
-            <EmptyState message="No workflow activity matches the current filters." />
+            <EmptyState message="No activity matches the current filters." />
           ) : (
-            filteredActivities.map((activity) => (
-              <ActivityRow
-                activity={activity}
-                key={activity.id}
-                onOpen={() => setSelected({ workflow: activity.workflow, run: activity.run })}
-              />
-            ))
+            filteredActivities.map((activity) =>
+              activity.type === "workflow" ? (
+                <ActivityRow
+                  activity={activity}
+                  key={activity.id}
+                  onOpen={() => setSelected({ workflow: activity.workflow, run: activity.run })}
+                />
+              ) : (
+                <ChangeRequestActivityRow
+                  activity={activity.event}
+                  key={activity.id}
+                  onOpen={() => setSelectedChangeRequest(activity.event)}
+                />
+              ),
+            )
           )}
         </div>
       </section>
@@ -236,6 +325,12 @@ export function ActivityPage() {
           workflow={selected.workflow}
           run={selected.run}
           onClose={() => setSelected(null)}
+        />
+      ) : null}
+      {selectedChangeRequest ? (
+        <ChangeRequestDetailsDialog
+          changeRequest={selectedChangeRequest.changeRequest}
+          onClose={() => setSelectedChangeRequest(null)}
         />
       ) : null}
     </section>

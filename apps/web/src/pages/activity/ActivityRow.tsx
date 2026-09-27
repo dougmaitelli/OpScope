@@ -7,7 +7,9 @@ import {
 import "./ActivityRow.css";
 
 export interface WorkflowActivity {
+  type: "workflow";
   id: string;
+  occurredAt: string;
   repositoryId: string;
   repositoryLabel: string;
   workflow: WorkflowSummary;

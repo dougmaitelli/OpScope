@@ -2,12 +2,13 @@ use crate::state::DesktopState;
 use opsscope_core::contracts::{
     ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListChangeRequestsResponse,
-    ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
-    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
-    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListActivityResponse,
+    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
+    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
 
@@ -50,6 +51,21 @@ pub(crate) async fn list_change_requests(
         .await
         .map(ListChangeRequestsResponse::from_domain)
         .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) fn list_activity(
+    state: State<'_, DesktopState>,
+) -> Result<ListActivityResponse, ConnectionValidationErrorResponse> {
+    state
+        .list_activity
+        .execute()
+        .map(ListActivityResponse::from_domain)
+        .map_err(|_| {
+            ConnectionValidationErrorResponse::from(
+                opsscope_core::application::ListWorkflowsFailure::StorageUnavailable,
+            )
+        })
 }
 
 #[tauri::command]

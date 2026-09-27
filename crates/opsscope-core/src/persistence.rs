@@ -3,11 +3,12 @@
 mod source_cache;
 
 use crate::application::{
-    ConnectionRepository, DEFAULT_RECENT_RUNS_PER_WORKFLOW,
-    DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS, LatestRunNotificationState, MonitoringSettings,
-    NotificationStateRepository, PersistenceFailure, ProviderToken, RepositorySelection,
-    RepositorySelectionRepository, SecretReference, SecretStore, SettingsRepository,
-    SourceRepositorySelection, StoredConnection, ValidatedAccount,
+    ActivityEventRepository, ChangeRequestActivityEvent, ConnectionRepository,
+    DEFAULT_RECENT_RUNS_PER_WORKFLOW, DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
+    LatestRunNotificationState, MonitoringSettings, NotificationStateRepository,
+    PersistenceFailure, ProviderToken, RepositorySelection, RepositorySelectionRepository,
+    SecretReference, SecretStore, SettingsRepository, SourceRepositorySelection, StoredConnection,
+    ValidatedAccount,
 };
 use chacha20poly1305::aead::{Aead, Generate, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
@@ -180,6 +181,24 @@ impl SqliteDatabase {
                    PRIMARY KEY (source_id, account_id, repository_id, number),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS change_request_activity_states (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   payload TEXT NOT NULL,
+                   observed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                   PRIMARY KEY (source_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS change_request_activity_events (
+                   id TEXT PRIMARY KEY,
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   occurred_at TEXT NOT NULL,
+                   payload TEXT NOT NULL,
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE INDEX IF NOT EXISTS change_request_activity_occurred_at
+                   ON change_request_activity_events(occurred_at DESC);
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    event_type TEXT NOT NULL,
@@ -585,6 +604,110 @@ impl SettingsRepository for SqliteDatabase {
                 params![synchronization_interval_seconds, recent_runs_per_workflow,],
             )
             .map(|_| ())
+            .map_err(|_| PersistenceFailure)
+    }
+}
+
+impl ActivityEventRepository for SqliteDatabase {
+    fn load_change_request_state(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<Vec<crate::domain::ChangeRequest>>, PersistenceFailure> {
+        self.lock()?
+            .query_row(
+                "SELECT payload FROM change_request_activity_states
+                 WHERE source_id = ?1 AND repository_id = ?2",
+                params![source_id, repository_id],
+                |row| {
+                    let payload: String = row.get(0)?;
+                    serde_json::from_str(&payload).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })
+                },
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn save_change_request_observation(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+        observed: &[crate::domain::ChangeRequest],
+        events: &[ChangeRequestActivityEvent],
+    ) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        let observed = serde_json::to_string(observed).map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO change_request_activity_states (
+                   source_id, repository_id, payload, observed_at
+                 ) VALUES (?1, ?2, ?3, unixepoch())
+                 ON CONFLICT(source_id, repository_id) DO UPDATE SET
+                   payload = excluded.payload,
+                   observed_at = unixepoch()",
+                params![source_id, repository_id, observed],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        for event in events {
+            let payload = serde_json::to_string(event).map_err(|_| PersistenceFailure)?;
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO change_request_activity_events (
+                       id, source_id, repository_id, occurred_at, payload
+                     ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        event.id,
+                        source_id,
+                        repository_id,
+                        event.occurred_at,
+                        payload
+                    ],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
+        transaction
+            .execute(
+                "DELETE FROM change_request_activity_events
+                 WHERE id NOT IN (
+                   SELECT id FROM change_request_activity_events
+                   ORDER BY occurred_at DESC, id DESC LIMIT 5000
+                 )",
+                [],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
+
+    fn list_change_request_events(
+        &self,
+    ) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
+        let database = self.lock()?;
+        let mut statement = database
+            .prepare(
+                "SELECT payload FROM change_request_activity_events
+                 ORDER BY occurred_at DESC, id DESC LIMIT 5000",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map([], |row| {
+                let payload: String = row.get(0)?;
+                serde_json::from_str(&payload).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })
+            })
+            .map_err(|_| PersistenceFailure)?;
+        rows.collect::<Result<Vec<_>, _>>()
             .map_err(|_| PersistenceFailure)
     }
 }

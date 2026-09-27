@@ -2,9 +2,11 @@ import "./ActivityFilters.css";
 
 export type ActivityStatusFilter = "all" | "failing" | "running" | "successful" | "other";
 export type ActivityRangeFilter = "all" | "day" | "week" | "month";
+export type ActivityTypeFilter = "all" | "workflows" | "pullRequests";
 
 export interface ActivityFilterValues {
   query: string;
+  type: ActivityTypeFilter;
   status: ActivityStatusFilter;
   repository: string;
   trigger: string;
@@ -28,6 +30,7 @@ export function ActivityFilters({
 }: ActivityFiltersProps) {
   const active =
     values.query.trim().length > 0 ||
+    values.type !== "all" ||
     values.status !== "all" ||
     values.repository.length > 0 ||
     values.trigger.length > 0 ||
@@ -40,9 +43,26 @@ export function ActivityFilters({
         <input
           type="search"
           value={values.query}
-          placeholder="Repository, workflow, branch, actor"
+          placeholder="Repository, workflow, pull request, actor"
           onChange={(event) => onChange({ ...values, query: event.target.value })}
         />
+      </label>
+      <label className="activity-filter">
+        <span>Type</span>
+        <select
+          value={values.type}
+          onChange={(event) =>
+            onChange({
+              ...values,
+              type: event.target.value as ActivityTypeFilter,
+              trigger: event.target.value === "pullRequests" ? "" : values.trigger,
+            })
+          }
+        >
+          <option value="all">All activity</option>
+          <option value="workflows">Workflows</option>
+          <option value="pullRequests">Pull requests</option>
+        </select>
       </label>
       <label className="activity-filter">
         <span>Repository</span>
@@ -80,6 +100,7 @@ export function ActivityFilters({
         <span>Trigger</span>
         <select
           value={values.trigger}
+          disabled={values.type === "pullRequests"}
           onChange={(event) => onChange({ ...values, trigger: event.target.value })}
         >
           <option value="">All triggers</option>

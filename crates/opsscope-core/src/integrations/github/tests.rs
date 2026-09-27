@@ -259,6 +259,11 @@ fn change_request_details_request_targets_the_selected_pull_request()
             .as_str()
             .is_some_and(|query| query.contains("reviews(first: 100)"))
     );
+    assert!(
+        body["query"]
+            .as_str()
+            .is_some_and(|query| query.contains("checkSuite { workflowRun { databaseId } }"))
+    );
     Ok(())
 }
 
@@ -274,7 +279,7 @@ fn github_change_request_details_map_provider_independent_sections()
           "updatedAt":"2026-09-27T18:00:00Z","url":"https://github.com/octocat/Hello-World/pull/42",
           "body":"Improves token handling.","labels":{"nodes":[{"name":"security"}]},
           "reviews":{"nodes":[{"author":{"login":"reviewer"},"state":"APPROVED","submittedAt":"2026-09-27T17:00:00Z"}]},
-          "commits":{"nodes":[{"commit":{"oid":"abcdef123456","messageHeadline":"Harden tokens","committedDate":"2026-09-27T16:00:00Z","author":{"name":"Octo Cat","user":{"login":"octocat"}},"statusCheckRollup":{"state":"SUCCESS","contexts":{"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/octocat/Hello-World/actions/runs/123456/job/789"}]}}}}]}
+          "commits":{"nodes":[{"commit":{"oid":"abcdef123456","messageHeadline":"Harden tokens","committedDate":"2026-09-27T16:00:00Z","author":{"name":"Octo Cat","user":{"login":"octocat"}},"statusCheckRollup":{"state":"SUCCESS","contexts":{"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/octocat/Hello-World/runs/789","checkSuite":{"workflowRun":{"databaseId":123456}}}]}}}}]}
         }"#,
     )?;
 
@@ -318,6 +323,31 @@ fn workflow_run_request_targets_selected_repository_with_required_headers()
     assert_eq!(request.url().query(), Some("per_page=100&page=2"));
     assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
     assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
+    assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
+    Ok(())
+}
+
+#[test]
+fn workflow_run_request_targets_a_run_outside_cached_history()
+-> Result<(), Box<dyn std::error::Error>> {
+    let client = GitHubClient::new()?;
+    let token = ProviderToken::new("github_pat_test".to_owned());
+    let repository = Repository {
+        id: "1296269".to_owned(),
+        owner: "octocat".to_owned(),
+        name: "Hello-World".to_owned(),
+        description: None,
+        visibility: RepositoryVisibility::Public,
+        web_url: "https://github.com/octocat/Hello-World".to_owned(),
+    };
+    let request = client
+        .workflow_run_request(&github_com(), &token, &repository, "30433642")?
+        .build()?;
+
+    assert_eq!(
+        request.url().path(),
+        "/repos/octocat/Hello-World/actions/runs/30433642"
+    );
     assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
     Ok(())
 }

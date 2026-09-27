@@ -10,15 +10,31 @@ import { DialogCloseButton } from "./DialogCloseButton.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
 import "./WorkflowRunLogsDialog.css";
 
-interface WorkflowRunLogsDialogProps {
-  workflow: WorkflowSummary;
-  run: WorkflowRunSummary;
-  onClose: () => void;
+export interface WorkflowRunReference {
+  sourceId: string;
+  sourceName: string;
+  repositoryId: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  runId: string;
+  label: string;
+  webUrl: string | null;
 }
 
-export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLogsDialogProps) {
+type WorkflowRunLogsDialogProps = (
+  | { workflow: WorkflowSummary; run: WorkflowRunSummary; reference?: never }
+  | { workflow?: never; run?: never; reference: WorkflowRunReference }
+) & { onClose: () => void };
+
+export function WorkflowRunLogsDialog({
+  workflow,
+  run,
+  reference,
+  onClose,
+}: WorkflowRunLogsDialogProps) {
   const client = useApplicationClient();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [resolvedRun, setResolvedRun] = useState<WorkflowRunSummary | null>(run ?? null);
   const [files, setFiles] = useState<WorkflowRunLogFile[]>([]);
   const [selectedFile, setSelectedFile] = useState(0);
   const [truncated, setTruncated] = useState(false);
@@ -33,17 +49,27 @@ export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLog
 
   useEffect(() => {
     let active = true;
+    const sourceId = workflow?.sourceId ?? reference?.sourceId;
+    const repositoryId = workflow?.repositoryId ?? reference?.repositoryId;
+    const runId = run?.id ?? reference?.runId;
+    if (!sourceId || !repositoryId || !runId) {
+      setError("The workflow run reference is incomplete.");
+      setLoading(false);
+      return;
+    }
+    setResolvedRun(run ?? null);
     setLoading(true);
     setError(null);
     client
       .workflowRunLogs({
-        sourceId: workflow.sourceId,
-        repositoryId: workflow.repositoryId,
-        runId: run.id,
-        attempt: run.attempt,
+        sourceId,
+        repositoryId,
+        runId,
+        attempt: run?.attempt ?? null,
       })
       .then((response) => {
         if (!active) return;
+        setResolvedRun(response.run);
         setFiles(response.files);
         setTruncated(response.truncated);
         setSelectedFile(0);
@@ -57,9 +83,14 @@ export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLog
     return () => {
       active = false;
     };
-  }, [client, run.attempt, run.id, workflow.repositoryId, workflow.sourceId]);
+  }, [client, reference?.repositoryId, reference?.runId, reference?.sourceId, run, workflow]);
 
   const activeFile = files[selectedFile] ?? null;
+  const sourceName = workflow?.sourceName ?? reference?.sourceName ?? "source";
+  const repositoryOwner = workflow?.repositoryOwner ?? reference?.repositoryOwner ?? "Unknown";
+  const repositoryName = workflow?.repositoryName ?? reference?.repositoryName ?? "repository";
+  const workflowName = workflow?.name ?? reference?.label ?? "Workflow run";
+  const webUrl = resolvedRun?.webUrl ?? reference?.webUrl;
 
   return (
     <dialog
@@ -86,33 +117,37 @@ export function WorkflowRunLogsDialog({ workflow, run, onClose }: WorkflowRunLog
       <header className="run-logs-header">
         <div>
           <p className="eyebrow">
-            {workflow.repositoryOwner}/{workflow.repositoryName} · {workflow.name}
+            {repositoryOwner}/{repositoryName} · {workflowName}
           </p>
           <h2 id="run-logs-title">
-            #{run.runNumber} · {run.title}
+            {resolvedRun ? `#${resolvedRun.runNumber} · ${resolvedRun.title}` : workflowName}
           </h2>
           <p className="run-logs-metadata">
-            {run.branch ?? "detached"} · {run.commitSha.slice(0, 7)} · attempt {run.attempt}
+            {resolvedRun
+              ? `${resolvedRun.branch ?? "detached"} · ${resolvedRun.commitSha.slice(0, 7)} · attempt ${resolvedRun.attempt}`
+              : "Resolving workflow run…"}
           </p>
         </div>
         <div className="run-logs-header-actions">
-          <WorkflowRunState run={run} />
-          <a
-            className="secondary-button compact-button"
-            href={run.webUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open in {workflow.sourceName}
-          </a>
+          {resolvedRun ? <WorkflowRunState run={resolvedRun} /> : null}
+          {webUrl ? (
+            <a
+              className="secondary-button compact-button"
+              href={webUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open in {sourceName}
+            </a>
+          ) : null}
           <DialogCloseButton label="Close logs" onClick={() => dialog.current?.close()} />
         </div>
       </header>
 
       {truncated ? (
         <p className="run-logs-notice">
-          This log bundle was shortened to keep the viewer responsive. Open it in{" "}
-          {workflow.sourceName} for the complete output.
+          This log bundle was shortened to keep the viewer responsive. Open it in {sourceName} for
+          the complete output.
         </p>
       ) : null}
 

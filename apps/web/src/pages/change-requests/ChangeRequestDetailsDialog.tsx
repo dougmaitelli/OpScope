@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
-import { WorkflowRunLogsDialog } from "../../components/WorkflowRunLogsDialog.tsx";
+import {
+  WorkflowRunLogsDialog,
+  type WorkflowRunReference,
+} from "../../components/WorkflowRunLogsDialog.tsx";
 import type {
   ChangeRequestDetailsResponse,
   ChangeRequestSummary,
@@ -32,6 +35,9 @@ export function ChangeRequestDetailsDialog({
     workflow: WorkflowSummary;
     run: WorkflowRunSummary;
   } | null>(null);
+  const [selectedRunReference, setSelectedRunReference] = useState<WorkflowRunReference | null>(
+    null,
+  );
 
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
@@ -175,9 +181,8 @@ export function ChangeRequestDetailsDialog({
                   {details.checks.length > 0 ? (
                     <div className="change-request-checks">
                       {details.checks.map((check, index) => {
-                        const workflowRun = check.workflowRunId
-                          ? workflowRuns.get(check.workflowRunId)
-                          : undefined;
+                        const runId = check.workflowRunId;
+                        const workflowRun = runId ? workflowRuns.get(runId) : undefined;
                         const content = (
                           <>
                             <span
@@ -188,11 +193,26 @@ export function ChangeRequestDetailsDialog({
                             <small>{statusLabel(check.status)}</small>
                           </>
                         );
-                        return workflowRun ? (
+                        return runId ? (
                           <button
                             type="button"
                             key={`${check.name}:${index}`}
-                            onClick={() => setSelectedRun(workflowRun)}
+                            onClick={() => {
+                              if (workflowRun) {
+                                setSelectedRun(workflowRun);
+                              } else {
+                                setSelectedRunReference({
+                                  sourceId: changeRequest.sourceId,
+                                  sourceName: changeRequest.sourceName,
+                                  repositoryId: changeRequest.repositoryId,
+                                  repositoryOwner: changeRequest.repositoryOwner,
+                                  repositoryName: changeRequest.repositoryName,
+                                  runId,
+                                  label: check.name,
+                                  webUrl: check.webUrl,
+                                });
+                              }
+                            }}
                             title="Open workflow run details"
                           >
                             {content}
@@ -269,6 +289,11 @@ export function ChangeRequestDetailsDialog({
           workflow={selectedRun.workflow}
           run={selectedRun.run}
           onClose={() => setSelectedRun(null)}
+        />
+      ) : selectedRunReference ? (
+        <WorkflowRunLogsDialog
+          reference={selectedRunReference}
+          onClose={() => setSelectedRunReference(null)}
         />
       ) : null}
     </>

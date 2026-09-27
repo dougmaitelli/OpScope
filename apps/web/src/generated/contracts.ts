@@ -46,6 +46,12 @@ export type ChangeRequestSummary = { id: string, number: number, title: string, 
 
 export type ListChangeRequestsResponse = { selectedRepositoryCount: number, changeRequests: Array<ChangeRequestSummary>, };
 
+export type ChangeRequestActivityKind = "opened" | "readyForReview" | "reviewApproved" | "changesRequested" | "checksFailed" | "checksRecovered" | "conflictDetected" | "conflictResolved" | "merged" | "closed";
+
+export type ChangeRequestActivitySummary = { id: string, kind: ChangeRequestActivityKind, occurredAt: string, changeRequest: ChangeRequestSummary, };
+
+export type ListActivityResponse = { changeRequestEvents: Array<ChangeRequestActivitySummary>, };
+
 export type ChangeRequestDetailsRequest = { sourceId: string, repositoryId: string, number: number, };
 
 export type ChangeRequestReviewSummary = { reviewer: string | null, status: ChangeRequestReviewStatus, submittedAt: string | null, };
@@ -66,11 +72,11 @@ export type RunOutcome = "success" | "warning" | "failure" | "cancelled" | "skip
 
 export type WorkflowRunSummary = { id: string, runNumber: number, attempt: number, title: string, lifecycle: RunLifecycle, outcome: RunOutcome, branch: string | null, commitSha: string, actor: string | null, trigger: string, createdAt: string, startedAt: string | null, updatedAt: string, webUrl: string, };
 
-export type WorkflowRunLogsRequest = { sourceId: string, repositoryId: string, runId: string, attempt: number, };
+export type WorkflowRunLogsRequest = { sourceId: string, repositoryId: string, runId: string, attempt: number | null, };
 
 export type WorkflowRunLogFile = { name: string, content: string, };
 
-export type WorkflowRunLogsResponse = { files: Array<WorkflowRunLogFile>, truncated: boolean, };
+export type WorkflowRunLogsResponse = { run: WorkflowRunSummary, files: Array<WorkflowRunLogFile>, truncated: boolean, };
 
 export type WorkflowRunLogsErrorResponse = { message: string, };
 
@@ -107,6 +113,7 @@ export const httpRoutes = {
   health: "/api/health",
   updateStatus: "/api/update-status",
   workflows: "/api/workflows",
+  activity: "/api/activity",
   changeRequests: "/api/change-requests",
   changeRequestDetails: "/api/change-request-details",
   workflowRunLogs: "/api/workflow-run-logs",
@@ -122,6 +129,7 @@ export const desktopCommands = {
   health: "health",
   updateStatus: "update_status",
   listWorkflows: "list_workflows",
+  listActivity: "list_activity",
   listChangeRequests: "list_change_requests",
   changeRequestDetails: "change_request_details",
   workflowRunLogs: "workflow_run_logs",
@@ -140,6 +148,7 @@ export interface ApplicationClient {
   health(): Promise<HealthResponse>;
   updateStatus(): Promise<UpdateStatusResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
+  listActivity(): Promise<ListActivityResponse>;
   listChangeRequests(): Promise<ListChangeRequestsResponse>;
   changeRequestDetails(request: ChangeRequestDetailsRequest): Promise<ChangeRequestDetailsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;

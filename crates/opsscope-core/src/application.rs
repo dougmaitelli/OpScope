@@ -1,5 +1,6 @@
 //! Application use cases and the ports they require.
 
+mod activity;
 mod change_request_details;
 mod notifications;
 mod run_logs;
@@ -12,7 +13,7 @@ pub use notifications::{
     NotificationSeverity, NotificationSink, NotificationStateRepository, NotifyRepositoryFailures,
     NotifyRepositoryFailuresFailure,
 };
-pub use run_logs::GetWorkflowRunLogs;
+pub use run_logs::{GetWorkflowRunLogs, ResolvedWorkflowRunLogs};
 pub use settings::{
     DEFAULT_RECENT_RUNS_PER_WORKFLOW, DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
     GetMonitoringSettings, MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
@@ -214,6 +215,16 @@ pub trait SourceModule: Send + Sync {
         token: &ProviderToken,
         repository: &Repository,
     ) -> Result<Vec<WorkflowRun>, ConnectionValidationFailure>;
+
+    async fn workflow_run(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _run_id: &str,
+    ) -> Result<Option<WorkflowRun>, ConnectionValidationFailure> {
+        Ok(None)
+    }
 
     async fn list_change_requests(
         &self,
@@ -1036,4 +1047,8 @@ impl DisconnectSource {
         Ok(true)
     }
 }
+pub use activity::{
+    ActivityEventRepository, ChangeRequestActivityEvent, ChangeRequestActivityKind, ListActivity,
+    TrackChangeRequestActivity,
+};
 pub use change_request_details::{GetChangeRequestDetails, GetChangeRequestDetailsFailure};
