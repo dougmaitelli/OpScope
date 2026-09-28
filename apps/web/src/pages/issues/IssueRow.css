@@ -1,70 +1,28 @@
-.issue-row {
+.issue-row,
+.issue-list-header {
   display: grid;
-  width: 100%;
-  min-height: 58px;
-  padding: 9px 12px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  color: var(--text);
-  background: var(--surface);
   grid-template-columns:
-    minmax(240px, 1.8fr) minmax(150px, 0.9fr) minmax(100px, 0.65fr) minmax(120px, 0.8fr)
+    minmax(240px, 1.8fr) minmax(100px, 0.65fr) minmax(120px, 0.8fr)
     58px 68px 14px;
-  gap: 12px;
-  align-items: center;
-  text-align: left;
-  cursor: pointer;
-}
-.issue-row:hover {
-  background: var(--surface-raised);
 }
 .issue-primary,
-.issue-repository,
 .issue-assignees,
 .issue-labels {
   min-width: 0;
-}
-.issue-title,
-.issue-repository > span {
-  display: block;
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .issue-number {
   margin-right: 7px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.issue-meta,
-.issue-repository small,
-.issue-updated {
-  display: block;
-  overflow: hidden;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.issue-assignees,
-.issue-comments {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .issue-comments {
   font-variant-numeric: tabular-nums;
 }
 .issue-labels {
   display: flex;
+  align-items: center;
   overflow: hidden;
   gap: 4px;
-  align-items: center;
 }
 .issue-labels span {
   overflow: hidden;
@@ -81,13 +39,10 @@
   font-size: 8px;
   white-space: nowrap;
 }
-.issue-open {
-  color: var(--subtle);
-  font-size: 11px;
-}
 @media (max-width: 1050px) {
-  .issue-row {
-    grid-template-columns: minmax(230px, 1.7fr) minmax(150px, 1fr) minmax(110px, 0.8fr) 58px 14px;
+  .issue-row,
+  .issue-list-header {
+    grid-template-columns: minmax(230px, 1.7fr) minmax(110px, 0.8fr) 58px 14px;
   }
   .issue-labels,
   .issue-updated {
@@ -95,11 +50,25 @@
   }
 }
 @media (max-width: 760px) {
-  .issue-row {
-    grid-template-columns: minmax(220px, 1.7fr) minmax(140px, 1fr) 14px;
+  .issue-row,
+  .issue-list-header {
+    grid-template-columns: minmax(0, 1fr) 14px;
   }
   .issue-assignees,
   .issue-comments {
+    display: none;
+  }
+}
+
+@media (max-width: 1050px) {
+  .issue-list-header span:nth-child(3),
+  .issue-list-header span:nth-child(5) {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .issue-list-header span:nth-child(2),
+  .issue-list-header span:nth-child(4) {
     display: none;
   }
 }

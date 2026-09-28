@@ -1,3 +1,4 @@
+import { DataRow, DataRowGroup, DataRowIdentity } from "./data-row/DataRow.tsx";
 import { useState } from "react";
 import type { WorkflowRunSummary, WorkflowSummary } from "../generated/contracts.ts";
 import "./WorkflowRow.css";
@@ -10,31 +11,33 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
   const earlierRuns = workflow.runs.slice(1);
 
   return (
-    <article className="workflow-row">
-      <div
+    <DataRowGroup className="workflow-row">
+      <DataRow
+        as="div"
+        surface={false}
         className={`workflow-row-summary${latestRun ? " workflow-row-summary-clickable" : ""}`}
         onClick={() => {
           if (latestRun) setSelectedRun(latestRun);
         }}
       >
-        <div className="workflow-identity">
-          <span className="workflow-mark" aria-hidden="true">
-            {workflow.name.slice(0, 2).toUpperCase()}
-          </span>
-          <div className="workflow-copy">
-            <h4>
-              <a
-                className="workflow-link"
-                href={workflow.webUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {workflow.name}
-              </a>
-            </h4>
-            {latestRun ? (
-              <p className="latest-run">
+        <DataRowIdentity
+          className="workflow-identity"
+          titleAs="h4"
+          title={
+            <a
+              className="workflow-link"
+              href={workflow.webUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {workflow.name}
+            </a>
+          }
+          metadataClassName={latestRun ? "latest-run" : ""}
+          metadata={
+            latestRun ? (
+              <>
                 <button
                   className="run-link-button"
                   type="button"
@@ -46,14 +49,14 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
                   {latestRun.branch ?? "detached"} · {latestRun.commitSha.slice(0, 7)}
                   {latestRun.actor ? ` · ${latestRun.actor}` : ""}
                 </span>
-              </p>
+              </>
             ) : (
-              <p>{workflow.path}</p>
-            )}
-          </div>
-        </div>
+              workflow.path
+            )
+          }
+        />
         <WorkflowRunState run={latestRun} workflowState={workflow.state} />
-      </div>
+      </DataRow>
       {earlierRuns.length > 0 ? (
         <details className="run-history">
           <summary>Previous runs</summary>
@@ -89,6 +92,6 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
           onClose={() => setSelectedRun(null)}
         />
       ) : null}
-    </article>
+    </DataRowGroup>
   );
 }

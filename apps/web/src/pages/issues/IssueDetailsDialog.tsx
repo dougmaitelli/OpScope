@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
+import { StatusPill } from "../../components/StatusPill.tsx";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
 import type { IssueDetailsResponse, IssueSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
@@ -91,9 +92,9 @@ export function IssueDetailsDialog({
         </div>
       </header>
       <div className="issue-dialog-statuses">
-        <span className={`issue-state-${current.state}`}>
+        <StatusPill tone={current.state === "open" ? "success" : "neutral"}>
           {current.state === "open" ? "Open" : "Closed"}
-        </span>
+        </StatusPill>
         <span>{current.commentCount} comments</span>
         <span>Updated {formatRelativeDate(current.updatedAt)}</span>
       </div>

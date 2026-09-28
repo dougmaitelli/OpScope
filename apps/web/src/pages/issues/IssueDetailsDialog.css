@@ -59,6 +59,7 @@
 }
 .issue-dialog-statuses {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 16px;
   padding: 7px 14px;
@@ -67,9 +68,6 @@
   background: #10161e;
   font-size: 9px;
   font-weight: 650;
-}
-.issue-state-open {
-  color: var(--success);
 }
 .issue-dialog-content {
   display: grid;

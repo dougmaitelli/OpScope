@@ -1,0 +1,95 @@
+/* Presentation owned by the row primitives; feature components supply layouts. */
+:root {
+  --row-height: 58px;
+  --row-padding-y: 8px;
+  --row-padding-x: 10px;
+  --row-gap: 14px;
+  --row-copy-gap: 3px;
+  --row-title-size: 11px;
+  --row-title-weight: 680;
+  --row-meta-size: 9px;
+  --row-surface: #10151c;
+  --row-hover: #131a23;
+  --row-border: #252d38;
+}
+
+.data-row {
+  align-items: center;
+  width: 100%;
+  min-height: var(--row-height);
+  padding: var(--row-padding-y) var(--row-padding-x);
+  gap: var(--row-gap);
+  color: var(--text);
+  text-align: left;
+}
+
+.data-row-surface {
+  border: 0;
+  border-bottom: 1px solid var(--row-border);
+  background: var(--row-surface);
+}
+
+.data-row-surface:last-child {
+  border-bottom: 0;
+}
+
+.data-row-surface:hover {
+  background: var(--row-hover);
+}
+
+button.data-row {
+  cursor: pointer;
+}
+
+.data-row:focus-visible,
+.data-row :is(button, a, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.data-row-title,
+.data-row-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-row-identity {
+  min-width: 0;
+}
+
+.data-row-title {
+  margin: 0;
+  font-size: var(--row-title-size);
+  font-weight: var(--row-title-weight);
+}
+
+.data-row-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--row-meta-size);
+}
+
+.data-row-title + .data-row-meta {
+  margin-top: var(--row-copy-gap);
+}
+
+.data-row-chevron {
+  color: var(--subtle);
+  font-size: 16px;
+}
+
+.data-row-header {
+  display: grid;
+  padding: 6px var(--row-padding-x);
+  gap: var(--row-gap);
+  border-bottom: 1px solid var(--row-border);
+  color: var(--subtle);
+  background: #0e131a;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

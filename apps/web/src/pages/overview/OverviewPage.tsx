@@ -4,7 +4,9 @@ import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
-import { groupWorkflows, ProjectGroup } from "../../components/ProjectGroup.tsx";
+import { ProjectGroupList } from "../../components/ProjectGroup.tsx";
+import { groupByProject } from "../../shared/project-groups.ts";
+import { WorkflowProjectGroup } from "./WorkflowProjectGroup.tsx";
 import { WorkflowFilters, type WorkflowStatusFilter } from "../../components/WorkflowFilters.tsx";
 import type { ListWorkflowsResponse, WorkflowSummary } from "../../generated/contracts.ts";
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
@@ -141,7 +143,7 @@ export function OverviewPage() {
       `${workflow.repositoryOwner}/${workflow.repositoryName} ${workflow.name}`.toLocaleLowerCase();
     return searchable.includes(normalizedQuery) && workflowMatchesStatus(workflow, status);
   });
-  const projects = groupWorkflows(filteredWorkflows);
+  const projects = groupByProject(filteredWorkflows);
   const filtersActive = normalizedQuery.length > 0 || status !== "all";
   const latestRuns = workflows.flatMap((workflow) => workflow.runs.slice(0, 1));
   const running = latestRuns.filter(
@@ -319,7 +321,7 @@ export function OverviewPage() {
               onClear={() => updateFilters("", "all")}
             />
           ) : null}
-          <div className="workflow-list" aria-live="polite">
+          <ProjectGroupList className="workflow-list" aria-live="polite">
             {loading && !inventory ? (
               <div className="loading-row">
                 <span className="loading-block loading-avatar" />
@@ -334,9 +336,9 @@ export function OverviewPage() {
             ) : filteredWorkflows.length === 0 ? (
               <EmptyState message="No workflows match the current filters." />
             ) : (
-              projects.map((project) => <ProjectGroup key={project.id} project={project} />)
+              projects.map((project) => <WorkflowProjectGroup key={project.id} project={project} />)
             )}
-          </div>
+          </ProjectGroupList>
         </section>
       </div>
     </section>

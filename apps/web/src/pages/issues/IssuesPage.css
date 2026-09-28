@@ -10,21 +10,6 @@
 .issue-list {
   min-height: 180px;
 }
-.issue-list-header {
-  display: grid;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--subtle);
-  background: #0e131a;
-  grid-template-columns:
-    minmax(240px, 1.8fr) minmax(150px, 0.9fr) minmax(100px, 0.65fr) minmax(120px, 0.8fr)
-    58px 68px 14px;
-  gap: 12px;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 .issue-loading {
   display: grid;
   min-height: 120px;
@@ -32,22 +17,4 @@
   place-items: center;
   color: var(--muted);
   font-size: 11px;
-}
-@media (max-width: 1050px) {
-  .issue-list-header {
-    grid-template-columns: minmax(230px, 1.7fr) minmax(150px, 1fr) minmax(110px, 0.8fr) 58px 14px;
-  }
-  .issue-list-header span:nth-child(4),
-  .issue-list-header span:nth-child(6) {
-    display: none;
-  }
-}
-@media (max-width: 760px) {
-  .issue-list-header {
-    grid-template-columns: minmax(220px, 1.7fr) minmax(140px, 1fr) 14px;
-  }
-  .issue-list-header span:nth-child(3),
-  .issue-list-header span:nth-child(5) {
-    display: none;
-  }
 }

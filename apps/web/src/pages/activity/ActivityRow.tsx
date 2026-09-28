@@ -1,3 +1,10 @@
+import {
+  DataRow,
+  DataRowIdentity,
+  DataRowMeta,
+  DataRowHeader,
+  RowChevron,
+} from "../../components/data-row/DataRow.tsx";
 import type { WorkflowRunSummary, WorkflowSummary } from "../../generated/contracts.ts";
 import {
   formatRelativeDate,
@@ -5,6 +12,7 @@ import {
   runPresentation,
 } from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
+import { StatusPill } from "../../components/StatusPill.tsx";
 
 export interface WorkflowActivity {
   type: "workflow";
@@ -27,45 +35,61 @@ export function ActivityRow({
   const presentation = runPresentation(run);
   const duration = formatRunDuration(run);
   return (
-    <button
+    <DataRow
       className="activity-row"
-      type="button"
       onClick={onOpen}
       aria-label={`Open logs for ${activity.repositoryLabel}, ${workflow.name}, run ${run.runNumber}`}
     >
       <span className="activity-state-cell">
-        <span className={`activity-state activity-state-${presentation.tone}`}>
-          {presentation.label}
-        </span>
-        <span>
+        <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
+        <DataRowMeta>
           {duration ? `${duration}${run.lifecycle === "running" ? " elapsed" : ""} · ` : ""}
           <time dateTime={run.createdAt}>{formatRelativeDate(run.createdAt)}</time>
-        </span>
+        </DataRowMeta>
       </span>
-      <span className="activity-run-cell">
-        <strong>
-          #{run.runNumber} · {run.title}
-        </strong>
-        <span>
-          {run.attempt > 1 ? `Attempt ${run.attempt} · ` : ""}
-          {workflow.sourceName}
-        </span>
-      </span>
-      <span className="activity-project-cell">
-        <strong>{activity.repositoryLabel}</strong>
-        <span>{workflow.name}</span>
-      </span>
-      <span className="activity-ref-cell">
-        <strong>{run.branch ?? "detached"}</strong>
-        <span>{run.commitSha.slice(0, 7)}</span>
-      </span>
-      <span className="activity-actor-cell">
-        <strong>{run.actor ?? "Unknown actor"}</strong>
-        <span>{run.trigger}</span>
-      </span>
-      <span className="activity-row-chevron" aria-hidden="true">
-        ›
-      </span>
-    </button>
+      <DataRowIdentity
+        className="activity-run-cell"
+        title={
+          <>
+            #{run.runNumber} · {run.title}
+          </>
+        }
+        metadata={
+          <>
+            {run.attempt > 1 ? `Attempt ${run.attempt} · ` : ""}
+            {workflow.sourceName}
+          </>
+        }
+      />
+      <DataRowIdentity
+        className="activity-project-cell"
+        title={<>{activity.repositoryLabel}</>}
+        metadata={<>{workflow.name}</>}
+      />
+      <DataRowIdentity
+        className="activity-ref-cell"
+        title={<>{run.branch ?? "detached"}</>}
+        metadata={<>{run.commitSha.slice(0, 7)}</>}
+      />
+      <DataRowIdentity
+        className="activity-actor-cell"
+        title={<>{run.actor ?? "Unknown actor"}</>}
+        metadata={<>{run.trigger}</>}
+      />
+      <RowChevron className="activity-row-chevron" />
+    </DataRow>
+  );
+}
+
+export function ActivityListHeader() {
+  return (
+    <DataRowHeader className="activity-list-header">
+      <span>Status</span>
+      <span>Activity</span>
+      <span>Project / context</span>
+      <span className="activity-ref-heading">Ref</span>
+      <span className="activity-actor-heading">Actor / trigger</span>
+      <span />
+    </DataRowHeader>
   );
 }

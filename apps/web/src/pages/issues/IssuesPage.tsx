@@ -7,7 +7,9 @@ import type { IssueSummary, ListIssuesResponse } from "../../generated/contracts
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { IssueDetailsDialog } from "./IssueDetailsDialog.tsx";
 import { IssueFilters } from "./IssueFilters.tsx";
-import { IssueRow } from "./IssueRow.tsx";
+import { IssueProjectGroup } from "./IssueProjectGroup.tsx";
+import { ProjectGroupList } from "../../components/ProjectGroup.tsx";
+import { groupByProject } from "../../shared/project-groups.ts";
 import "./IssuesPage.css";
 
 const ISSUE_REFRESH_INTERVAL_MS = 10_000;
@@ -106,6 +108,8 @@ export function IssuesPage() {
     });
   }, [issues, query, repository, assignment]);
 
+  const projects = useMemo(() => groupByProject(filtered), [filtered]);
+
   return (
     <section className="page-view" aria-label="Issues">
       <PageHeader
@@ -150,18 +154,9 @@ export function IssuesPage() {
               onRepositoryChange={setRepository}
               onAssignmentChange={setAssignment}
             />
-            <div className="issue-list-header" aria-hidden="true">
-              <span>Issue</span>
-              <span>Repository</span>
-              <span>Assignees</span>
-              <span>Labels</span>
-              <span>Comments</span>
-              <span>Updated</span>
-              <span />
-            </div>
           </>
         ) : null}
-        <div className="issue-list" aria-live="polite">
+        <ProjectGroupList className="issue-list" aria-live="polite">
           {loading ? (
             <p className="issue-loading">Loading cached issues…</p>
           ) : error ? (
@@ -173,15 +168,11 @@ export function IssuesPage() {
           ) : filtered.length === 0 ? (
             <EmptyState message="No issues match the current filters." />
           ) : (
-            filtered.map((issue) => (
-              <IssueRow
-                key={`${issue.sourceId}:${issue.repositoryId}:${issue.id}`}
-                issue={issue}
-                onOpen={() => setSelected(issue)}
-              />
+            projects.map((project) => (
+              <IssueProjectGroup key={project.id} project={project} onOpen={setSelected} />
             ))
           )}
-        </div>
+        </ProjectGroupList>
       </section>
       {selected ? <IssueDetailsDialog issue={selected} onClose={() => setSelected(null)} /> : null}
     </section>

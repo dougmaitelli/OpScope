@@ -131,12 +131,6 @@
   min-height: 220px;
 }
 
-.workflow-list {
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px 14px;
-}
-
 .loading-row {
   display: flex;
   align-items: center;
@@ -188,9 +182,5 @@
 @media (max-width: 480px) {
   .health-summary {
     padding: 14px;
-  }
-
-  .workflow-list {
-    padding: 11px 12px 12px;
   }
 }

@@ -20,7 +20,7 @@ import {
   type ActivityStatusFilter,
   type ActivityTypeFilter,
 } from "./ActivityFilters.tsx";
-import { ActivityRow, type WorkflowActivity } from "./ActivityRow.tsx";
+import { ActivityListHeader, ActivityRow, type WorkflowActivity } from "./ActivityRow.tsx";
 import { ChangeRequestActivityRow } from "./ChangeRequestActivityRow.tsx";
 import "./ActivityPage.css";
 
@@ -281,14 +281,7 @@ export function ActivityPage() {
                 })
               }
             />
-            <div className="activity-list-header" aria-hidden="true">
-              <span>Status</span>
-              <span>Activity</span>
-              <span>Project / context</span>
-              <span className="activity-ref-heading">Ref</span>
-              <span className="activity-actor-heading">Actor / trigger</span>
-              <span />
-            </div>
+            <ActivityListHeader />
           </>
         ) : null}
         <div className="activity-list" aria-live="polite">

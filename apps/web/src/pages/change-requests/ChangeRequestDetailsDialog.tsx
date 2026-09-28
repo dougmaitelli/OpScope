@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
+import { StatusPill } from "../../components/StatusPill.tsx";
+import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
 import {
   WorkflowRunLogsDialog,
@@ -142,15 +144,15 @@ export function ChangeRequestDetailsDialog({
           </div>
         </header>
         <div className="change-request-dialog-statuses">
-          <span className={`state-review-${changeRequest.reviewStatus}`}>
+          <StatusPill tone={changeRequestStatusTone[changeRequest.reviewStatus]}>
             Review · {statusLabel(changeRequest.reviewStatus)}
-          </span>
-          <span className={`state-check-${changeRequest.checkStatus}`}>
+          </StatusPill>
+          <StatusPill tone={changeRequestStatusTone[changeRequest.checkStatus]}>
             Checks · {statusLabel(changeRequest.checkStatus)}
-          </span>
-          <span className={`state-merge-${changeRequest.mergeStatus}`}>
+          </StatusPill>
+          <StatusPill tone={changeRequestStatusTone[changeRequest.mergeStatus]}>
             Merge · {statusLabel(changeRequest.mergeStatus)}
-          </span>
+          </StatusPill>
           <span>Updated {formatRelativeDate(changeRequest.updatedAt)}</span>
         </div>
         <div className="change-request-dialog-content" aria-busy={loading}>
@@ -185,12 +187,10 @@ export function ChangeRequestDetailsDialog({
                         const workflowRun = runId ? workflowRuns.get(runId) : undefined;
                         const content = (
                           <>
-                            <span
-                              className={`check-dot check-${check.status}`}
-                              aria-hidden="true"
-                            />
                             <span>{check.name}</span>
-                            <small>{statusLabel(check.status)}</small>
+                            <StatusPill tone={changeRequestStatusTone[check.status]}>
+                              {statusLabel(check.status)}
+                            </StatusPill>
                           </>
                         );
                         return runId ? (
@@ -256,9 +256,9 @@ export function ChangeRequestDetailsDialog({
                       {details.reviews.map((review, index) => (
                         <div key={`${review.reviewer ?? "unknown"}:${review.submittedAt ?? index}`}>
                           <span>{review.reviewer ?? "Unknown reviewer"}</span>
-                          <small className={`state-review-${review.status}`}>
+                          <StatusPill tone={changeRequestStatusTone[review.status]}>
                             {statusLabel(review.status)}
-                          </small>
+                          </StatusPill>
                         </div>
                       ))}
                     </div>

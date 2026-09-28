@@ -10,7 +10,9 @@ import type {
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { ChangeRequestFilters, type ChangeRequestFilter } from "./ChangeRequestFilters.tsx";
 import { ChangeRequestDetailsDialog } from "./ChangeRequestDetailsDialog.tsx";
-import { ChangeRequestRow } from "./ChangeRequestRow.tsx";
+import { ChangeRequestProjectGroup } from "./ChangeRequestProjectGroup.tsx";
+import { ProjectGroupList } from "../../components/ProjectGroup.tsx";
+import { groupByProject } from "../../shared/project-groups.ts";
 import "./ChangeRequestsPage.css";
 
 export function ChangeRequestsPage() {
@@ -71,6 +73,8 @@ export function ChangeRequestsPage() {
     });
   }, [changeRequests, query, status]);
 
+  const projects = useMemo(() => groupByProject(filtered), [filtered]);
+
   return (
     <section className="page-view" aria-labelledby="change-requests-title">
       <PageHeader
@@ -96,18 +100,9 @@ export function ChangeRequestsPage() {
               onQueryChange={setQuery}
               onStatusChange={setStatus}
             />
-            <div className="change-request-list-header" aria-hidden="true">
-              <span>Pull request</span>
-              <span>Repository</span>
-              <span>Review</span>
-              <span>Checks</span>
-              <span>Merge</span>
-              <span>Updated</span>
-              <span />
-            </div>
           </>
         ) : null}
-        <div className="change-request-list" aria-live="polite">
+        <ProjectGroupList className="change-request-list" aria-live="polite">
           {loading ? (
             <p className="change-request-loading">Loading cached pull requests…</p>
           ) : error ? (
@@ -119,15 +114,11 @@ export function ChangeRequestsPage() {
           ) : filtered.length === 0 ? (
             <EmptyState message="No pull requests match the current filters." />
           ) : (
-            filtered.map((item) => (
-              <ChangeRequestRow
-                key={`${item.sourceId}:${item.repositoryId}:${item.id}`}
-                changeRequest={item}
-                onOpen={() => setSelected(item)}
-              />
+            projects.map((project) => (
+              <ChangeRequestProjectGroup key={project.id} project={project} onOpen={setSelected} />
             ))
           )}
-        </div>
+        </ProjectGroupList>
       </section>
       {selected ? (
         <ChangeRequestDetailsDialog changeRequest={selected} onClose={() => setSelected(null)} />

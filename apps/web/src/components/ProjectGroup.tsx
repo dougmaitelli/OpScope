@@ -1,64 +1,43 @@
-import type { WorkflowSummary } from "../generated/contracts.ts";
-import { WorkflowRow } from "./WorkflowRow.tsx";
+import { useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import type { ProjectIdentity } from "../shared/project-groups.ts";
 import "./ProjectGroup.css";
 
-export interface WorkflowProject {
-  id: string;
-  sourceName: string;
-  sourceAbbreviation: string;
-  repositoryOwner: string;
-  repositoryName: string;
-  workflows: WorkflowSummary[];
-}
+export function ProjectGroup({
+  project,
+  countLabel,
+  itemCount,
+  defaultExpanded = false,
+  metadata,
+  children,
+}: {
+  project: ProjectIdentity;
+  countLabel: string;
+  itemCount: number;
+  defaultExpanded?: boolean;
+  metadata?: ReactNode;
+  children: ReactNode;
+}) {
+  // Initial state only: refreshes should not override the user's expand/collapse choice.
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  if (itemCount === 0) return null;
 
-export function groupWorkflows(workflows: WorkflowSummary[]): WorkflowProject[] {
-  const projects = new Map<string, WorkflowProject>();
-  for (const workflow of workflows) {
-    const id = `${workflow.sourceId}:${workflow.repositoryId}`;
-    const project = projects.get(id);
-    if (project) {
-      project.workflows.push(workflow);
-    } else {
-      projects.set(id, {
-        id,
-        sourceName: workflow.sourceName,
-        sourceAbbreviation: workflow.sourceAbbreviation,
-        repositoryOwner: workflow.repositoryOwner,
-        repositoryName: workflow.repositoryName,
-        workflows: [workflow],
-      });
-    }
-  }
-  return [...projects.values()].sort((left, right) =>
-    `${left.repositoryOwner}/${left.repositoryName}`.localeCompare(
-      `${right.repositoryOwner}/${right.repositoryName}`,
-      undefined,
-      { sensitivity: "base" },
-    ),
-  );
-}
-
-export function ProjectGroup({ project }: { project: WorkflowProject }) {
-  const active = project.workflows.filter((workflow) => workflow.state === "active").length;
   return (
-    <details className="project-group">
+    <details
+      className="project-group"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
       <summary className="project-header">
         <div className="project-identity">
-          <span className="project-mark" aria-hidden="true">
-            {project.sourceAbbreviation}
-          </span>
-          <div>
-            <h3>
-              {project.repositoryOwner}/{project.repositoryName}
-            </h3>
-            <p>
-              {project.sourceName} · {project.workflows.length} workflow
-              {project.workflows.length === 1 ? "" : "s"}
-            </p>
-          </div>
+          <h3>
+            {project.repositoryOwner}/{project.repositoryName}
+          </h3>
+          <p>
+            {project.sourceName} · {countLabel}
+          </p>
         </div>
         <div className="project-metadata">
-          <span>{active} active</span>
+          {metadata ? <span className="project-summary">{metadata}</span> : null}
           <span className="project-chevron" aria-hidden="true">
             <svg viewBox="0 0 16 16">
               <path d="m4.5 6 3.5 3.5L11.5 6" />
@@ -66,11 +45,11 @@ export function ProjectGroup({ project }: { project: WorkflowProject }) {
           </span>
         </div>
       </summary>
-      <div className="project-workflows">
-        {project.workflows.map((workflow) => (
-          <WorkflowRow key={workflow.id} workflow={workflow} />
-        ))}
-      </div>
+      <div className="project-items">{children}</div>
     </details>
   );
+}
+
+export function ProjectGroupList({ className = "", ...props }: ComponentPropsWithoutRef<"div">) {
+  return <div {...props} className={`project-group-list ${className}`} />;
 }

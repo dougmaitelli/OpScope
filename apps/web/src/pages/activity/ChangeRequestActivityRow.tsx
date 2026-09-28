@@ -1,9 +1,16 @@
+import {
+  DataRow,
+  DataRowIdentity,
+  DataRowMeta,
+  RowChevron,
+} from "../../components/data-row/DataRow.tsx";
 import type {
   ChangeRequestActivityKind,
   ChangeRequestActivitySummary,
 } from "../../generated/contracts.ts";
 import { formatRelativeDate } from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
+import { StatusPill } from "../../components/StatusPill.tsx";
 
 const presentation: Record<
   ChangeRequestActivityKind,
@@ -48,37 +55,42 @@ export function ChangeRequestActivityRow({
   const state = presentation[activity.kind];
   const repository = `${changeRequest.repositoryOwner}/${changeRequest.repositoryName}`;
   return (
-    <button
+    <DataRow
       className="activity-row"
-      type="button"
       onClick={onOpen}
       aria-label={`Open pull request ${changeRequest.number} in ${repository}`}
     >
       <span className="activity-state-cell">
-        <span className={`activity-state activity-state-${state.tone}`}>{state.label}</span>
-        <time dateTime={activity.occurredAt}>{formatRelativeDate(activity.occurredAt)}</time>
+        <StatusPill tone={state.tone}>{state.label}</StatusPill>
+        <DataRowMeta>
+          <time dateTime={activity.occurredAt}>{formatRelativeDate(activity.occurredAt)}</time>
+        </DataRowMeta>
       </span>
-      <span className="activity-run-cell">
-        <strong>
-          #{changeRequest.number} · {changeRequest.title}
-        </strong>
-        <span>{state.description}</span>
-      </span>
-      <span className="activity-project-cell">
-        <strong>{repository}</strong>
-        <span>Pull request · {changeRequest.sourceName}</span>
-      </span>
-      <span className="activity-ref-cell">
-        <strong>{changeRequest.sourceBranch}</strong>
-        <span>→ {changeRequest.targetBranch}</span>
-      </span>
-      <span className="activity-actor-cell">
-        <strong>{changeRequest.author ?? "Unknown actor"}</strong>
-        <span>pull request</span>
-      </span>
-      <span className="activity-row-chevron" aria-hidden="true">
-        ›
-      </span>
-    </button>
+      <DataRowIdentity
+        className="activity-run-cell"
+        title={
+          <>
+            #{changeRequest.number} · {changeRequest.title}
+          </>
+        }
+        metadata={<>{state.description}</>}
+      />
+      <DataRowIdentity
+        className="activity-project-cell"
+        title={<>{repository}</>}
+        metadata={<>Pull request · {changeRequest.sourceName}</>}
+      />
+      <DataRowIdentity
+        className="activity-ref-cell"
+        title={<>{changeRequest.sourceBranch}</>}
+        metadata={<>→ {changeRequest.targetBranch}</>}
+      />
+      <DataRowIdentity
+        className="activity-actor-cell"
+        title={<>{changeRequest.author ?? "Unknown actor"}</>}
+        metadata={<>pull request</>}
+      />
+      <RowChevron className="activity-row-chevron" />
+    </DataRow>
   );
 }

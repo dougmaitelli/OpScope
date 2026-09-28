@@ -1,3 +1,10 @@
+import {
+  DataRow,
+  DataRowIdentity,
+  DataRowMeta,
+  DataRowHeader,
+  RowChevron,
+} from "../../components/data-row/DataRow.tsx";
 import type {
   ChangeRequestCheckStatus,
   ChangeRequestMergeStatus,
@@ -6,6 +13,8 @@ import type {
 } from "../../generated/contracts.ts";
 import { formatRelativeDate } from "../../shared/workflow-runs.ts";
 import "./ChangeRequestRow.css";
+import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
+import { StatusPill } from "../../components/StatusPill.tsx";
 
 const reviewLabels: Record<ChangeRequestReviewStatus, string> = {
   approved: "Approved",
@@ -36,37 +45,60 @@ export function ChangeRequestRow({
   onOpen: () => void;
 }) {
   return (
-    <button className="change-request-row" type="button" onClick={onOpen}>
-      <span className="change-request-primary">
-        <span className="change-request-title">
-          <span className="change-request-number">#{changeRequest.number}</span>
-          {changeRequest.title}
-          {changeRequest.draft ? <span className="change-request-draft">Draft</span> : null}
-        </span>
-        <span className="change-request-meta">
-          {changeRequest.author ?? "Unknown author"} · {changeRequest.sourceBranch} →{" "}
-          {changeRequest.targetBranch}
-        </span>
-      </span>
-      <span className="change-request-repository">
-        <span>
-          {changeRequest.repositoryOwner}/{changeRequest.repositoryName}
-        </span>
-        <small>{changeRequest.sourceName}</small>
-      </span>
-      <span className={`change-request-state state-review-${changeRequest.reviewStatus}`}>
+    <DataRow className="change-request-row" onClick={onOpen}>
+      <DataRowIdentity
+        className="change-request-primary"
+        title={
+          <>
+            <span className="change-request-number">#{changeRequest.number}</span>
+            {changeRequest.title}
+            {changeRequest.draft ? (
+              <StatusPill className="change-request-draft">Draft</StatusPill>
+            ) : null}
+          </>
+        }
+        metadata={
+          <>
+            {changeRequest.author ?? "Unknown author"} · {changeRequest.sourceBranch} →{" "}
+            {changeRequest.targetBranch}
+          </>
+        }
+      />
+      <StatusPill
+        className="change-request-state"
+        tone={changeRequestStatusTone[changeRequest.reviewStatus]}
+      >
         {reviewLabels[changeRequest.reviewStatus]}
-      </span>
-      <span className={`change-request-state state-check-${changeRequest.checkStatus}`}>
+      </StatusPill>
+      <StatusPill
+        className="change-request-state"
+        tone={changeRequestStatusTone[changeRequest.checkStatus]}
+      >
         {checkLabels[changeRequest.checkStatus]}
-      </span>
-      <span className={`change-request-state state-merge-${changeRequest.mergeStatus}`}>
+      </StatusPill>
+      <StatusPill
+        className="change-request-state"
+        tone={changeRequestStatusTone[changeRequest.mergeStatus]}
+      >
         {mergeLabels[changeRequest.mergeStatus]}
-      </span>
-      <span className="change-request-updated">{formatRelativeDate(changeRequest.updatedAt)}</span>
-      <span className="change-request-open" aria-hidden="true">
-        ↗
-      </span>
-    </button>
+      </StatusPill>
+      <DataRowMeta className="change-request-updated">
+        {formatRelativeDate(changeRequest.updatedAt)}
+      </DataRowMeta>
+      <RowChevron className="change-request-open" />
+    </DataRow>
+  );
+}
+
+export function ChangeRequestListHeader() {
+  return (
+    <DataRowHeader className="change-request-list-header">
+      <span>Pull request</span>
+      <span>Review</span>
+      <span>Checks</span>
+      <span>Merge</span>
+      <span>Updated</span>
+      <span />
+    </DataRowHeader>
   );
 }

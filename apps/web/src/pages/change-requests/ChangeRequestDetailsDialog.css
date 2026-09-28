@@ -59,6 +59,7 @@
 }
 .change-request-dialog-statuses {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 16px;
   padding: 7px 14px;
@@ -156,9 +157,6 @@
   gap: 8px;
   font-size: 9px;
 }
-.change-request-reviews small {
-  font-size: 8px;
-}
 .change-request-checks {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -173,7 +171,7 @@
   align-items: center;
   border-bottom: 1px solid var(--border);
   color: var(--text);
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   font-size: 10px;
   text-decoration: none;
@@ -193,25 +191,6 @@
 .change-request-checks > a:hover,
 .change-request-checks > button:hover {
   background: var(--surface-raised);
-}
-.change-request-checks small {
-  color: var(--muted);
-  font-size: 8px;
-}
-.check-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--subtle);
-}
-.check-passed {
-  background: var(--success);
-}
-.check-failing {
-  background: var(--danger);
-}
-.check-running {
-  background: var(--warning);
 }
 .change-request-commit {
   display: grid;

@@ -1,0 +1,34 @@
+.status-pill {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #181f29;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status-pill-success {
+  border-color: #2e7551;
+  color: var(--success);
+  background: #122a20;
+}
+.status-pill-warning,
+.status-pill-running,
+.status-pill-queued {
+  border-color: #7b6232;
+  color: var(--warning);
+  background: #2d2516;
+}
+.status-pill-failure,
+.status-pill-cancelled {
+  border-color: #7c3e43;
+  color: var(--danger);
+  background: #30191d;
+}
