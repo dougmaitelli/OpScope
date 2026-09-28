@@ -122,7 +122,7 @@ Proxy the entire site, including `/api`, at the root of its public origin.
 A proxy in another container should reach `opsscope:4317` over a shared Docker
 network; the host's loopback mapping is not that container's loopback.
 
-Use a version tag such as `:0.3.1` instead of `:latest` for controlled upgrades.
+Use a version tag such as `:v0.3.1` instead of `:latest` for controlled upgrades.
 
 ### Server configuration
 

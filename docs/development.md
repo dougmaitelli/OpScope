@@ -88,7 +88,8 @@ After validation, the release workflow builds:
 - A Linux x86-64 AppImage and raw executable.
 - A `linux/amd64` container at `ghcr.io/dougmaitelli/opsscope`.
 
-Container tags include full version, major/minor, major, and `latest` for
-stable releases. The GitHub release remains a draft until all desktop builds
+Container version tags use a `v` prefix: full version (such as `v0.3.1`),
+major/minor (`v0.3`), and major (`v0`). Stable releases also publish `latest`.
+The GitHub release remains a draft until all desktop builds
 and container publishing succeed. macOS builds use ad-hoc signing; trusted
 publisher signing and Apple notarization are not configured.
