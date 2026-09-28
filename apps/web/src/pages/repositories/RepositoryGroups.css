@@ -1,0 +1,37 @@
+.repository-groups {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.repository-owner-group {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.repository-owner-group > header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--border);
+  background: #1a2330;
+}
+
+.repository-owner-group h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.repository-owner-group > header > span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.repository-owner-group .repository-row:last-child {
+  border-bottom: 0;
+}
