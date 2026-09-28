@@ -116,7 +116,7 @@ export type SaveRepositorySelectionResponse = { selectedCount: number, };
 
 export type RepositorySelectionErrorResponse = { message: string, };
 
-export const applicationVersion = "0.3.1" as const;
+export const applicationVersion = "0.4.0" as const;
 
 export const settingsLimits = {
   synchronizationIntervalSeconds: { min: 30, max: 3600 },
