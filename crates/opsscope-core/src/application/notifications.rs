@@ -87,6 +87,7 @@ impl Error for NotifyRepositoryFailuresFailure {}
 
 #[derive(Clone)]
 pub struct NotifyRepositoryFailures {
+    settings: Option<Arc<dyn super::SettingsRepository>>,
     states: Arc<dyn NotificationStateRepository>,
     sink: Arc<dyn NotificationSink>,
 }
@@ -97,7 +98,17 @@ impl NotifyRepositoryFailures {
         states: Arc<dyn NotificationStateRepository>,
         sink: Arc<dyn NotificationSink>,
     ) -> Self {
-        Self { states, sink }
+        Self {
+            states,
+            sink,
+            settings: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_settings(mut self, settings: Arc<dyn super::SettingsRepository>) -> Self {
+        self.settings = Some(settings);
+        self
     }
 
     pub async fn observe(
@@ -107,6 +118,14 @@ impl NotifyRepositoryFailures {
         workflows: &[Workflow],
         runs: &[WorkflowRun],
     ) -> Result<(), NotifyRepositoryFailuresFailure> {
+        let only_my_work = self
+            .settings
+            .as_ref()
+            .map(|settings| settings.load_settings())
+            .transpose()
+            .map_err(|_| NotifyRepositoryFailuresFailure::StorageUnavailable)?
+            .unwrap_or_default()
+            .only_my_work;
         let previous = self
             .states
             .load(source_id, &repository.id)
@@ -122,6 +141,15 @@ impl NotifyRepositoryFailures {
                 .filter(|state| {
                     state.failed
                         && previous.get(state.workflow_id.as_str()).copied() != Some(*state)
+                })
+                .filter(|state| {
+                    !only_my_work
+                        || runs.iter().any(|run| {
+                            run.workflow_id == state.workflow_id
+                                && Some(&run.id) == state.run_id.as_ref()
+                                && Some(run.attempt) == state.attempt
+                                && run.relevance.matches()
+                        })
                 })
                 .filter_map(|state| {
                     let workflow = workflows

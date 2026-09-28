@@ -68,11 +68,18 @@ impl DesktopState {
             list_change_requests: ListChangeRequests::new(
                 source_data.clone(),
                 repository_selections.clone(),
+                settings.clone(),
             ),
-            list_issues: ListIssues::new(source_data.clone(), repository_selections.clone()),
+            list_issues: ListIssues::new(
+                source_data.clone(),
+                repository_selections.clone(),
+                settings.clone(),
+            ),
             list_activity: ListActivity::new(
                 activity_events.clone(),
                 repository_selections.clone(),
+                settings.clone(),
+                connections.clone(),
             ),
             change_request_details: GetChangeRequestDetails::new(source_data.clone()),
             issue_details: GetIssueDetails::new(source_data.clone()),

@@ -76,6 +76,7 @@ fn repository() -> Repository {
 
 fn change_request() -> ChangeRequest {
     ChangeRequest {
+        relevance: Default::default(),
         id: "pr-1".to_owned(),
         number: 1,
         title: "Improve activity".to_owned(),

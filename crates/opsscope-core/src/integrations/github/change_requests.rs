@@ -146,6 +146,14 @@ impl GitHubClient {
                     .map(ChangeRequest::from),
             );
             if !repository.pull_requests.page_info.has_next_page {
+                let ids = change_requests
+                    .iter()
+                    .map(|item| item.id.clone())
+                    .collect::<Vec<_>>();
+                let relevance = relevance::items(self, configuration, token, &ids).await;
+                for item in &mut change_requests {
+                    item.relevance = relevance.get(&item.id).cloned().unwrap_or_default();
+                }
                 return Ok(Some(change_requests));
             }
             after = repository.pull_requests.page_info.end_cursor;
@@ -188,9 +196,23 @@ impl GitHubClient {
             .data
             .and_then(|data| data.repository)
             .ok_or_else(|| graphql_failure(&response.errors))?;
-        Ok(repository
+        let mut details = repository
             .pull_request
-            .map(GitHubChangeRequest::into_details))
+            .map(GitHubChangeRequest::into_details);
+        if let Some(details) = &mut details {
+            let relevance = relevance::items(
+                self,
+                configuration,
+                token,
+                std::slice::from_ref(&details.change_request.id),
+            )
+            .await;
+            details.change_request.relevance = relevance
+                .get(&details.change_request.id)
+                .cloned()
+                .unwrap_or_default();
+        }
+        Ok(details)
     }
 }
 
@@ -375,6 +397,7 @@ impl From<GitHubChangeRequest> for ChangeRequest {
             _ => ChangeRequestMergeStatus::Unknown,
         };
         Self {
+            relevance: Default::default(),
             id: change_request.id,
             number: change_request.number,
             title: change_request.title,

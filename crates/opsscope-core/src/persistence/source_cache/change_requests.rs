@@ -98,7 +98,7 @@ impl SqliteDatabase {
             .prepare(
                 "SELECT change_request_id, number, title, author, source_branch, target_branch,
                         state, draft, review_status, check_status, merge_status, created_at,
-                        updated_at, web_url
+                        updated_at, web_url, relevance
                  FROM change_requests
                  WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3
                  ORDER BY updated_at DESC, number DESC",
@@ -122,6 +122,8 @@ impl SqliteDatabase {
                     created_at: row.get(11)?,
                     updated_at: row.get(12)?,
                     web_url: row.get(13)?,
+                    relevance: serde_json::from_str(&row.get::<_, String>(14)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
                 })
             })
             .map_err(|_| PersistenceFailure)?;
@@ -157,10 +159,10 @@ impl SqliteDatabase {
                     "INSERT INTO change_requests (
                        source_id, account_id, repository_id, change_request_id, number, title,
                        author, source_branch, target_branch, state, draft, review_status,
-                       check_status, merge_status, created_at, updated_at, web_url
+                       check_status, merge_status, created_at, updated_at, web_url, relevance
                      ) VALUES (
                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                       ?15, ?16, ?17
+                       ?15, ?16, ?17, ?18
                      )",
                     params![
                         source_id,
@@ -180,6 +182,8 @@ impl SqliteDatabase {
                         change_request.created_at,
                         change_request.updated_at,
                         change_request.web_url,
+                        serde_json::to_string(&change_request.relevance)
+                            .map_err(|_| PersistenceFailure)?,
                     ],
                 )
                 .map_err(|_| PersistenceFailure)?;

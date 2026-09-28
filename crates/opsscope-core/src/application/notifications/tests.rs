@@ -29,6 +29,98 @@ impl NotificationStateRepository for MemoryStates {
 #[derive(Default)]
 struct RecordingSink(Mutex<Vec<Notification>>);
 
+struct PersonalSettings(Mutex<bool>);
+
+impl crate::application::SettingsRepository for PersonalSettings {
+    fn load_settings(&self) -> Result<crate::application::MonitoringSettings, PersistenceFailure> {
+        Ok(crate::application::MonitoringSettings {
+            only_my_work: *self.0.lock().unwrap(),
+            ..Default::default()
+        })
+    }
+    fn save_settings(
+        &self,
+        settings: crate::application::MonitoringSettings,
+    ) -> Result<(), PersistenceFailure> {
+        *self.0.lock().unwrap() = settings.only_my_work;
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn personal_scope_filters_before_aggregation_without_replaying_on_toggle() {
+    let states = Arc::new(MemoryStates::default());
+    let sink = Arc::new(RecordingSink::default());
+    let settings = Arc::new(PersonalSettings(Mutex::new(true)));
+    let notifier =
+        NotifyRepositoryFailures::new(states, sink.clone()).with_settings(settings.clone());
+    notifier
+        .observe("source", &repository(), &workflows(), &[])
+        .await
+        .unwrap();
+    let mut mine = run("workflow-1", "mine", 1, RunOutcome::Failure);
+    mine.relevance
+        .reasons
+        .push(crate::domain::RelevanceReason::CommitAuthored);
+    let other = run("workflow-2", "other", 2, RunOutcome::Failure);
+    notifier
+        .observe(
+            "source",
+            &repository(),
+            &workflows(),
+            &[mine.clone(), other.clone()],
+        )
+        .await
+        .unwrap();
+    {
+        let sent = sink.0.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].body, "Build");
+    }
+    *settings.0.lock().unwrap() = false;
+    notifier
+        .observe("source", &repository(), &workflows(), &[mine, other])
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    notifier
+        .observe(
+            "source",
+            &repository(),
+            &workflows(),
+            &[run("workflow-2", "new", 3, RunOutcome::Failure)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn personal_history_never_replaces_the_actual_latest_run_for_notifications() {
+    let sink = Arc::new(RecordingSink::default());
+    let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
+        .with_settings(Arc::new(PersonalSettings(Mutex::new(true))));
+    notifier
+        .observe("source", &repository(), &workflows(), &[])
+        .await
+        .unwrap();
+    let mut history = run("workflow-1", "mine", 1, RunOutcome::Failure);
+    history
+        .relevance
+        .reasons
+        .push(crate::domain::RelevanceReason::ChangeRequestAuthored);
+    notifier
+        .observe(
+            "source",
+            &repository(),
+            &workflows(),
+            &[history, run("workflow-1", "other", 2, RunOutcome::Failure)],
+        )
+        .await
+        .unwrap();
+    assert!(sink.0.lock().unwrap().is_empty());
+}
+
 #[async_trait]
 impl NotificationSink for RecordingSink {
     async fn send(&self, notification: &Notification) -> Result<(), NotificationDeliveryFailure> {
@@ -66,6 +158,7 @@ fn workflows() -> Vec<Workflow> {
 
 fn run(workflow_id: &str, id: &str, number: u64, outcome: RunOutcome) -> WorkflowRun {
     WorkflowRun {
+        relevance: Default::default(),
         id: id.to_owned(),
         workflow_id: workflow_id.to_owned(),
         run_number: number,

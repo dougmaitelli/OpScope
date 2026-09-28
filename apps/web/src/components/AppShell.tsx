@@ -4,6 +4,7 @@ import { useApplicationClient } from "../api/application-client.tsx";
 import { applicationVersion, type UpdateStatusResponse } from "../generated/contracts.ts";
 import { useWebAuthentication } from "../auth/WebAuthentication.tsx";
 import "./AppShell.css";
+import { PersonalScopeNotice } from "./PersonalScopeNotice.tsx";
 
 const pageTitles: Record<string, string> = {
   "/": "Overview",
@@ -124,6 +125,9 @@ export function AppShell() {
       </aside>
 
       <main className="workspace">
+        {["/", "/activity", "/pull-requests", "/issues"].includes(location.pathname) ? (
+          <PersonalScopeNotice key={location.pathname} />
+        ) : null}
         <Outlet />
       </main>
     </div>

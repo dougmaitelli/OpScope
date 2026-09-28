@@ -35,7 +35,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let failure_notifications = NotifyRepositoryFailures::new(
         database.clone(),
         opsscope_server::notifications::notification_sink_from_environment()?,
-    );
+    )
+    .with_settings(database.clone());
     let application = opsscope_server::application(opsscope_server::ServerDependencies {
         registry: sources,
         connections: database.clone(),

@@ -251,6 +251,32 @@ impl SqliteDatabase {
                  ",
             )
             .map_err(|_| PersistenceFailure)?;
+        for (table, column, declaration) in [
+            (
+                "monitoring_settings",
+                "only_my_work",
+                "INTEGER NOT NULL DEFAULT 0",
+            ),
+            ("workflow_runs", "relevance", "TEXT NOT NULL DEFAULT '{}'"),
+            ("change_requests", "relevance", "TEXT NOT NULL DEFAULT '{}'"),
+        ] {
+            let exists = connection
+                .prepare(&format!("PRAGMA table_info({table})"))
+                .map_err(|_| PersistenceFailure)?
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|_| PersistenceFailure)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| PersistenceFailure)?
+                .iter()
+                .any(|name| name == column);
+            if !exists {
+                connection
+                    .execute_batch(&format!(
+                        "ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+                    ))
+                    .map_err(|_| PersistenceFailure)?;
+            }
+        }
         ensure_connection_column(&connection, "configuration", "TEXT NOT NULL DEFAULT '{}'")?;
         ensure_connection_column(&connection, "connection_key", "TEXT NOT NULL DEFAULT ''")?;
         ensure_connection_column(&connection, "connection_label", "TEXT NOT NULL DEFAULT ''")?;
@@ -586,16 +612,23 @@ impl RepositorySelectionRepository for SqliteDatabase {
 
 impl SettingsRepository for SqliteDatabase {
     fn load_settings(&self) -> Result<MonitoringSettings, PersistenceFailure> {
-        let (synchronization_interval_seconds, recent_runs_per_workflow) = self
+        let (synchronization_interval_seconds, recent_runs_per_workflow, only_my_work) = self
             .lock()?
             .query_row(
-                "SELECT synchronization_interval_seconds, recent_runs_per_workflow
+                "SELECT synchronization_interval_seconds, recent_runs_per_workflow, only_my_work
                  FROM monitoring_settings WHERE id = 1",
                 [],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, bool>(2)?,
+                    ))
+                },
             )
             .map_err(|_| PersistenceFailure)?;
         Ok(MonitoringSettings {
+            only_my_work,
             synchronization_interval_seconds: synchronization_interval_seconds
                 .try_into()
                 .map_err(|_| PersistenceFailure)?,
@@ -618,9 +651,14 @@ impl SettingsRepository for SqliteDatabase {
             .execute(
                 "UPDATE monitoring_settings SET
                    synchronization_interval_seconds = ?1,
-                   recent_runs_per_workflow = ?2
+                   recent_runs_per_workflow = ?2,
+                   only_my_work = ?3
                  WHERE id = 1",
-                params![synchronization_interval_seconds, recent_runs_per_workflow,],
+                params![
+                    synchronization_interval_seconds,
+                    recent_runs_per_workflow,
+                    settings.only_my_work
+                ],
             )
             .map(|_| ())
             .map_err(|_| PersistenceFailure)

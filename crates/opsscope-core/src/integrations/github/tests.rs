@@ -366,6 +366,7 @@ fn workflow_run_log_request_targets_the_selected_attempt() -> Result<(), Box<dyn
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let run = WorkflowRun {
+        relevance: Default::default(),
         id: "30433642".to_owned(),
         workflow_id: "161335".to_owned(),
         run_number: 562,

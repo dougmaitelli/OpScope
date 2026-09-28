@@ -137,6 +137,14 @@ pub(super) async fn list(
                 .map(|issue| issue.summary()),
         );
         if !repository.issues.page_info.has_next_page {
+            let ids = issues
+                .iter()
+                .map(|item| item.id.clone())
+                .collect::<Vec<_>>();
+            let relevance = super::relevance::items(client, configuration, token, &ids).await;
+            for item in &mut issues {
+                item.relevance = relevance.get(&item.id).cloned().unwrap_or_default();
+            }
             return Ok(Some(issues));
         }
         after = repository.issues.page_info.end_cursor;
@@ -260,6 +268,7 @@ struct GitHubIssue {
 impl GitHubIssue {
     fn summary(&self) -> Issue {
         Issue {
+            relevance: Default::default(),
             id: self.id.clone(),
             number: self.number,
             title: self.title.clone(),

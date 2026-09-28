@@ -1,0 +1,20 @@
+.personal-scope-notice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10px;
+}
+.personal-scope-notice strong,
+.personal-scope-notice a {
+  flex-shrink: 0;
+  color: var(--accent-strong);
+}
+.personal-scope-notice span {
+  flex: 1;
+}

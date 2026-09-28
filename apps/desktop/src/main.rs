@@ -37,7 +37,8 @@ fn main() {
             let failure_notifications = NotifyRepositoryFailures::new(
                 database.clone(),
                 Arc::new(DesktopNotificationSink::new(app.handle().clone())),
-            );
+            )
+            .with_settings(database.clone());
             let state = DesktopState::new(DesktopStateDependencies {
                 sources,
                 connections: database.clone(),

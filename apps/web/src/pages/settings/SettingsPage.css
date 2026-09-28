@@ -104,3 +104,19 @@
     text-align: left;
   }
 }
+
+.settings-scope-toggle {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+  align-self: center;
+  accent-color: var(--accent);
+}
+@media (max-width: 580px) {
+  .settings-scope-toggle {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-top: 10px;
+  }
+}

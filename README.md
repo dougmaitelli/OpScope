@@ -36,11 +36,20 @@ Version one includes:
 - New latest-run failure notifications, grouped once per repository.
 - Search and filtering by repository, workflow, and status.
 - Configurable local history stored in SQLite.
+- Optional **Only show my work** scope in Settings, using each connection's token
+  owner for PR authorship/reviews/review requests, issue authorship/subscriptions/
+  discussion, and workflow commit/PR ownership. It also scopes native and Apprise
+  notifications without discarding other monitored data.
 - Native desktop and single-administrator self-hosted editions.
 
 It does not include write actions, artifacts, multiple users,
 PostgreSQL, other providers, runtime plugins, mobile applications, or a hosted
 service.
+
+Personal scope shows the latest matching workflow run and matching cached history,
+not necessarily the repository's latest run. Notifications still consider only the
+actual latest run per workflow. Items with unavailable relevance metadata are hidden
+in personal scope until a successful refresh; switching back restores the full view.
 
 ## Model
 

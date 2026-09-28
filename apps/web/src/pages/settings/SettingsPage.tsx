@@ -11,6 +11,7 @@ export function SettingsPage() {
   const [saved, setSaved] = useState<MonitoringSettingsResponse | null>(null);
   const [synchronizationInterval, setSynchronizationInterval] = useState("");
   const [recentRuns, setRecentRuns] = useState("");
+  const [onlyMyWork, setOnlyMyWork] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function SettingsPage() {
         setSaved(settings);
         setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
         setRecentRuns(String(settings.recentRunsPerWorkflow));
+        setOnlyMyWork(settings.onlyMyWork);
       })
       .catch((failure: unknown) => {
         if (active) setError(requestErrorMessage(failure));
@@ -49,7 +51,8 @@ export function SettingsPage() {
   const changed =
     saved !== null &&
     (synchronizationIntervalValue !== saved.synchronizationIntervalSeconds ||
-      recentRunsValue !== saved.recentRunsPerWorkflow);
+      recentRunsValue !== saved.recentRunsPerWorkflow ||
+      onlyMyWork !== saved.onlyMyWork);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,10 +64,12 @@ export function SettingsPage() {
       const settings = await client.updateSettings({
         synchronizationIntervalSeconds: synchronizationIntervalValue,
         recentRunsPerWorkflow: recentRunsValue,
+        onlyMyWork,
       });
       setSaved(settings);
       setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
       setRecentRuns(String(settings.recentRunsPerWorkflow));
+      setOnlyMyWork(settings.onlyMyWork);
       setNote("Monitoring settings saved.");
     } catch (failure) {
       setError(requestErrorMessage(failure));
@@ -77,6 +82,7 @@ export function SettingsPage() {
     if (!saved) return;
     setSynchronizationInterval(String(saved.synchronizationIntervalSeconds));
     setRecentRuns(String(saved.recentRunsPerWorkflow));
+    setOnlyMyWork(saved.onlyMyWork);
     setError(null);
     setNote(null);
   };
@@ -86,11 +92,11 @@ export function SettingsPage() {
       <PageHeader
         eyebrow="Application"
         title="Settings"
-        description="Control synchronization frequency and workflow history depth."
+        description="Control personal scope, notifications, synchronization, and workflow history."
       />
 
       <section className="panel settings-panel" aria-labelledby="monitoring-settings-title">
-        <PanelHeader label="Monitoring" title="Synchronization and history" />
+        <PanelHeader label="Monitoring" title="Scope, synchronization and history" />
         <form className="settings-form" onSubmit={(event) => void save(event)}>
           <label className="settings-field">
             <span className="settings-field-title">Synchronization interval</span>
@@ -144,6 +150,26 @@ export function SettingsPage() {
               {settingsLimits.recentRunsPerWorkflow.min}–{settingsLimits.recentRunsPerWorkflow.max}{" "}
               runs
             </small>
+          </label>
+
+          <label className="settings-field">
+            <span className="settings-field-title">Only show my work</span>
+            <span className="settings-field-description">
+              Show PRs you opened, reviewed, or were asked to review; issues you opened, follow, or
+              discussed; and runs linked to your commits or PRs. “You” means each connection’s token
+              owner. Also limits desktop and Apprise notifications. Unverified items stay hidden
+              until relevance is available.
+            </span>
+            <input
+              className="settings-scope-toggle"
+              type="checkbox"
+              checked={onlyMyWork}
+              disabled={loading || saving || saved === null}
+              onChange={(event) => {
+                setOnlyMyWork(event.target.checked);
+                setNote(null);
+              }}
+            />
           </label>
 
           {error ? <p className="settings-message settings-error">{error}</p> : null}

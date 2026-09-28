@@ -155,6 +155,7 @@ pub struct SynchronizationStatusResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitoringSettingsResponse {
+    pub only_my_work: bool,
     #[ts(type = "number")]
     pub synchronization_interval_seconds: u64,
     pub recent_runs_per_workflow: usize,
@@ -163,6 +164,7 @@ pub struct MonitoringSettingsResponse {
 impl From<MonitoringSettings> for MonitoringSettingsResponse {
     fn from(settings: MonitoringSettings) -> Self {
         Self {
+            only_my_work: settings.only_my_work,
             synchronization_interval_seconds: settings.synchronization_interval_seconds,
             recent_runs_per_workflow: settings.recent_runs_per_workflow,
         }
@@ -172,6 +174,8 @@ impl From<MonitoringSettings> for MonitoringSettingsResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMonitoringSettingsRequest {
+    #[serde(default)]
+    pub only_my_work: bool,
     #[ts(type = "number")]
     pub synchronization_interval_seconds: u64,
     pub recent_runs_per_workflow: usize,
@@ -180,6 +184,7 @@ pub struct UpdateMonitoringSettingsRequest {
 impl From<UpdateMonitoringSettingsRequest> for MonitoringSettings {
     fn from(request: UpdateMonitoringSettingsRequest) -> Self {
         Self {
+            only_my_work: request.only_my_work,
             synchronization_interval_seconds: request.synchronization_interval_seconds,
             recent_runs_per_workflow: request.recent_runs_per_workflow,
         }

@@ -48,6 +48,7 @@ fn change_request_activity_is_deduplicated_persisted_and_removed_with_its_source
         repository_owner: "owner".to_owned(),
         repository_name: "project".to_owned(),
         change_request: ChangeRequest {
+            relevance: Default::default(),
             id: "pr-1".to_owned(),
             number: 1,
             title: "Add activity".to_owned(),
@@ -229,12 +230,33 @@ fn monitoring_settings_have_defaults_and_persist_updates() -> Result<(), Box<dyn
     );
 
     let updated = MonitoringSettings {
+        only_my_work: true,
         synchronization_interval_seconds: 120,
         recent_runs_per_workflow: 25,
     };
     database.save_settings(updated)?;
 
     assert_eq!(SettingsRepository::load_settings(&database)?, updated);
+    Ok(())
+}
+
+#[test]
+fn legacy_monitoring_settings_keep_values_and_default_to_all_work()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("legacy.sqlite3");
+    {
+        let connection = Connection::open(&path)?;
+        connection.execute_batch("CREATE TABLE monitoring_settings (id INTEGER PRIMARY KEY, synchronization_interval_seconds INTEGER NOT NULL, recent_runs_per_workflow INTEGER NOT NULL);
+            INSERT INTO monitoring_settings VALUES (1, 120, 25);")?;
+    }
+    let database = SqliteDatabase::open(&path)?;
+    let settings = database.load_settings()?;
+    assert!(!settings.only_my_work);
+    assert_eq!(settings.synchronization_interval_seconds, 120);
+    assert_eq!(settings.recent_runs_per_workflow, 25);
+    drop(database);
+    assert_eq!(SqliteDatabase::open(&path)?.load_settings()?, settings);
     Ok(())
 }
 

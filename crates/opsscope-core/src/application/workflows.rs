@@ -67,11 +67,11 @@ impl ListWorkflows {
     }
 
     pub async fn execute(&self) -> Result<WorkflowInventory, ListWorkflowsFailure> {
-        let recent_runs_per_workflow = self
+        let settings = self
             .settings
             .load_settings()
-            .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?
-            .recent_runs_per_workflow;
+            .map_err(|_| ListWorkflowsFailure::StorageUnavailable)?;
+        let recent_runs_per_workflow = settings.recent_runs_per_workflow;
         let selections = self
             .selections
             .list()
@@ -132,6 +132,7 @@ impl ListWorkflows {
                         .runs
                         .iter()
                         .filter(|run| run.workflow_id == workflow.id)
+                        .filter(|run| !settings.only_my_work || run.relevance.matches())
                         .take(recent_runs_per_workflow)
                         .cloned()
                         .collect();
@@ -145,6 +146,7 @@ impl ListWorkflows {
             }
         }
 
+        workflows.retain(|workflow| !settings.only_my_work || !workflow.runs.is_empty());
         Ok(WorkflowInventory {
             selected_repository_count,
             workflows,

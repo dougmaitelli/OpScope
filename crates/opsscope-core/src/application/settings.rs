@@ -12,6 +12,7 @@ pub const MAX_RECENT_RUNS_PER_WORKFLOW: usize = 100;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitoringSettings {
+    pub only_my_work: bool,
     pub synchronization_interval_seconds: u64,
     pub recent_runs_per_workflow: usize,
 }
@@ -19,6 +20,7 @@ pub struct MonitoringSettings {
 impl Default for MonitoringSettings {
     fn default() -> Self {
         Self {
+            only_my_work: false,
             synchronization_interval_seconds: DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
             recent_runs_per_workflow: DEFAULT_RECENT_RUNS_PER_WORKFLOW,
         }
@@ -130,6 +132,7 @@ mod tests {
 
         assert_eq!(
             update.execute(MonitoringSettings {
+                only_my_work: false,
                 synchronization_interval_seconds: 1,
                 recent_runs_per_workflow: 10,
             }),

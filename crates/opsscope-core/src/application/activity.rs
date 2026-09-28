@@ -257,6 +257,8 @@ fn event(
 
 #[derive(Clone)]
 pub struct ListActivity {
+    connections: Arc<dyn super::ConnectionRepository>,
+    settings: Arc<dyn super::SettingsRepository>,
     events: Arc<dyn ActivityEventRepository>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
@@ -266,20 +268,82 @@ impl ListActivity {
     pub fn new(
         events: Arc<dyn ActivityEventRepository>,
         selections: Arc<dyn RepositorySelectionRepository>,
+        settings: Arc<dyn super::SettingsRepository>,
+        connections: Arc<dyn super::ConnectionRepository>,
     ) -> Self {
-        Self { events, selections }
+        Self {
+            events,
+            selections,
+            settings,
+            connections,
+        }
     }
 
     pub fn execute(&self) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
+        let only_my_work = self.settings.load_settings()?.only_my_work;
+        let accounts = self
+            .connections
+            .list()?
+            .into_iter()
+            .map(|connection| (connection.id, connection.account.external_id))
+            .collect::<HashMap<_, _>>();
         let selected = self
             .selections
             .list()?
             .into_iter()
             .collect::<std::collections::HashSet<RepositorySelection>>();
-        Ok(self
-            .events
-            .list_change_request_events()?
+        let events = self.events.list_change_request_events()?;
+        let mut relevance = HashMap::new();
+        if only_my_work {
+            // Use the newest event for closed PRs, then current observations for open PRs.
+            // This also enriches historical events created before personal scope existed.
+            let mut chronological = events.iter().collect::<Vec<_>>();
+            chronological.sort_by(|left, right| left.occurred_at.cmp(&right.occurred_at));
+            for event in chronological {
+                relevance.insert(
+                    (
+                        event.source_id.clone(),
+                        event.repository_id.clone(),
+                        event.change_request.id.clone(),
+                    ),
+                    event.change_request.relevance.clone(),
+                );
+            }
+            for selection in &selected {
+                if let Some(current) = self
+                    .events
+                    .load_change_request_state(&selection.source_id, &selection.repository_id)?
+                {
+                    for item in current {
+                        relevance.insert(
+                            (
+                                selection.source_id.clone(),
+                                selection.repository_id.clone(),
+                                item.id,
+                            ),
+                            item.relevance,
+                        );
+                    }
+                }
+            }
+        }
+        Ok(events
             .into_iter()
+            .filter(|event| {
+                !only_my_work
+                    || relevance
+                        .get(&(
+                            event.source_id.clone(),
+                            event.repository_id.clone(),
+                            event.change_request.id.clone(),
+                        ))
+                        .is_some_and(|relevance| {
+                            relevance.matches()
+                                && relevance.account_id.as_ref().is_some_and(|account| {
+                                    accounts.get(&event.source_id) == Some(account)
+                                })
+                        })
+            })
             .filter(|event| {
                 selected.contains(&RepositorySelection {
                     source_id: event.source_id.clone(),

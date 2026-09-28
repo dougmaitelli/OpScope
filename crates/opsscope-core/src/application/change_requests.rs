@@ -1,5 +1,6 @@
 use super::{
-    ConnectedSource, ConnectionValidationFailure, RepositorySelectionRepository, SourceCapability,
+    ConnectedSource, ConnectionValidationFailure, RepositorySelectionRepository,
+    SettingsRepository, SourceCapability,
 };
 use crate::domain::{ChangeRequest, Repository};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
@@ -42,6 +43,7 @@ impl Error for ListChangeRequestsFailure {}
 
 #[derive(Clone)]
 pub struct ListChangeRequests {
+    settings: Arc<dyn SettingsRepository>,
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
@@ -51,14 +53,21 @@ impl ListChangeRequests {
     pub fn new(
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
+        settings: Arc<dyn SettingsRepository>,
     ) -> Self {
         Self {
+            settings,
             source_data,
             selections,
         }
     }
 
     pub async fn execute(&self) -> Result<ChangeRequestInventory, ListChangeRequestsFailure> {
+        let only_my_work = self
+            .settings
+            .load_settings()
+            .map_err(|_| ListChangeRequestsFailure::StorageUnavailable)?
+            .only_my_work;
         let selections = self
             .selections
             .list()
@@ -108,6 +117,7 @@ impl ListChangeRequests {
                 ));
             }
         }
+        change_requests.retain(|item| !only_my_work || item.change_request.relevance.matches());
         change_requests.sort_by(|left, right| {
             right
                 .change_request

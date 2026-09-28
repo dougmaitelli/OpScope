@@ -1,6 +1,7 @@
 //! GitHub source module for connection, repository, and workflow discovery.
 
 mod issues;
+mod relevance;
 mod workflows;
 #[cfg(test)]
 use workflows::GitHubWorkflow;
@@ -577,11 +578,19 @@ impl SourceModule for GitHubClient {
                 return Err(response_failure(&response));
             }
 
-            let page = response
+            let mut page = response
                 .json::<GitHubWorkflowRunPage>()
                 .await
                 .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
             let page_size = page.workflow_runs.len();
+            relevance::runs(
+                self,
+                configuration,
+                token,
+                repository,
+                &mut page.workflow_runs,
+            )
+            .await;
             runs.extend(page.workflow_runs.into_iter().map(WorkflowRun::from));
             if page_size < WORKFLOW_RUNS_PER_PAGE {
                 return Ok(runs);

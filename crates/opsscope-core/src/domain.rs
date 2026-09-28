@@ -1,5 +1,8 @@
 //! Provider-independent monitoring concepts.
 
+mod relevance;
+pub use relevance::{Relevance, RelevanceReason};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +56,8 @@ pub enum ChangeRequestMergeStatus {
 /// A provider-independent proposed change to a repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ChangeRequest {
+    #[serde(default)]
+    pub relevance: Relevance,
     pub id: String,
     pub number: u64,
     pub title: String,
@@ -111,6 +116,8 @@ pub enum IssueState {
 /// A provider-independent issue reported against a repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Issue {
+    #[serde(default)]
+    pub relevance: Relevance,
     pub id: String,
     pub number: u64,
     pub title: String,
@@ -178,6 +185,7 @@ pub enum RunOutcome {
 /// A provider-independent execution of an automation workflow.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkflowRun {
+    pub relevance: Relevance,
     pub id: String,
     pub workflow_id: String,
     pub run_number: u64,

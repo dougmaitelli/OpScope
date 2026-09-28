@@ -51,6 +51,7 @@ impl From<DiscoveredIssue> for IssueSummary {
             created_at,
             updated_at,
             web_url,
+            ..
         } = discovered.issue;
         Self {
             id,

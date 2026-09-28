@@ -35,6 +35,146 @@ use tower::ServiceExt;
 #[derive(Clone)]
 struct TestSourceModule;
 
+#[tokio::test]
+async fn personal_scope_filters_cached_routes_and_is_reversible()
+-> Result<(), Box<dyn std::error::Error>> {
+    use opsscope_core::application::{
+        ConnectionRepository, MonitoringSettings, SettingsRepository,
+    };
+    let database = SqliteDatabase::in_memory()?;
+    let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+    let app = router(test_dependencies(
+        &database,
+        secrets,
+        WebAuthentication::disabled_for_tests(),
+    ));
+    let connected = app
+        .clone()
+        .oneshot(
+            Request::post(CONNECTIONS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"sourceId":"example","configuration":{},"credential":"test_credential"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(connected.status(), StatusCode::OK);
+    let connection: ConnectionSummary =
+        serde_json::from_slice(&connected.into_body().collect().await?.to_bytes())?;
+    let selected = app
+        .clone()
+        .oneshot(
+            Request::put(REPOSITORY_SELECTIONS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"sources":[{"sourceId":connection.id,"repositoryIds":["repository-1"]}]})
+                        .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(selected.status(), StatusCode::OK);
+    let synced = app
+        .clone()
+        .oneshot(Request::post(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    assert_eq!(synced.status(), StatusCode::OK);
+
+    for only_my_work in [true, false] {
+        let response = app.clone().oneshot(Request::put(SETTINGS_HTTP_PATH)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::json!({"synchronizationIntervalSeconds":60,"recentRunsPerWorkflow":5,"onlyMyWork":only_my_work}).to_string()))?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let settings: MonitoringSettingsResponse =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(settings.only_my_work, only_my_work);
+        let response = app
+            .clone()
+            .oneshot(Request::get(WORKFLOWS_HTTP_PATH).body(Body::empty())?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let workflows: ListWorkflowsResponse =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(workflows.workflows[0].runs.len(), 5);
+        if only_my_work {
+            assert!(
+                workflows.workflows[0]
+                    .runs
+                    .iter()
+                    .all(|run| run.run_number % 2 == 1)
+            );
+        }
+        for (path, field, expected) in [
+            (ISSUES_HTTP_PATH, "issues", usize::from(!only_my_work)),
+            (CHANGE_REQUESTS_HTTP_PATH, "changeRequests", 1),
+            (ACTIVITY_HTTP_PATH, "changeRequestEvents", 1),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(Request::get(path).body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let data: serde_json::Value =
+                serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+            assert_eq!(
+                data[field].as_array().unwrap().len(),
+                expected,
+                "{path}, personal={only_my_work}"
+            );
+        }
+    }
+    // Current observations, not historical relevance snapshots, determine visibility.
+    database.save_settings(MonitoringSettings {
+        only_my_work: true,
+        ..Default::default()
+    })?;
+    let mut observed =
+        opsscope_core::application::ActivityEventRepository::load_change_request_state(
+            &database,
+            &connection.id,
+            "repository-1",
+        )?
+        .unwrap();
+    let original_relevance = observed[0].relevance.clone();
+    observed[0].relevance.reasons.clear();
+    opsscope_core::application::ActivityEventRepository::save_change_request_observation(
+        &database,
+        &connection.id,
+        "repository-1",
+        &observed,
+        &[],
+    )?;
+    let response = app
+        .clone()
+        .oneshot(Request::get(ACTIVITY_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    let activity: ListActivityResponse =
+        serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+    assert!(activity.change_request_events.is_empty());
+    observed[0].relevance = original_relevance;
+    opsscope_core::application::ActivityEventRepository::save_change_request_observation(
+        &database,
+        &connection.id,
+        "repository-1",
+        &observed,
+        &[],
+    )?;
+    // A replacement token must not inherit the previous account's personal activity.
+    database.save_settings(MonitoringSettings {
+        only_my_work: true,
+        ..Default::default()
+    })?;
+    let mut stored = database.get(&connection.id)?.unwrap();
+    stored.account.external_id = "another-account".to_owned();
+    database.save(&stored)?;
+    let response = app
+        .oneshot(Request::get(ACTIVITY_HTTP_PATH).body(Body::empty())?)
+        .await?;
+    let activity: ListActivityResponse =
+        serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+    assert!(activity.change_request_events.is_empty());
+    Ok(())
+}
+
 #[async_trait]
 impl SourceModule for TestSourceModule {
     fn descriptor(&self) -> SourceDescriptor {
@@ -126,6 +266,15 @@ impl SourceModule for TestSourceModule {
         assert_eq!(repository.id, "repository-1");
         Ok((1..=12)
             .map(|number| WorkflowRun {
+                relevance: opsscope_core::domain::Relevance {
+                    account_id: Some("42".to_owned()),
+                    reasons: if number % 2 == 0 {
+                        vec![opsscope_core::domain::RelevanceReason::CommitAuthored]
+                    } else {
+                        vec![]
+                    },
+                    complete: true,
+                },
                 id: format!("run-{number}"),
                 workflow_id: "workflow-1".to_owned(),
                 run_number: 13 - number,
@@ -160,6 +309,7 @@ impl SourceModule for TestSourceModule {
             return Ok(None);
         }
         Ok(Some(WorkflowRun {
+            relevance: Default::default(),
             id: run_id.to_owned(),
             workflow_id: "workflow-1".to_owned(),
             run_number: 1,
@@ -194,6 +344,11 @@ impl SourceModule for TestSourceModule {
         assert_eq!(token.expose(), "test_credential");
         assert_eq!(repository.id, "repository-1");
         Ok(Some(vec![ChangeRequest {
+            relevance: opsscope_core::domain::Relevance {
+                account_id: Some("42".to_owned()),
+                reasons: vec![opsscope_core::domain::RelevanceReason::Authored],
+                complete: true,
+            },
             id: "pr-1".to_owned(),
             number: 1,
             title: "Add activity".to_owned(),
@@ -261,6 +416,7 @@ impl SourceModule for TestSourceModule {
 
 fn test_issue() -> Issue {
     Issue {
+        relevance: Default::default(),
         id: "issue-7".to_owned(),
         number: 7,
         title: "Improve diagnostics".to_owned(),

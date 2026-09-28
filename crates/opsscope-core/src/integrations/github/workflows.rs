@@ -145,6 +145,10 @@ pub(super) struct GitHubWorkflowRunActor {
 
 #[derive(Deserialize)]
 pub(super) struct GitHubWorkflowRun {
+    #[serde(skip)]
+    pub(super) relevance: crate::domain::Relevance,
+    #[serde(default)]
+    pub(super) pull_requests: Vec<GitHubRunPullRequest>,
     pub(super) id: u64,
     pub(super) workflow_id: u64,
     pub(super) run_number: u64,
@@ -182,6 +186,7 @@ impl From<GitHubWorkflowRun> for WorkflowRun {
         };
 
         Self {
+            relevance: run.relevance,
             id: run.id.to_string(),
             workflow_id: run.workflow_id.to_string(),
             run_number: run.run_number,
@@ -201,4 +206,9 @@ impl From<GitHubWorkflowRun> for WorkflowRun {
             provider_conclusion: run.conclusion,
         }
     }
+}
+
+#[derive(Deserialize)]
+pub(super) struct GitHubRunPullRequest {
+    pub(super) number: u64,
 }

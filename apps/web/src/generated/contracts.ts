@@ -102,9 +102,9 @@ export type SynchronizationResponse = { selectedRepositoryCount: number, synchro
 
 export type SynchronizationStatusResponse = { running: boolean, activeSourceCount: number, lastCompletedAt: number | null, lastFailedRepositoryCount: number, };
 
-export type MonitoringSettingsResponse = { synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+export type MonitoringSettingsResponse = { onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 
-export type UpdateMonitoringSettingsRequest = { synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+export type UpdateMonitoringSettingsRequest = { onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 
 export type MonitoringSettingsErrorResponse = { message: string, };
 

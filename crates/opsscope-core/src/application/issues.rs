@@ -1,5 +1,6 @@
 use super::{
-    ConnectedSource, ConnectionValidationFailure, RepositorySelectionRepository, SourceCapability,
+    ConnectedSource, ConnectionValidationFailure, RepositorySelectionRepository,
+    SettingsRepository, SourceCapability,
 };
 use crate::domain::{Issue, IssueDetails, Repository};
 use crate::source_data::{RefreshMode, SourceData, SourceDataFailure};
@@ -40,6 +41,7 @@ impl Error for ListIssuesFailure {}
 
 #[derive(Clone)]
 pub struct ListIssues {
+    settings: Arc<dyn SettingsRepository>,
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
 }
@@ -49,14 +51,21 @@ impl ListIssues {
     pub fn new(
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
+        settings: Arc<dyn SettingsRepository>,
     ) -> Self {
         Self {
+            settings,
             source_data,
             selections,
         }
     }
 
     pub async fn execute(&self) -> Result<IssueInventory, ListIssuesFailure> {
+        let only_my_work = self
+            .settings
+            .load_settings()
+            .map_err(|_| ListIssuesFailure::StorageUnavailable)?
+            .only_my_work;
         let selections = self
             .selections
             .list()
@@ -100,6 +109,7 @@ impl ListIssues {
                 }));
             }
         }
+        issues.retain(|item| !only_my_work || item.issue.relevance.matches());
         issues.sort_by(|left, right| right.issue.updated_at.cmp(&left.issue.updated_at));
         Ok(IssueInventory {
             selected_repository_count,

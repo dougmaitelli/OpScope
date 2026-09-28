@@ -78,6 +78,7 @@ impl From<DiscoveredChangeRequest> for ChangeRequestSummary {
             created_at,
             updated_at,
             web_url,
+            ..
         } = discovered.change_request;
         Self {
             id,

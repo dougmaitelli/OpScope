@@ -45,6 +45,11 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
         last_successful_at: Some(125),
         last_error: None,
         runs: vec![WorkflowRun {
+            relevance: crate::domain::Relevance {
+                account_id: Some("42".to_owned()),
+                reasons: vec![crate::domain::RelevanceReason::Authored],
+                complete: true,
+            },
             id: "run-1".to_owned(),
             workflow_id: "workflow-1".to_owned(),
             run_number: 7,
@@ -67,6 +72,11 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
     let change_requests = ChangeRequestSnapshot {
         refreshed_at: 126,
         change_requests: vec![ChangeRequest {
+            relevance: crate::domain::Relevance {
+                account_id: Some("42".to_owned()),
+                reasons: vec![crate::domain::RelevanceReason::Authored],
+                complete: true,
+            },
             id: "change-1".to_owned(),
             number: 42,
             title: "Harden authentication".to_owned(),
