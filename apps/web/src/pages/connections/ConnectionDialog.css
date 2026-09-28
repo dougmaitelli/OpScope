@@ -1,0 +1,97 @@
+.connection-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: #0c1118;
+  box-shadow: 0 18px 55px rgb(0 0 0 / 55%);
+}
+.connection-dialog::backdrop {
+  background: rgb(4 7 11 / 72%);
+  backdrop-filter: blur(2px);
+}
+.connection-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+.connection-dialog-header h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.connection-dialog-header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.connection-dialog-fields {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+}
+.connection-dialog-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+.connection-dialog-field label {
+  font-size: 10px;
+  font-weight: 650;
+}
+.connection-dialog-field input,
+.connection-dialog-field select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  background: #0f141c;
+  font-size: 12px;
+}
+.connection-dialog-field input:focus,
+.connection-dialog-field select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.connection-dialog-field input:disabled {
+  color: var(--muted);
+  background: #151a22;
+}
+.connection-dialog-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.connection-dialog-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.connection-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.connection-dialog-actions .primary-button {
+  width: auto;
+  margin: 0;
+}
