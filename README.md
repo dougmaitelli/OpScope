@@ -4,109 +4,242 @@
   <img src="assets/opsscope-logo.png" alt="OpsScope logo" width="128" height="128">
 </p>
 
-OpsScope is a local-first application for monitoring software-delivery
-systems. It begins with GitHub Actions across multiple repositories and runs as
-either a desktop application or a self-hosted web application.
+An operational dashboard for your repositories: see failing workflows, pull
+requests that need attention, and open issues in one place. Run it on your
+desktop or host it yourself.
 
-The first release should make it easy to see what is failing, what is running,
-what changed recently, which repository needs attention, and how fresh the
-displayed information is.
+## Why OpsScope?
 
-## Principles
+Following work across repositories means switching between Actions pages,
+pull request lists, and issue trackers just to answer “what needs my attention?”
+OpsScope brings those signals together in a compact, project-grouped view.
 
-- Read-only before requesting permission to change external systems.
-- Desktop operation does not depend on a service run by this project.
-- Desktop and self-hosted editions share one application core and frontend.
-- Cached data always exposes its freshness and remains useful during outages.
-- Stored credentials are never returned to the frontend.
-- Missing production security configuration fails closed.
+It complements your source platform rather than replacing it. Inspect status,
+activity, and run logs here; open the original page when you need to act.
+Credentials and cached data stay on your machine or server, with no
+OpsScope-hosted service required.
 
-## Version-one scope
+GitHub.com and GitHub Enterprise Server are supported today. The shared core
+and source-module architecture allow other providers and kinds of operational
+information to be added without building a separate application for each.
 
-Version one includes:
+## Features
 
-- Multiple GitHub.com and GitHub Enterprise Server connections using personal
-  access tokens.
-- Repository and GitHub Actions workflow discovery.
-- Current and recent workflow-run state across selected repositories.
-- On-demand workflow-run logs with links back to the source provider.
-- Repository, workflow, branch, commit, actor, trigger, timing, outcome,
-  freshness, and links back to GitHub.
-- Manual and scheduled refresh with cached state during transient failures.
-- New latest-run failure notifications, grouped once per repository.
-- Search and filtering by repository, workflow, and status.
-- Configurable local history stored in SQLite.
-- Optional **Only show my work** scope in Settings, using each connection's token
-  owner for PR authorship/reviews/review requests, issue authorship/subscriptions/
-  discussion, and workflow commit/PR ownership. It also scopes native and Apprise
-  notifications without discarding other monitored data.
-- Native desktop and single-administrator self-hosted editions.
+- **Workflows:** latest and previous runs, status filters, duration, and
+  on-demand logs in a dialog.
+- **Pull requests:** open PRs grouped by repository, with reviews and checks;
+  supported workflow checks open run details directly.
+- **Issues:** open issues grouped by repository, with details and discussion.
+- **Activity:** a combined feed of workflow runs and observed PR changes.
+- **Background monitoring:** scheduled and manual refresh, cached results on
+  reload, and freshness information when a source is unavailable.
+- **Failure notifications:** native desktop notifications or Apprise delivery
+  from the server, grouped by repository.
+- **Personal scope:** optionally show only work relevant to each connection's
+  token owner, including notification filtering.
 
-It does not include write actions, artifacts, multiple users,
-PostgreSQL, other providers, runtime plugins, mobile applications, or a hosted
-service.
+Both editions share the same core and UI. Each installation is intended for a
+single user: there are no separate workspaces or per-user data permissions.
+Integrations are read-only; rerunning jobs, editing issues, and merging PRs are
+not supported. GitHub is currently the only source module.
 
-Personal scope shows the latest matching workflow run and matching cached history,
-not necessarily the repository's latest run. Notifications still consider only the
-actual latest run per workflow. Items with unavailable relevance metadata are hidden
-in personal scope until a successful refresh; switching back restores the full view.
+## Quick start
 
-## Model
+### Desktop
 
-The core uses general monitoring language rather than CI-specific language:
+Download your platform's asset from
+[Releases](https://github.com/dougmaitelli/OpsScope/releases).
 
-| Term | Meaning | Initial GitHub mapping |
-| --- | --- | --- |
-| Workspace | Ownership and authorization boundary | The single local workspace |
-| Source | External system providing information | GitHub |
-| Connection | Source configuration and secret reference | GitHub account and token |
-| Resource | Durable provider object that can be monitored | Repository |
-| Monitor | Configured observation of a resource | Actions workflow |
-| Observation | Latest known state and freshness | Latest workflow state |
-| Activity | Historical immutable occurrence | Workflow run |
-| Sync state | Cursor, rate limit, retry, and freshness metadata | GitHub synchronization state |
+| Platform | Download and run |
+| --- | --- |
+| macOS (Apple Silicon and Intel) | Extract the universal `.app.zip`, move OpsScope.app to Applications, and open it. |
+| Windows x86-64 | Run the portable `.exe`. |
+| Linux x86-64 | Make the `.AppImage` executable and run it, or use the raw binary with its system dependencies installed. |
 
-Lifecycle (`queued`, `running`, `completed`, or `unknown`) is separate from
-outcome (`success`, `warning`, `failure`, `cancelled`, `skipped`, or `unknown`).
-Provider-native values are retained alongside normalized values.
+Desktop releases are not currently signed with a trusted publisher certificate
+or notarized by Apple; platform security warnings may appear. The raw Linux
+binary needs the WebKitGTK 4.1 and tray libraries used by the desktop shell;
+it is not a standalone static executable.
 
-## Documentation
+Minimize the window to keep monitoring from the system tray. Use the tray menu
+to restore it or quit. Desktop operation does not require the web server.
 
-- [Architecture](docs/architecture.md)
-- [Security and threat model](docs/security.md)
-- [Development guide](docs/development.md)
+### Self-hosted with Docker
 
-## Development
+Save this as `compose.yaml`:
 
-The workspace currently provides the shared Rust core, Axum server, Tauri
-desktop shell, generated TypeScript contracts, and the GitHub source module.
-GitHub account validation, multi-server connection persistence, repository selection,
-workflow discovery, and recent workflow-run monitoring are implemented. Run
-activity and synchronization freshness are cached in SQLite, with the last
-successful snapshot retained during transient provider failures. Users can
-inspect workflow-run logs on demand without persisting them locally. Desktop
-credentials use the operating-system keychain, minimizes to the system tray,
-and delivers native failure notifications. The server encrypts credentials
-stored in SQLite, optionally authenticates browser sessions through OpenID Connect, and
-can deliver failure notifications through Apprise. Manual refresh uses a shared
-synchronization coordinator that
-bypasses cache TTLs, prevents overlapping work per source, and continues when an
-individual repository fails. Both editions also invoke the same coordinator on
-a 60-second background schedule, and the UI observes completed synchronization
-runs through lightweight status polling. Connections and discovery are driven
-through the source-module registry in both editions. Every non-health server API
-requires an authenticated web session.
+```yaml
+services:
+  opsscope:
+    image: ghcr.io/dougmaitelli/opsscope:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4317:4317"
+    volumes:
+      - opsscope-data:/data
 
-```sh
-npm install
-npm run contracts:generate
-npm run check
+volumes:
+  opsscope-data:
 ```
 
-The canonical logo is `assets/opsscope-logo.png`. After changing it, run
-`npm run icons:generate` to regenerate the web, desktop, and packaging icons.
+Run `docker compose up -d`, then open **http://127.0.0.1:4317** and connect
+a source below.
+The published image targets **linux/amd64**.
 
-For the browser UI, run `npm run server:dev` and `npm run web:dev` in separate
-terminals. Run the desktop shell with `npm run desktop:dev`; the Tauri CLI is
-installed locally by npm. See the [development guide](docs/development.md) for
-the complete command and dependency-boundary reference.
+This example exposes the service only on the Docker host's loopback interface.
+**Authentication is disabled unless OIDC is configured.** Do not expose an
+unauthenticated instance to an untrusted network.
+
+### Connect your repositories
+
+1. Open **Connections**, add a GitHub connection, and provide a personal access
+   token. Keep `https://github.com` or enter your GitHub Enterprise Server
+   origin, such as `https://github.example.com`.
+2. In **Repositories**, select the repositories to monitor.
+3. Open **Overview**, **Pull requests**, **Issues**, or **Activity**. Use Refresh
+   for an immediate update; synchronization also runs in the background.
+4. Adjust refresh frequency, history, or personal scope in **Settings**.
+
+Multiple GitHub servers are supported, but duplicate connections to the same
+normalized server URL are not. Replace a connection's token from Connections
+when it expires or needs different permissions.
+
+For a fine-grained token, grant access to the selected repositories and read
+access to **Metadata, Actions, Pull requests, Issues, Checks, and Commit
+statuses**. A classic token with **repo** scope is also supported; it grants
+broader permissions than OpsScope uses. Organization token approval and access
+policies still apply.
+
+## Deployment
+
+The image serves the UI and API, runs as an
+unprivileged user, and has a health check at `/api/health`. A bind-mounted data
+directory must be writable by the container user.
+
+For remote access, put an HTTPS reverse proxy in front of the service and
+configure OIDC below, or provide an equivalent trusted access boundary.
+Proxy the entire site, including `/api`, at the root of its public origin.
+A proxy in another container should reach `opsscope:4317` over a shared Docker
+network; the host's loopback mapping is not that container's loopback.
+
+Use a version tag such as `:0.3.1` instead of `:latest` for controlled upgrades.
+
+### Server configuration
+
+Set these environment variables on the server process or in the Compose
+service's `environment` section. They are not desktop settings.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OPSSCOPE_BIND_ADDRESS` | `127.0.0.1:4317`; container: `0.0.0.0:4317` | HTTP listening address. |
+| `OPSSCOPE_DATA_DIR` | `.opsscope-data`; container: `/data` | SQLite database and default encryption-key directory. |
+| `OPSSCOPE_MASTER_KEY_FILE` | `<data directory>/master.key` | Raw 32-byte credential-encryption key file; created if absent. |
+| `OPSSCOPE_APPRISE_URL` | Unset (delivery disabled) | Apprise HTTP(S) notification endpoint. |
+| `OPSSCOPE_PUBLIC_URL` | Unset | Browser-visible origin, required with OIDC. |
+| `OPSSCOPE_OIDC_ISSUER` | Unset | OIDC discovery issuer URL. |
+| `OPSSCOPE_OIDC_CLIENT_ID` | Unset | Confidential OIDC client ID. |
+| `OPSSCOPE_OIDC_CLIENT_SECRET` | Unset | Confidential OIDC client secret. |
+| `OPSSCOPE_OIDC_ALLOWED_SUBJECTS` | Unset | Optional comma-separated allowed `sub` values. |
+
+### Optional OIDC authentication
+
+Register a confidential web client with your identity provider using this
+redirect URI (substitute your public origin):
+
+```text
+https://ops.example.com/api/auth/callback
+```
+
+Add this to the Compose service:
+
+```yaml
+    environment:
+      OPSSCOPE_PUBLIC_URL: https://ops.example.com
+      OPSSCOPE_OIDC_ISSUER: https://identity.example.com/your-issuer
+      OPSSCOPE_OIDC_CLIENT_ID: opsscope
+      OPSSCOPE_OIDC_CLIENT_SECRET: ${OPSSCOPE_OIDC_CLIENT_SECRET:?Set the OIDC client secret}
+      OPSSCOPE_OIDC_ALLOWED_SUBJECTS: your-subject-id
+```
+
+Supply the secret through your deployment environment; do not commit it.
+OpsScope uses authorization-code flow with PKCE. The public URL must be an
+origin without a path, and HTTPS is required except on loopback.
+
+OIDC is disabled when issuer, client ID, and client secret are all unset or
+blank. Setting any one requires all three plus the public URL; incomplete
+configuration or failed discovery prevents startup. Public URL or allowed
+subjects alone do not enable authentication.
+
+Without an allowed-subject list, restrict admission through the identity
+provider's client policy. OIDC controls access to the installation, not
+individual connections: every admitted user shares the same data and
+credentials. The GitHub token owner—not the OIDC login—defines “me.”
+
+### Apprise notifications
+
+Set `OPSSCOPE_APPRISE_URL` to a reachable Apprise API notification endpoint,
+for example `http://apprise:8000/notify/opsscope`. Configure destinations and
+their credentials in Apprise, not in OpsScope. OpsScope sends a notification
+payload to that endpoint; it does not run Apprise for you.
+Leave the variable unset to disable delivery.
+
+Notifications consider only the actual latest run of each workflow, not
+historical failures. Initial observation establishes a baseline; subsequent
+new failures are grouped into one notification per repository for that
+observation. Unchanged failures do not repeatedly notify. Personal scope
+also applies to notification eligibility.
+
+### Persistence, backups, and upgrades
+
+Desktop metadata lives in the application's OS data directory, and tokens live
+in the OS keychain. The server stores metadata and encrypted tokens in
+`opsscope.sqlite3`, using `master.key` by default.
+
+Persist the entire server data directory. For a simple consistent backup,
+stop the container and back up the volume **and its encryption key** before
+restarting it. Back up a separately mounted key too.
+Losing the key makes stored tokens unreadable; replacing it is not a key
+rotation procedure.
+
+For stronger separation, mount a raw 32-byte key file and set
+`OPSSCOPE_MASTER_KEY_FILE` to its path. It must be readable by the server user
+and, on Unix, grant no group or world permissions. A separate mount is not
+enforced: the generated default key works in deployed containers too.
+Encryption protects a database-only disclosure, not a compromised host or a
+backup containing both the database and key.
+
+After backing up, update your image tag if pinned, then run:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Keep the same volume and key. Database migrations run at startup.
+Restarting the server also invalidates existing OIDC sessions.
+
+## In-app settings
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| Synchronization interval | 60 seconds | Background refresh, configurable from 30 to 3,600 seconds. |
+| Recent runs per workflow | 10 | Recent-run window, configurable from 1 to 100. |
+| Only show my work | Off | Filters monitoring views and notifications using each connection's token owner. |
+
+Personal scope includes PRs you authored, reviewed, or were asked to review;
+issues you authored, subscribed to, or participated in; and workflow runs
+associated with your commits or PRs.
+
+The displayed latest matching workflow run may not be the repository's actual
+latest run. Notifications still use the actual latest run. Relevance is
+determined within fetched data, not by searching unlimited history.
+Items whose relevance cannot be determined are hidden in personal scope;
+refresh to populate missing metadata. Turning it off restores the full cached
+view without reconnecting sources.
+
+## Development and design
+
+For local setup, commands, and release maintenance, see the
+[development guide](docs/development.md). The [architecture](docs/architecture.md)
+explains the shared core and source modules; the
+[security model](docs/security.md) describes trust boundaries and limitations.

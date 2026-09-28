@@ -1,196 +1,110 @@
 # Architecture
 
-## Context
+OpsScope has one Rust application core and two delivery shells. Desktop and
+self-hosted editions share a React/TypeScript frontend, generated contracts,
+and application behavior; neither edition depends on the other.
 
-OpsScope has one Rust application core and two delivery shells:
-
-- A native-WebView desktop application using narrow IPC commands and an
-  operating-system secret store.
-- A self-hosted server exposing a same-origin HTTP API and serving the shared
-  web application.
-
-The first integration is GitHub and the first monitor type is GitHub Actions.
-
-## Dependency rule
-
-Dependencies point inward:
+## Structure and boundaries
 
 ```text
-GitHub API -> integration adapter -> application services <- persistence port
-                                      ^        ^
-                                      |        |
-                              Desktop adapter  HTTP adapter
-                                      \        /
-                                      shared UI
-```
-
-The domain and application modules cannot depend on a desktop framework, HTTP
-framework, database driver, UI framework, or GitHub response types.
-
-## Repository structure
-
-```text
-crates/
-  opsscope-core/
-    domain                Pure types, invariants, and state transitions
-    application           Use cases and port interfaces
-    contracts             Stable request and response DTOs
-    integrations          Provider adapters, beginning with GitHub
-    persistence           SQLite metadata and encrypted server-secret adapters
+crates/opsscope-core/src/
+  domain/          Provider-independent types
+  application/     Use cases, ports, caching, synchronization, notifications
+  contracts/       Transport DTOs and generated client definitions
+  integrations/    Compiled source modules and provider adapters
+  persistence.rs   SQLite setup and persistence adapters
+  persistence/     Persistence implementation modules and tests
 apps/
-  server/                 Server composition root and HTTP adapter
-  desktop/                Desktop composition root and IPC adapter
-  web/                    Shared web application
+  server/          Axum HTTP adapter, OIDC, Apprise, server composition
+  desktop/         Tauri IPC adapter, OS keychain, tray, native notifications
+  web/             Shared React UI, feature pages, components, client adapters
 ```
 
-Domain, application, contracts, and integrations are modules in one shared Rust
-crate. They are conceptual boundaries, not separate Cargo packages. A module is
-extracted into another crate only when concrete dependency, build, or reuse
-requirements justify the additional package boundary. The dependency rule is
-more important than the number of packages.
+Domain and application code must not depend on Axum, Tauri, UI code, or
+provider response types. Application ports separate business behavior from
+storage and external services. Integrations and persistence implement those
+ports. These are module boundaries within one shared crate, not separate
+crates for each layer.
 
-## Application ports
+The frontend uses a generated `ApplicationClient` interface. Its web adapter
+uses same-origin HTTP; its desktop adapter uses allowlisted Tauri IPC.
+Desktop does not start an HTTP server. Rust contracts are exported with
+`ts-rs`; CI detects drift in DTOs, routes, commands, and the client interface.
 
-Initial ports are expected to cover:
+## Sources and connections
 
-- Clock and identifier generation.
-- Connection validation and resource discovery.
-- Monitor and activity synchronization.
-- Workspace, connection, resource, monitor, observation, activity, and sync
-  repositories.
-- Secret storage by opaque secret reference.
-- Unit-of-work or transaction boundaries.
-- Application event publication.
+A `SourceModule` describes a provider, its connection fields, validation,
+normalization, and monitoring capabilities. The compiled catalog in
+`integrations/mod.rs` registers modules for both editions. Generic connection
+contracts and module-provided fields keep provider-specific forms out of the UI.
 
-Source integrations implement the `SourceModule` interface. A module supplies
-its stable identifier, display metadata, credential-field description,
-credential validation behavior, repository discovery, and workflow discovery.
-A central compiled catalog registers modules in `SourceRegistry` for both
-editions; generic list, connect, disconnect, and discovery use cases drive both
-transports and the UI. Adding a source must not require a provider-specific
-route, IPC command, DTO, or frontend screen.
+A connection is one configured instance of a source. Connections have internal
+IDs; uniqueness is enforced by module ID plus a module-owned connection key.
+For GitHub, that key is the normalized server origin. GitHub.com and separate
+Enterprise Server origins can coexist.
 
-Provider credentials are represented by opaque references outside the secret
-adapter. DTOs returned to a transport contain credential status and metadata,
-never secret material. Credential input exists only in the intentional
-connection request.
+GitHub currently supplies workflows, pull requests, and issues. New providers
+implement the relevant application ports; new capabilities may require new
+shared domain and UI behavior. There is no runtime plugin loading.
 
-## Frontend transports
+## Storage and cache
 
-The web application depends on a typed client interface rather than directly on
-HTTP or a desktop framework:
+SQLite stores connections, repository selections, settings, cached source
+data, activity events, notification observations, and credential audit events.
+Provider IDs identify cached objects; names and URLs are presentation data.
 
-- The web implementation uses same-origin JSON HTTP requests.
-- The desktop implementation invokes an explicit allowlist of IPC commands.
+Application use cases read source data through a port. A caching decorator
+handles SQLite snapshots, cache lifetimes, and API refreshes transparently;
+callers do not choose between the database and GitHub. This allows the cache
+implementation to be changed independently.
 
-Both adapters call the same application use cases and map the same DTOs. The
-desktop application does not start a loopback HTTP server.
+The UI can render cached snapshots before background synchronization completes.
+Repository metadata has a longer cache lifetime than workflow and run data.
+Manual refresh bypasses cache TTLs. Failed refreshes preserve the last
+successful snapshot, with freshness and failure information available to the UI.
+Run logs are fetched on demand and are not persisted.
 
-## Credential separation
+Desktop credentials use the OS keychain. Server credentials use encrypted
+SQLite storage with a master key independent of OIDC. Transport responses
+contain connection metadata and credential status, never stored tokens.
+OIDC sessions are held in server memory, not SQLite.
 
-OIDC client authentication, browser sessions, provider credentials, server-side
-credential encryption, and future webhook verification use independent secrets
-and lifecycles. The desktop stores provider credentials in the operating-system
-keychain. The self-hosted server uses a separately managed encryption key; the
-OIDC client secret is never an encryption key. See the [security model](security.md)
-for the complete controls.
+## Synchronization and notifications
 
-## Persistence model
+Both shells run the shared synchronization coordinator on the interval stored
+in Settings. Manual refresh uses the same coordinator. It prevents overlapping
+synchronization for a connection and continues when an individual repository
+fails. The UI observes synchronization status rather than owning the schedule.
 
-Likely version-one tables are:
+The core detects new failure observations for actual latest workflow runs,
+persists notification state, and groups failures by repository. Platform
+implementations of the notification port deliver native notifications or
+Apprise requests. Initial observations establish a baseline rather than
+alerting on existing failures.
 
-- `workspaces`
-- `connections`
-- `secret_references`
-- `resources`
-- `monitors`
-- `observations`
-- `activities`
-- `sync_states`
-- `sessions` (server only)
-- `audit_events`
-- schema migration metadata
+The Activity view combines workflow runs with locally observed PR changes;
+it is not a complete provider audit log.
 
-Records use internal UUIDs and store provider-issued durable numeric IDs where
-available. Mutable names, slugs, and URLs are not identities.
+## Personal scope
 
-A source module describes a provider type, while a connection is one configured
-instance of that module. Connections have independent internal IDs and carry
-module-owned normalized configuration. The persistence layer enforces uniqueness
-on the module ID plus the module's stable connection key; for GitHub this key is
-the normalized server origin.
+“Me” is the token owner for each connection, not a desktop OS identity or OIDC
+login. Provider adapters collect relevance metadata and map it to common domain
+reasons. The core applies the persisted personal-scope setting to views,
+counts, history, activity, and notification eligibility.
 
-Provider-specific details use versioned payloads only where a common column is
-not meaningful. Fields that are filtered, sorted, constrained, or joined belong
-in typed columns rather than opaque JSON.
+Filtering does not discard unrelated cached source data. Unknown relevance is
+excluded while the setting is enabled. A workflow view can show the latest
+matching historical run, but notifications still consider only the actual
+latest run. This prevents old matching failures from becoming new alerts.
 
-SQLite is the only version-one database. Database access remains behind
-application ports, but no lowest-common-denominator SQL abstraction for a
-hypothetical future PostgreSQL implementation will be created prematurely.
+## Testing
 
-## Synchronization
+The workspace check runs Rust tests across core and platform adapters, including
+application behavior, synthetic provider responses, persistence, and server
+authentication. TypeScript checks, linting, formatting, and generated-contract
+checks cover the shared frontend contract. Build checks cover both shells.
 
-Synchronization is a background application concern, not a UI concern.
-
-- Only one sync for a connection may run at a time.
-- Manual refresh uses the same synchronization path as scheduled refresh.
-- Latest-run failure transitions are persisted and grouped into one
-  provider-independent notification per repository.
-- Desktop and server shells implement notification delivery through native
-  system notifications and an environment-configured Apprise endpoint,
-  respectively.
-- Cached data remains available during provider outages.
-- Last attempt and last successful sync are distinct.
-- Conditional requests and ETags are used where supported.
-- GitHub rate-limit response data is recorded.
-- Transient failures use bounded exponential backoff with jitter.
-- Authentication and authorization failures do not retry indefinitely.
-- Shutdown cancels work cleanly and does not leave partial projections.
-- Provider activity is upserted idempotently by durable external ID.
-
-The initial default interval is 60 seconds and will be configurable within safe
-bounds. Self-hosted webhooks are a later optimization; polling remains required
-for desktop operation.
-
-## Extension model
-
-Integrations are compiled into the application and registered explicitly. There
-is no version-one runtime plugin ABI or execution of downloaded third-party
-code.
-
-Source and monitor type are separate dimensions. Adding GitHub deployments, for
-example, extends the GitHub integration with a new monitor capability rather
-than pretending that GitHub Deployments is a different provider.
-
-## Technology choice
-
-The selected implementation stack is:
-
-- Rust for the domain, application core, integrations, and native adapters.
-- Tauri 2 for the native desktop shell using an operating-system WebView.
-- Axum, Tokio, and Tower for the self-hosted HTTP composition.
-- A Rust application core reused by desktop and server compositions.
-- React with TypeScript and Vite for the shared component-based frontend.
-- SQLite as the version-one database.
-- TypeScript DTOs, route names, command names, and the frontend client interface
-  generated from Rust with `ts-rs`, with a CI drift check covering desktop IPC
-  and HTTP transports.
-
-Rust was selected after building equivalent disposable Rust and Go prototypes.
-Go built considerably faster, but build time was not an important project
-constraint. On the comparison machine, the minimal Rust server used 3.00 MiB
-idle RSS and produced a 1.69 MiB executable, versus 11.19 MiB and 6.17 MiB for
-Go. These measurements are directional rather than production-load guarantees.
-Rust also provides the preferred Tauri capability model and compile-time domain
-modeling.
-
-## Testing strategy
-
-- Unit tests for domain invariants and normalization.
-- Application tests with in-memory ports.
-- GitHub contract tests against synthetic fixtures and a mock HTTP server.
-- SQLite migration, transaction, and idempotency tests.
-- Security tests for session, CSRF, redaction, and authorization behavior.
-- The same frontend client contract suite against HTTP and desktop transports.
-- End-to-end smoke tests for desktop and self-hosted packaging.
-- Backup restoration tests before a release changes the database schema.
+Live-provider compatibility, desktop OS integration, and deployment behavior
+still need appropriate smoke testing; passing unit tests is not proof of those
+environments. See [development](development.md) for commands and
+[security](security.md) for trust boundaries.

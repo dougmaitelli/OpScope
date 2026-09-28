@@ -1,157 +1,94 @@
 # Development
 
-## Prerequisites
+Deployment, token permissions, authentication, and runtime configuration belong
+in the [README](../README.md#deployment). This guide covers working on the code.
 
-- Rust 1.98.1 with `rustfmt` and `clippy` (also declared in
-  `rust-toolchain.toml`).
-- Node.js 24 and npm.
-- The platform prerequisites listed by Tauri for desktop builds.
+## Local setup
 
-Install JavaScript dependencies and generate the committed TypeScript contract:
+Prerequisites:
+
+- Rust 1.98.1 with rustfmt and Clippy (pinned in `rust-toolchain.toml`).
+- Node.js 24 and npm, matching the CI jobs.
+- Platform build dependencies for Tauri when building the desktop crate.
+  On the Ubuntu CI runners these include `libwebkit2gtk-4.1-dev`,
+  `libappindicator3-dev`, `librsvg2-dev`, `patchelf`, and `xdg-utils`.
+
+Install the locked dependencies:
 
 ```sh
-npm install
-npm run contracts:generate
+npm ci
 ```
 
-No global Tauri installation is required; the CLI is pinned in the root npm
-workspace.
+For the browser UI, run these in separate terminals:
 
-## Workspace checks
+```sh
+npm run server:dev
+npm run web:dev
+```
 
-Run the complete local and CI review gate:
+Open `http://127.0.0.1:1420`. Vite proxies `/api` to the Rust server on
+`127.0.0.1:4317`. The server stores development data in `.opsscope-data/`.
+No OIDC configuration is needed for local development.
+
+To test OIDC locally, use the configuration described in the README with
+`OPSSCOPE_PUBLIC_URL=http://127.0.0.1:1420` and register
+`http://127.0.0.1:1420/api/auth/callback` with your provider.
+
+For the desktop UI:
+
+```sh
+npm run desktop:dev
+```
+
+This starts the shared frontend and Tauri shell; it does not need the HTTP
+server. The Tauri CLI is installed locally by npm.
+
+## Checks and builds
 
 ```sh
 npm run check
-```
-
-This verifies the generated contract, Rust formatting, Clippy with warnings
-denied, all Rust tests, strict TypeScript compilation, ESLint, and frontend
-formatting with Prettier. Build all Rust crates and the production frontend with:
-
-```sh
 npm run build
 ```
 
-The other root commands are:
+The check command verifies generated contracts, Rust formatting, Clippy with
+warnings denied, Rust tests, TypeScript compilation, ESLint, and Prettier.
+The build command builds the Rust workspace and production frontend.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run contracts:generate` | Regenerate TypeScript DTOs, routes, commands, and the client interface from Rust. |
-| `npm run contracts:check` | Fail if the committed TypeScript contract differs from Rust. |
-| `npm run desktop:build` | Build the desktop application executable without packaging an installer. |
-| `npm run server:dev` | Run the loopback-only development HTTP server on port 4317. |
-| `npm run web:dev` | Run the browser frontend on port 1420 and proxy `/api` to the development server. |
-| `npm run desktop:dev` | Run the Tauri desktop shell and shared Vite frontend. |
+| `npm run contracts:generate` | Regenerate committed TypeScript DTOs, routes, commands, and the client interface after changing Rust contracts. |
+| `npm run contracts:check` | Detect generated-contract drift. |
+| `npm run desktop:build` | Build a desktop executable without packaging an installer. |
+| `npm run icons:generate` | Regenerate web and desktop icons from `assets/opsscope-logo.png`. |
 
-The HTTP server binds to `127.0.0.1:4317` by default. Set
-`OPSSCOPE_BIND_ADDRESS` to another socket address when deploying it; the
-container sets this to `0.0.0.0:4317`. Set `OPSSCOPE_WEB_DIR` to a production
-frontend directory to serve the SPA and API from one process. OIDC is disabled
-when issuer, client ID, and client secret are all unset. When any of those three
-is set, all four required values must be present and valid or startup fails:
+## Code organization
 
-| Variable | Purpose |
-| --- | --- |
-| `OPSSCOPE_PUBLIC_URL` | Required with OIDC. Browser-visible origin. HTTPS is required except for loopback development. The callback is `<origin>/api/auth/callback`. |
-| `OPSSCOPE_OIDC_ISSUER` | Required with OIDC. Exact issuer URL used for discovery and ID-token validation. |
-| `OPSSCOPE_OIDC_CLIENT_ID` | Required with OIDC. Confidential web-client identifier. |
-| `OPSSCOPE_OIDC_CLIENT_SECRET` | Required with OIDC. Confidential web-client secret. |
-| `OPSSCOPE_OIDC_ALLOWED_SUBJECTS` | Optional comma-separated `sub` allowlist. When unset, provider-side client access policy controls admission. |
+The workspace has one shared Rust library, `crates/opsscope-core`, and two
+executable crates, `apps/server` and `apps/desktop`. The React application in
+`apps/web` is shared by both. See [architecture](architecture.md) for dependency
+boundaries, persistence, and source-module extension points.
 
-For local development, register
-`http://127.0.0.1:1420/api/auth/callback` with the provider and set
-`OPSSCOPE_PUBLIC_URL=http://127.0.0.1:1420`. Vite proxies the callback and API
-requests to the Rust server.
-
-With OIDC disabled, the web API and interface do not require a session or CSRF
-token. Use that mode only where network access is already restricted to trusted
-users.
-
-The development server stores metadata and encrypted credentials under
-`.opsscope-data/`. It creates a 32-byte `master.key` with owner-only
-permissions on first use. Set `OPSSCOPE_DATA_DIR` to move the database or
-`OPSSCOPE_MASTER_KEY_FILE` to use a separately mounted raw 32-byte key file.
-Production self-hosting will require the latter rather than the development
-default.
-
-Set `OPSSCOPE_APPRISE_URL` to an Apprise API notification endpoint, such as
-`http://127.0.0.1:8000/notify/opsscope`, to enable server notifications. Leave
-it unset to disable delivery. Apprise service URLs and credentials stay in the
-Apprise configuration identified by that endpoint rather than in OpsScope.
-When using the stateless `/notify` endpoint, configure those destinations on
-the Apprise API process with its `APPRISE_STATELESS_URLS` environment variable.
-
-## Dependency direction
-
-The workspace has one shared library and two executable crates:
-
-```text
-Cargo.toml
-├── crates/opsscope-core/Cargo.toml
-├── apps/server/Cargo.toml
-└── apps/desktop/Cargo.toml
-```
-
-Inside `opsscope-core`, module dependencies point inward:
-
-```text
-domain <── application <── integrations
-   ^             ^
-   └── contracts └── persistence
-```
-
-- The domain module has no dependencies on other project modules.
-- The application module defines ports and depends only on domain concepts.
-- Integrations and persistence implement application ports and may depend on
-  domain types.
-- Response contracts contain no secret material; the connection request is the
-  sole credential-bearing transport type.
-- Axum and Tauri occur only in their executable crates.
-
-Source modules are added to the central compiled catalog in
-`integrations/mod.rs`. The shared registry exposes them to both editions
-through generic list, connect, and disconnect contracts, so the frontend
-renders new registered sources without provider-specific UI code.
-Modules also declare their connection fields and own their validation and
-normalization. The GitHub module defaults its server URL to `https://github.com`;
-an enterprise origin such as `https://github.example.com` uses the REST prefix
-`/api/v3`.
-
-These are module-level rules rather than separate compilation units. If an
-integration later requires enough isolated dependencies or conditional builds
-to justify a crate, it can be extracted then.
-
-The frontend implements the generated `ApplicationClient` twice: once with
-same-origin HTTP and once with Tauri IPC. The desktop application does not run
-an HTTP server.
+Keep feature-specific UI components and styles with their feature, and reuse
+shared components for common row, pill, and project-group presentation.
+Changes to application behavior belong in the shared core; platform adapters
+provide transport, credential storage, and notification delivery.
 
 ## Continuous delivery
 
-GitHub Actions runs the complete check and build gate on every branch push and
-pull request. Pushing a semantic-version tag such as `v0.1.0` starts a release.
-The tag must match the versions in `Cargo.toml`, `package.json`, and
-`apps/desktop/tauri.conf.json`.
+[CI](../.github/workflows/ci.yml) runs on pushes and pull requests.
+[Release](../.github/workflows/release.yml) runs on `v*` tags and checks that
+the tag matches `Cargo.toml`, `package.json`, and
+`apps/desktop/tauri.conf.json`. Keep corresponding lockfile versions in sync
+when changing versions.
 
-A successful tag build publishes a GitHub Release containing a universal macOS
-DMG, Windows NSIS and MSI installers, and Linux AppImage and Debian packages.
-It also publishes a multi-platform `linux/amd64` and `linux/arm64` image to
-`ghcr.io/<owner>/<repository>`, tagged with the full version, major/minor,
-major, and (for stable releases) `latest`. The GitHub Release remains a draft
-unless every desktop build and the container publish succeed.
+After validation, the release workflow builds:
 
-Run the self-hosted image with a persistent data volume:
+- A universal macOS `.app.zip` (Apple Silicon and Intel).
+- A Windows x86-64 portable `.exe`.
+- A Linux x86-64 AppImage and raw executable.
+- A `linux/amd64` container at `ghcr.io/dougmaitelli/opsscope`.
 
-```sh
-docker run --detach --name opsscope \
-  --publish 4317:4317 \
-  --volume opsscope-data:/data \
-  ghcr.io/<owner>/<repository>:latest
-```
-
-The image serves the web application and API from port 4317, runs as an
-unprivileged user, and stores its SQLite database and generated encryption key
-under `/data`. Pass the existing server environment variables to configure
-OIDC, Apprise, or a separately mounted master key. Desktop packages are
-currently unsigned; macOS uses ad-hoc signing so downloaded universal builds
-remain runnable while production signing credentials are not configured.
+Container tags include full version, major/minor, major, and `latest` for
+stable releases. The GitHub release remains a draft until all desktop builds
+and container publishing succeed. macOS builds use ad-hoc signing; trusted
+publisher signing and Apple notarization are not configured.
