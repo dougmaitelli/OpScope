@@ -2,13 +2,13 @@ use crate::state::DesktopState;
 use opsscope_core::contracts::{
     ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListActivityResponse,
-    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
-    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
-    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
-    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
-    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, IssueDetailsErrorResponse,
+    IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse, ListChangeRequestsResponse,
+    ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
+    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
+    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
+    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
+    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
 
@@ -54,6 +54,18 @@ pub(crate) async fn list_change_requests(
 }
 
 #[tauri::command]
+pub(crate) async fn list_issues(
+    state: State<'_, DesktopState>,
+) -> Result<ListIssuesResponse, ConnectionValidationErrorResponse> {
+    state
+        .list_issues
+        .execute()
+        .await
+        .map(ListIssuesResponse::from_domain)
+        .map_err(ConnectionValidationErrorResponse::from)
+}
+
+#[tauri::command]
 pub(crate) fn list_activity(
     state: State<'_, DesktopState>,
 ) -> Result<ListActivityResponse, ConnectionValidationErrorResponse> {
@@ -79,6 +91,19 @@ pub(crate) async fn change_request_details(
         .await
         .map(ChangeRequestDetailsResponse::from)
         .map_err(ChangeRequestDetailsErrorResponse::from)
+}
+
+#[tauri::command]
+pub(crate) async fn issue_details(
+    state: State<'_, DesktopState>,
+    request: IssueDetailsRequest,
+) -> Result<IssueDetailsResponse, IssueDetailsErrorResponse> {
+    state
+        .issue_details
+        .execute(&request.source_id, &request.repository_id, request.number)
+        .await
+        .map(IssueDetailsResponse::from)
+        .map_err(IssueDetailsErrorResponse::from)
 }
 
 #[tauri::command]

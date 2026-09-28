@@ -9,6 +9,7 @@ const pageTitles: Record<string, string> = {
   "/": "Overview",
   "/activity": "Activity",
   "/pull-requests": "Pull requests",
+  "/issues": "Issues",
   "/repositories": "Repositories",
   "/connections": "Connections",
   "/settings": "Settings",
@@ -66,6 +67,12 @@ export function AppShell() {
               P
             </span>
             Pull requests
+          </NavLink>
+          <NavLink className={navClass} to="/issues">
+            <span className="nav-symbol" aria-hidden="true">
+              I
+            </span>
+            Issues
           </NavLink>
           <NavLink className={navClass} to="/repositories">
             <span className="nav-symbol" aria-hidden="true">

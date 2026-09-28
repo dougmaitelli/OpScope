@@ -1,10 +1,10 @@
 use opsscope_core::application::{
     ActivityEventRepository, CheckForUpdates, ConnectSource, ConnectionRepository,
-    DisconnectSource, GetChangeRequestDetails, GetMonitoringSettings, GetWorkflowRunLogs,
-    ListActivity, ListChangeRequests, ListRepositories, ListSources, ListWorkflows,
-    NotifyRepositoryFailures, RepositorySelectionRepository, SaveRepositorySelection, SecretStore,
-    SettingsRepository, SourceRegistry, SynchronizeSources, TrackChangeRequestActivity,
-    UpdateMonitoringSettings,
+    DisconnectSource, GetChangeRequestDetails, GetIssueDetails, GetMonitoringSettings,
+    GetWorkflowRunLogs, ListActivity, ListChangeRequests, ListIssues, ListRepositories,
+    ListSources, ListWorkflows, NotifyRepositoryFailures, RepositorySelectionRepository,
+    SaveRepositorySelection, SecretStore, SettingsRepository, SourceRegistry, SynchronizeSources,
+    TrackChangeRequestActivity, UpdateMonitoringSettings,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -13,8 +13,10 @@ pub(crate) struct DesktopState {
     pub(crate) check_for_updates: CheckForUpdates,
     pub(crate) list_workflows: ListWorkflows,
     pub(crate) list_change_requests: ListChangeRequests,
+    pub(crate) list_issues: ListIssues,
     pub(crate) list_activity: ListActivity,
     pub(crate) change_request_details: GetChangeRequestDetails,
+    pub(crate) issue_details: GetIssueDetails,
     pub(crate) workflow_run_logs: GetWorkflowRunLogs,
     pub(crate) connect_source: ConnectSource,
     pub(crate) list_sources: ListSources,
@@ -67,11 +69,13 @@ impl DesktopState {
                 source_data.clone(),
                 repository_selections.clone(),
             ),
+            list_issues: ListIssues::new(source_data.clone(), repository_selections.clone()),
             list_activity: ListActivity::new(
                 activity_events.clone(),
                 repository_selections.clone(),
             ),
             change_request_details: GetChangeRequestDetails::new(source_data.clone()),
+            issue_details: GetIssueDetails::new(source_data.clone()),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 sources.clone(),

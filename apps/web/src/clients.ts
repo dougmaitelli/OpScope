@@ -11,9 +11,12 @@ import {
   type DisconnectSourceRequest,
   type DisconnectSourceResponse,
   type HealthResponse,
+  type IssueDetailsRequest,
+  type IssueDetailsResponse,
   type ListActivityResponse,
   type ListWorkflowsResponse,
   type ListChangeRequestsResponse,
+  type ListIssuesResponse,
   type ListRepositoriesResponse,
   type ListSourcesResponse,
   type MonitoringSettingsResponse,
@@ -52,6 +55,14 @@ export class DesktopClient implements ApplicationClient {
     request: ChangeRequestDetailsRequest,
   ): Promise<ChangeRequestDetailsResponse> {
     return invoke<ChangeRequestDetailsResponse>(desktopCommands.changeRequestDetails, { request });
+  }
+
+  listIssues(): Promise<ListIssuesResponse> {
+    return invoke<ListIssuesResponse>(desktopCommands.listIssues);
+  }
+
+  issueDetails(request: IssueDetailsRequest): Promise<IssueDetailsResponse> {
+    return invoke<IssueDetailsResponse>(desktopCommands.issueDetails, { request });
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {
@@ -134,6 +145,14 @@ export class HttpClient implements ApplicationClient {
     request: ChangeRequestDetailsRequest,
   ): Promise<ChangeRequestDetailsResponse> {
     return this.post<ChangeRequestDetailsResponse>(httpRoutes.changeRequestDetails, request);
+  }
+
+  listIssues(): Promise<ListIssuesResponse> {
+    return this.get<ListIssuesResponse>(httpRoutes.issues);
+  }
+
+  issueDetails(request: IssueDetailsRequest): Promise<IssueDetailsResponse> {
+    return this.post<IssueDetailsResponse>(httpRoutes.issueDetails, request);
   }
 
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse> {

@@ -102,6 +102,45 @@ pub struct ChangeRequestDetails {
     pub latest_commit: Option<ChangeRequestCommit>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum IssueState {
+    Open,
+    Closed,
+}
+
+/// A provider-independent issue reported against a repository.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Issue {
+    pub id: String,
+    pub number: u64,
+    pub title: String,
+    pub author: Option<String>,
+    pub state: IssueState,
+    pub labels: Vec<String>,
+    pub assignees: Vec<String>,
+    pub comment_count: u64,
+    pub created_at: String,
+    pub updated_at: String,
+    pub web_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct IssueComment {
+    pub id: String,
+    pub author: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct IssueDetails {
+    pub issue: Issue,
+    pub body: Option<String>,
+    pub milestone: Option<String>,
+    pub comments: Vec<IssueComment>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkflowState {
     Active,

@@ -18,6 +18,10 @@ use opsscope_core::contracts::{
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
 };
+use opsscope_core::contracts::{
+    ISSUE_DETAILS_HTTP_PATH, ISSUES_HTTP_PATH, IssueDetailsResponse, ListIssuesResponse,
+};
+use opsscope_core::domain::{Issue, IssueDetails, IssueState};
 use opsscope_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
     WorkflowRunLog, WorkflowRunLogs, WorkflowState,
@@ -42,6 +46,7 @@ impl SourceModule for TestSourceModule {
             capabilities: vec![
                 SourceCapability::Workflows,
                 SourceCapability::ChangeRequests,
+                SourceCapability::Issues,
             ],
             credential: CredentialField {
                 label: "Access token".to_owned(),
@@ -206,6 +211,34 @@ impl SourceModule for TestSourceModule {
         }]))
     }
 
+    async fn list_issues(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Option<Vec<Issue>>, ConnectionValidationFailure> {
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        Ok(Some(vec![test_issue()]))
+    }
+
+    async fn issue_details(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        number: u64,
+    ) -> Result<Option<IssueDetails>, ConnectionValidationFailure> {
+        assert_eq!(token.expose(), "test_credential");
+        assert_eq!(repository.id, "repository-1");
+        Ok((number == 7).then(|| IssueDetails {
+            issue: test_issue(),
+            body: Some("Reproduction steps".to_owned()),
+            milestone: Some("v1".to_owned()),
+            comments: vec![],
+        }))
+    }
+
     async fn workflow_run_logs(
         &self,
         _configuration: &ConnectionConfiguration,
@@ -223,6 +256,22 @@ impl SourceModule for TestSourceModule {
             }],
             truncated: false,
         })
+    }
+}
+
+fn test_issue() -> Issue {
+    Issue {
+        id: "issue-7".to_owned(),
+        number: 7,
+        title: "Improve diagnostics".to_owned(),
+        author: Some("reporter".to_owned()),
+        state: IssueState::Open,
+        labels: vec!["bug".to_owned()],
+        assignees: vec!["maintainer".to_owned()],
+        comment_count: 0,
+        created_at: "2026-09-25T18:00:00Z".to_owned(),
+        updated_at: "2026-09-26T18:00:00Z".to_owned(),
+        web_url: "https://example.com/issues/7".to_owned(),
     }
 }
 
@@ -552,6 +601,37 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.change_request_events.len(), 1);
     assert_eq!(decoded.change_request_events[0].change_request.number, 1);
 
+    let issues = app
+        .clone()
+        .oneshot(
+            authenticated(Request::get(ISSUES_HTTP_PATH), &session, false).body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(issues.status(), StatusCode::OK);
+    let body = issues.into_body().collect().await?.to_bytes();
+    let decoded: ListIssuesResponse = serde_json::from_slice(&body)?;
+    assert_eq!(decoded.selected_repository_count, 1);
+    assert_eq!(decoded.issues.len(), 1);
+    assert_eq!(decoded.issues[0].number, 7);
+    assert_eq!(decoded.issues[0].repository_name, "example-project");
+
+    for (number, expected) in [(7, StatusCode::OK), (99, StatusCode::NOT_FOUND)] {
+        let details = app.clone().oneshot(
+            authenticated(Request::post(ISSUE_DETAILS_HTTP_PATH), &session, true)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({
+                    "sourceId": connection_id, "repositoryId": "repository-1", "number": number,
+                }).to_string()))?
+        ).await?;
+        assert_eq!(details.status(), expected);
+        if expected == StatusCode::OK {
+            let body = details.into_body().collect().await?.to_bytes();
+            let decoded: IssueDetailsResponse = serde_json::from_slice(&body)?;
+            assert_eq!(decoded.body.as_deref(), Some("Reproduction steps"));
+            assert_eq!(decoded.assignees, ["maintainer"]);
+        }
+    }
+
     let logs = app
         .clone()
         .oneshot(
@@ -638,6 +718,8 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
         (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),
         (Method::GET, SETTINGS_HTTP_PATH),
         (Method::PUT, SETTINGS_HTTP_PATH),
+        (Method::GET, ISSUES_HTTP_PATH),
+        (Method::POST, ISSUE_DETAILS_HTTP_PATH),
         (Method::GET, SYNCHRONIZATION_HTTP_PATH),
         (Method::POST, SYNCHRONIZATION_HTTP_PATH),
         (Method::POST, CONNECTIONS_HTTP_PATH),

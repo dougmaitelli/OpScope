@@ -1,0 +1,199 @@
+.issue-dialog {
+  width: min(960px, calc(100vw - 36px));
+  height: min(720px, calc(100vh - 36px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: #0c1118;
+  box-shadow: 0 18px 55px rgb(0 0 0 / 55%);
+}
+.issue-dialog[open] {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.issue-dialog::backdrop {
+  background: rgb(4 7 11 / 72%);
+  backdrop-filter: blur(2px);
+}
+.issue-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+.issue-dialog-header > div:first-child {
+  min-width: 0;
+}
+.issue-dialog-header h2,
+.issue-dialog-header .eyebrow,
+.issue-dialog-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issue-dialog-header h2 {
+  margin: 0 0 3px;
+  font-size: 14px;
+}
+.issue-dialog-meta {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 9px;
+}
+.issue-dialog-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.issue-dialog-actions a {
+  color: var(--text);
+  text-decoration: none;
+}
+.issue-dialog-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: #10161e;
+  font-size: 9px;
+  font-weight: 650;
+}
+.issue-state-open {
+  color: var(--success);
+}
+.issue-dialog-content {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) 240px;
+}
+.issue-dialog-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 24px;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.issue-dialog-error {
+  flex-direction: column;
+  gap: 5px;
+  color: var(--danger);
+}
+.issue-dialog-error span {
+  color: var(--muted);
+}
+.issue-dialog-main,
+.issue-dialog-sidebar {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+.issue-dialog-sidebar {
+  border-left: 1px solid var(--border);
+  background: #10161e;
+}
+.issue-dialog-main section + section,
+.issue-dialog-sidebar section + section {
+  margin-top: 20px;
+}
+.issue-dialog h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.issue-dialog h3 span {
+  color: var(--subtle);
+  font-weight: 500;
+}
+.issue-body,
+.issue-comment-list p {
+  margin: 0;
+  color: #cbd3df;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.issue-empty,
+.issue-sidebar-value {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 10px;
+}
+.issue-sidebar-value {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.issue-dialog-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.issue-dialog-labels span {
+  padding: 2px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 8px;
+}
+.issue-comment-list {
+  display: grid;
+  gap: 8px;
+}
+.issue-comment-list article {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.issue-comment-list article > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  background: #10161e;
+  font-size: 9px;
+}
+.issue-comment-list article > header span {
+  color: var(--subtle);
+}
+.issue-comment-list p {
+  padding: 9px;
+}
+@media (max-width: 700px) {
+  .issue-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+  .issue-dialog-header {
+    align-items: flex-start;
+  }
+  .issue-dialog-content {
+    overflow: auto;
+    grid-template-columns: 1fr;
+  }
+  .issue-dialog-main,
+  .issue-dialog-sidebar {
+    overflow: visible;
+  }
+  .issue-dialog-sidebar {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}

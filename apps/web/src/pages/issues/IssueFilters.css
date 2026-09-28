@@ -1,0 +1,25 @@
+.issue-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 220px 150px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #10151d;
+}
+
+.issue-filters input,
+.issue-filters select {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  background: #0c1118;
+  font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .issue-filters {
+    grid-template-columns: 1fr;
+  }
+}

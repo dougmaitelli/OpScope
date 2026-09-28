@@ -12,7 +12,7 @@ export type CredentialFieldSummary = { label: string, placeholder: string, help:
 
 export type ConnectionFieldSummary = { key: string, label: string, placeholder: string, help: string, defaultValue: string, };
 
-export type SourceCapability = "workflows" | "changeRequests";
+export type SourceCapability = "workflows" | "changeRequests" | "issues";
 
 export type SourceSummary = { id: string, name: string, description: string, abbreviation: string, capabilities: Array<SourceCapability>, credential: CredentialFieldSummary, connectionFields: Array<ConnectionFieldSummary>, connections: Array<ConnectionSummary>, };
 
@@ -63,6 +63,20 @@ export type ChangeRequestCommitSummary = { sha: string, title: string, author: s
 export type ChangeRequestDetailsResponse = { body: string | null, labels: Array<string>, reviews: Array<ChangeRequestReviewSummary>, checks: Array<ChangeRequestCheckSummary>, latestCommit: ChangeRequestCommitSummary | null, };
 
 export type ChangeRequestDetailsErrorResponse = { message: string, };
+
+export type IssueState = "open" | "closed";
+
+export type IssueSummary = { id: string, number: number, title: string, author: string | null, state: IssueState, labels: Array<string>, assignees: Array<string>, commentCount: number, createdAt: string, updatedAt: string, webUrl: string, sourceId: string, sourceName: string, sourceAbbreviation: string, repositoryId: string, repositoryOwner: string, repositoryName: string, };
+
+export type ListIssuesResponse = { selectedRepositoryCount: number, issues: Array<IssueSummary>, };
+
+export type IssueDetailsRequest = { sourceId: string, repositoryId: string, number: number, };
+
+export type IssueCommentSummary = { id: string, author: string | null, body: string, createdAt: string, updatedAt: string, };
+
+export type IssueDetailsResponse = { title: string, state: IssueState, labels: Array<string>, assignees: Array<string>, commentCount: number, updatedAt: string, body: string | null, milestone: string | null, comments: Array<IssueCommentSummary>, };
+
+export type IssueDetailsErrorResponse = { message: string, };
 
 export type WorkflowState = "active" | "disabled";
 
@@ -116,6 +130,8 @@ export const httpRoutes = {
   activity: "/api/activity",
   changeRequests: "/api/change-requests",
   changeRequestDetails: "/api/change-request-details",
+  issues: "/api/issues",
+  issueDetails: "/api/issue-details",
   workflowRunLogs: "/api/workflow-run-logs",
   synchronization: "/api/sync",
   settings: "/api/settings",
@@ -132,6 +148,8 @@ export const desktopCommands = {
   listActivity: "list_activity",
   listChangeRequests: "list_change_requests",
   changeRequestDetails: "change_request_details",
+  listIssues: "list_issues",
+  issueDetails: "issue_details",
   workflowRunLogs: "workflow_run_logs",
   synchronizeSources: "synchronize_sources",
   synchronizationStatus: "synchronization_status",
@@ -151,6 +169,8 @@ export interface ApplicationClient {
   listActivity(): Promise<ListActivityResponse>;
   listChangeRequests(): Promise<ListChangeRequestsResponse>;
   changeRequestDetails(request: ChangeRequestDetailsRequest): Promise<ChangeRequestDetailsResponse>;
+  listIssues(): Promise<ListIssuesResponse>;
+  issueDetails(request: IssueDetailsRequest): Promise<IssueDetailsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
   synchronizeSources(): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;

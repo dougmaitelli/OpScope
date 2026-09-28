@@ -4,23 +4,24 @@ use axum::http::StatusCode;
 use opsscope_core::application::{
     ActivityEventRepository, CheckForUpdates, ConnectSource, ConnectSourceFailure,
     ConnectionRepository, ConnectionValidationFailure, DisconnectSource, GetChangeRequestDetails,
-    GetChangeRequestDetailsFailure, GetMonitoringSettings, GetWorkflowRunLogs, ListActivity,
-    ListChangeRequests, ListChangeRequestsFailure, ListRepositories, ListRepositoriesFailure,
-    ListSources, ListWorkflows, ListWorkflowsFailure, NotifyRepositoryFailures,
-    RepositorySelectionRepository, SaveRepositorySelection, SaveRepositorySelectionFailure,
-    SecretStore, SettingsFailure, SettingsRepository, SourceRegistry, SynchronizeSources,
-    TrackChangeRequestActivity, UpdateMonitoringSettings, WorkflowRunLogsFailure,
+    GetChangeRequestDetailsFailure, GetIssueDetails, GetIssueDetailsFailure, GetMonitoringSettings,
+    GetWorkflowRunLogs, ListActivity, ListChangeRequests, ListChangeRequestsFailure, ListIssues,
+    ListIssuesFailure, ListRepositories, ListRepositoriesFailure, ListSources, ListWorkflows,
+    ListWorkflowsFailure, NotifyRepositoryFailures, RepositorySelectionRepository,
+    SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
+    SettingsRepository, SourceRegistry, SynchronizeSources, TrackChangeRequestActivity,
+    UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
     ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
     ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, ListActivityResponse,
-    ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
-    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
-    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
-    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
-    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, IssueDetailsErrorResponse,
+    IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse, ListChangeRequestsResponse,
+    ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
+    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
+    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
+    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
+    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -30,8 +31,10 @@ pub(crate) struct AppState {
     check_for_updates: CheckForUpdates,
     list_workflows: ListWorkflows,
     list_change_requests: ListChangeRequests,
+    list_issues: ListIssues,
     list_activity: ListActivity,
     change_request_details: GetChangeRequestDetails,
+    issue_details: GetIssueDetails,
     workflow_run_logs: GetWorkflowRunLogs,
     connect_source: ConnectSource,
     list_sources: ListSources,
@@ -84,11 +87,13 @@ impl AppState {
                 source_data.clone(),
                 repository_selections.clone(),
             ),
+            list_issues: ListIssues::new(source_data.clone(), repository_selections.clone()),
             list_activity: ListActivity::new(
                 activity_events.clone(),
                 repository_selections.clone(),
             ),
             change_request_details: GetChangeRequestDetails::new(source_data.clone()),
+            issue_details: GetIssueDetails::new(source_data.clone()),
             workflow_run_logs: GetWorkflowRunLogs::new(source_data.clone()),
             connect_source: ConnectSource::new(
                 registry.clone(),
@@ -172,6 +177,52 @@ pub(crate) async fn list_change_requests(
         .map_err(http_change_requests_error)
 }
 
+pub(crate) async fn list_issues(
+    State(state): State<AppState>,
+) -> Result<Json<ListIssuesResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
+    state
+        .list_issues
+        .execute()
+        .await
+        .map(ListIssuesResponse::from_domain)
+        .map(Json)
+        .map_err(http_issues_error)
+}
+
+pub(crate) async fn issue_details(
+    State(state): State<AppState>,
+    Json(request): Json<IssueDetailsRequest>,
+) -> Result<Json<IssueDetailsResponse>, (StatusCode, Json<IssueDetailsErrorResponse>)> {
+    state
+        .issue_details
+        .execute(&request.source_id, &request.repository_id, request.number)
+        .await
+        .map(IssueDetailsResponse::from)
+        .map(Json)
+        .map_err(http_issue_details_error)
+}
+
+fn http_issue_details_error(
+    failure: GetIssueDetailsFailure,
+) -> (StatusCode, Json<IssueDetailsErrorResponse>) {
+    eprintln!("failed to load issue details: {failure}");
+    let status = match failure {
+        GetIssueDetailsFailure::UnknownSource
+        | GetIssueDetailsFailure::RepositoryNotFound
+        | GetIssueDetailsFailure::IssueNotFound => StatusCode::NOT_FOUND,
+        GetIssueDetailsFailure::SourceNotConnected | GetIssueDetailsFailure::Unsupported => {
+            StatusCode::CONFLICT
+        }
+        GetIssueDetailsFailure::InvalidCredentials => StatusCode::UNAUTHORIZED,
+        GetIssueDetailsFailure::PermissionDenied => StatusCode::FORBIDDEN,
+        GetIssueDetailsFailure::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+        GetIssueDetailsFailure::ProviderUnavailable
+        | GetIssueDetailsFailure::UnexpectedResponse => StatusCode::BAD_GATEWAY,
+        GetIssueDetailsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
+}
+
 pub(crate) async fn list_activity(
     State(state): State<AppState>,
 ) -> Result<Json<ListActivityResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
@@ -204,6 +255,26 @@ fn http_change_requests_error(
         }
         ListChangeRequestsFailure::Source(_) => StatusCode::BAD_GATEWAY,
         ListChangeRequestsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status, Json(failure.into()))
+}
+
+fn http_issues_error(
+    failure: ListIssuesFailure,
+) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
+    eprintln!("failed to list issues: {failure}");
+    let status = match failure {
+        ListIssuesFailure::Source(ConnectionValidationFailure::InvalidCredentials) => {
+            StatusCode::UNAUTHORIZED
+        }
+        ListIssuesFailure::Source(ConnectionValidationFailure::PermissionDenied) => {
+            StatusCode::FORBIDDEN
+        }
+        ListIssuesFailure::Source(ConnectionValidationFailure::RateLimited) => {
+            StatusCode::TOO_MANY_REQUESTS
+        }
+        ListIssuesFailure::Source(_) => StatusCode::BAD_GATEWAY,
+        ListIssuesFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
     (status, Json(failure.into()))
 }

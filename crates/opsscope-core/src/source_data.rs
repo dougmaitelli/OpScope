@@ -1,11 +1,15 @@
 //! Transparent access to provider data with optional persistent read-through caching.
 
+mod change_requests;
+mod issues;
+
 use crate::application::{
     ConnectedSource, ConnectionRepository, ConnectionValidationFailure, PersistenceFailure,
     SecretStore, SourceRegistry, StoredConnection, WorkflowRunLogsFailure,
 };
 use crate::domain::{
-    ChangeRequest, ChangeRequestDetails, Repository, Workflow, WorkflowRun, WorkflowRunLogs,
+    ChangeRequest, ChangeRequestDetails, Issue, IssueDetails, Repository, Workflow, WorkflowRun,
+    WorkflowRunLogs,
 };
 use async_trait::async_trait;
 use std::error::Error;
@@ -18,6 +22,8 @@ pub const DEFAULT_WORKFLOW_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 pub const DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 pub const DEFAULT_CHANGE_REQUEST_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 pub const DEFAULT_CHANGE_REQUEST_DETAILS_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+pub const DEFAULT_ISSUE_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+pub const DEFAULT_ISSUE_DETAILS_CACHE_MAX_AGE: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceDataCachePolicy {
@@ -26,6 +32,8 @@ pub struct SourceDataCachePolicy {
     pub workflow_runs: Duration,
     pub change_requests: Duration,
     pub change_request_details: Duration,
+    pub issues: Duration,
+    pub issue_details: Duration,
 }
 
 impl SourceDataCachePolicy {
@@ -35,6 +43,8 @@ impl SourceDataCachePolicy {
         workflow_runs: DEFAULT_WORKFLOW_RUN_CACHE_MAX_AGE,
         change_requests: DEFAULT_CHANGE_REQUEST_CACHE_MAX_AGE,
         change_request_details: DEFAULT_CHANGE_REQUEST_DETAILS_CACHE_MAX_AGE,
+        issues: DEFAULT_ISSUE_CACHE_MAX_AGE,
+        issue_details: DEFAULT_ISSUE_DETAILS_CACHE_MAX_AGE,
     };
 
     #[must_use]
@@ -45,6 +55,8 @@ impl SourceDataCachePolicy {
             workflow_runs: max_age,
             change_requests: max_age,
             change_request_details: max_age,
+            issues: max_age,
+            issue_details: max_age,
         }
     }
 }
@@ -85,6 +97,18 @@ pub struct ChangeRequestSnapshot {
 pub struct ChangeRequestDetailsSnapshot {
     pub refreshed_at: u64,
     pub details: ChangeRequestDetails,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IssueSnapshot {
+    pub refreshed_at: u64,
+    pub issues: Vec<Issue>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IssueDetailsSnapshot {
+    pub refreshed_at: u64,
+    pub details: IssueDetails,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -178,6 +202,38 @@ pub trait SourceDataCache: Send + Sync {
         number: u64,
         snapshot: &ChangeRequestDetailsSnapshot,
     ) -> Result<(), PersistenceFailure>;
+
+    fn issues(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<IssueSnapshot>, PersistenceFailure>;
+
+    fn replace_issues(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        snapshot: &IssueSnapshot,
+    ) -> Result<(), PersistenceFailure>;
+
+    fn issue_details(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        number: u64,
+    ) -> Result<Option<IssueDetailsSnapshot>, PersistenceFailure>;
+
+    fn replace_issue_details(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        number: u64,
+        snapshot: &IssueDetailsSnapshot,
+    ) -> Result<(), PersistenceFailure>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -242,6 +298,25 @@ pub trait SourceData: Send + Sync {
         number: u64,
         refresh: RefreshMode,
     ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure>;
+
+    async fn issues(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        _refresh: RefreshMode,
+    ) -> Result<Option<Vec<Issue>>, SourceDataFailure> {
+        Ok(None)
+    }
+
+    async fn issue_details(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        _number: u64,
+        _refresh: RefreshMode,
+    ) -> Result<Option<IssueDetails>, SourceDataFailure> {
+        Ok(None)
+    }
 
     async fn workflow_run_logs(
         &self,
@@ -321,135 +396,6 @@ impl ReadThroughSourceData {
                 ConnectionValidationFailure::UnexpectedResponse,
             ))?;
         Ok((connection, module))
-    }
-
-    async fn load_change_requests(
-        &self,
-        source_id: &str,
-        repository: &Repository,
-        refresh: RefreshMode,
-    ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
-        let (connection, module) = self.connection(source_id)?;
-        if !module
-            .descriptor()
-            .supports(crate::application::SourceCapability::ChangeRequests)
-        {
-            return Ok(None);
-        }
-        let now = Self::now();
-        let cached = self.cache.as_ref().and_then(|cache| {
-            cache
-                .change_requests(source_id, &connection.account.external_id, &repository.id)
-                .ok()
-                .flatten()
-        });
-        if let Some(snapshot) = &cached
-            && (refresh == RefreshMode::CacheFirst
-                || refresh == RefreshMode::IfStale
-                    && Self::is_fresh(
-                        snapshot.refreshed_at,
-                        now,
-                        self.cache_policy.change_requests,
-                    ))
-        {
-            return Ok(Some(snapshot.change_requests.clone()));
-        }
-
-        let token = self
-            .secrets
-            .retrieve(&connection.secret_reference)
-            .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let change_requests = match module
-            .list_change_requests(&connection.configuration, &token, repository)
-            .await
-        {
-            Ok(Some(change_requests)) => change_requests,
-            Ok(None) => return Ok(None),
-            Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
-                return Ok(cached.map(|snapshot| snapshot.change_requests));
-            }
-            Err(failure) => return Err(SourceDataFailure::Source(failure)),
-        };
-
-        if let Some(cache) = &self.cache {
-            _ = cache.replace_change_requests(
-                source_id,
-                &connection.account.external_id,
-                &repository.id,
-                &ChangeRequestSnapshot {
-                    refreshed_at: Self::now(),
-                    change_requests: change_requests.clone(),
-                },
-            );
-        }
-        Ok(Some(change_requests))
-    }
-
-    async fn load_change_request_details(
-        &self,
-        source_id: &str,
-        repository: &Repository,
-        number: u64,
-        refresh: RefreshMode,
-    ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
-        let (connection, module) = self.connection(source_id)?;
-        if !module
-            .descriptor()
-            .supports(crate::application::SourceCapability::ChangeRequests)
-        {
-            return Ok(None);
-        }
-        let now = Self::now();
-        let cached = self.cache.as_ref().and_then(|cache| {
-            cache
-                .change_request_details(
-                    source_id,
-                    &connection.account.external_id,
-                    &repository.id,
-                    number,
-                )
-                .ok()
-                .flatten()
-        });
-        if let Some(snapshot) = &cached
-            && (refresh == RefreshMode::CacheFirst
-                || refresh == RefreshMode::IfStale
-                    && Self::is_fresh(
-                        snapshot.refreshed_at,
-                        now,
-                        self.cache_policy.change_request_details,
-                    ))
-        {
-            return Ok(Some(snapshot.details.clone()));
-        }
-        let token = self
-            .secrets
-            .retrieve(&connection.secret_reference)
-            .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        let details = match module
-            .change_request_details(&connection.configuration, &token, repository, number)
-            .await
-        {
-            Ok(Some(details)) => details,
-            Ok(None) => return Ok(None),
-            Err(_) if refresh == RefreshMode::IfStale && cached.is_some() => {
-                return Ok(cached.map(|snapshot| snapshot.details));
-            }
-            Err(failure) => return Err(SourceDataFailure::Source(failure)),
-        };
-        if let Some(cache) = &self.cache {
-            _ = cache.replace_change_request_details(
-                source_id,
-                &connection.account.external_id,
-                &repository.id,
-                number,
-                &ChangeRequestDetailsSnapshot {
-                    refreshed_at: Self::now(),
-                    details: details.clone(),
-                },
-            );
-        }
-        Ok(Some(details))
     }
 }
 
@@ -703,6 +649,26 @@ impl SourceData for ReadThroughSourceData {
         refresh: RefreshMode,
     ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
         self.load_change_request_details(source_id, repository, number, refresh)
+            .await
+    }
+
+    async fn issues(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<Issue>>, SourceDataFailure> {
+        self.load_issues(source_id, repository, refresh).await
+    }
+
+    async fn issue_details(
+        &self,
+        source_id: &str,
+        repository: &Repository,
+        number: u64,
+        refresh: RefreshMode,
+    ) -> Result<Option<IssueDetails>, SourceDataFailure> {
+        self.load_issue_details(source_id, repository, number, refresh)
             .await
     }
 

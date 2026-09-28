@@ -11,9 +11,9 @@ use axum::middleware;
 use axum::routing::{any, get, post, put};
 use handlers::{
     AppState, AppStateDependencies, change_request_details, connect_source, disconnect_source,
-    get_settings, health, list_activity, list_change_requests, list_repositories, list_sources,
-    list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
-    update_settings, update_status, workflow_run_logs,
+    get_settings, health, issue_details, list_activity, list_change_requests, list_issues,
+    list_repositories, list_sources, list_workflows, save_repository_selection,
+    synchronization_status, synchronize_sources, update_settings, update_status, workflow_run_logs,
 };
 use opsscope_core::application::{
     ActivityEventRepository, ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
@@ -21,8 +21,8 @@ use opsscope_core::application::{
 };
 use opsscope_core::contracts::{
     ACTIVITY_HTTP_PATH, CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH,
-    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, REPOSITORIES_HTTP_PATH,
-    REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
+    CONNECTIONS_HTTP_PATH, HEALTH_HTTP_PATH, ISSUE_DETAILS_HTTP_PATH, ISSUES_HTTP_PATH,
+    REPOSITORIES_HTTP_PATH, REPOSITORY_SELECTIONS_HTTP_PATH, SETTINGS_HTTP_PATH, SOURCES_HTTP_PATH,
     SYNCHRONIZATION_HTTP_PATH, UPDATE_STATUS_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH,
     WORKFLOWS_HTTP_PATH,
 };
@@ -83,6 +83,8 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
             CHANGE_REQUEST_DETAILS_HTTP_PATH,
             post(change_request_details),
         )
+        .route(ISSUES_HTTP_PATH, get(list_issues))
+        .route(ISSUE_DETAILS_HTTP_PATH, post(issue_details))
         .route(WORKFLOW_RUN_LOGS_HTTP_PATH, post(workflow_run_logs))
         .route(SETTINGS_HTTP_PATH, get(get_settings).put(update_settings))
         .route(

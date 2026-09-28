@@ -195,6 +195,19 @@ impl SynchronizeSources {
                         );
                     }
                 }
+                let mut issue_sync_failed = false;
+                if source.descriptor.supports(super::SourceCapability::Issues)
+                    && let Err(failure) = self
+                        .source_data
+                        .issues(&source.id, &repository, RefreshMode::Force)
+                        .await
+                {
+                    eprintln!(
+                        "failed to synchronize issues for {}/{}: {failure}",
+                        repository.owner, repository.name
+                    );
+                    issue_sync_failed = true;
+                }
                 let workflows = self
                     .source_data
                     .workflows(&source.id, &repository, RefreshMode::Force)
@@ -205,7 +218,11 @@ impl SynchronizeSources {
                     .await;
                 match (workflows, runs) {
                     (Ok(workflows), Ok(runs)) if !runs.stale => {
-                        summary.synchronized_repository_count += 1;
+                        if issue_sync_failed {
+                            summary.failed_repository_count += 1;
+                        } else {
+                            summary.synchronized_repository_count += 1;
+                        }
                         _ = self
                             .failure_notifications
                             .observe(&source.id, &repository, &workflows, &runs.runs)

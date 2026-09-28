@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[derive(Clone)]
 struct CountingSourceModule {
+    issue_requests: Arc<AtomicUsize>,
+    fail_issues: Arc<AtomicBool>,
     repository_requests: Arc<AtomicUsize>,
     workflow_requests: Arc<AtomicUsize>,
     workflow_run_requests: Arc<AtomicUsize>,
@@ -26,7 +28,7 @@ impl SourceModule for CountingSourceModule {
             name: "Example".to_owned(),
             description: "Example source".to_owned(),
             abbreviation: "EX".to_owned(),
-            capabilities: vec![SourceCapability::Workflows],
+            capabilities: vec![SourceCapability::Workflows, SourceCapability::Issues],
             credential: CredentialField {
                 label: "Token".to_owned(),
                 placeholder: "token".to_owned(),
@@ -94,6 +96,36 @@ impl SourceModule for CountingSourceModule {
         }
     }
 
+    async fn list_issues(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+    ) -> Result<Option<Vec<Issue>>, ConnectionValidationFailure> {
+        self.issue_requests.fetch_add(1, Ordering::SeqCst);
+        if self.fail_issues.load(Ordering::SeqCst) {
+            Err(ConnectionValidationFailure::PermissionDenied)
+        } else {
+            Ok(Some(vec![test_issue()]))
+        }
+    }
+
+    async fn issue_details(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _number: u64,
+    ) -> Result<Option<IssueDetails>, ConnectionValidationFailure> {
+        self.issue_requests.fetch_add(1, Ordering::SeqCst);
+        Ok(Some(IssueDetails {
+            issue: test_issue(),
+            body: Some("Description".to_owned()),
+            milestone: None,
+            comments: vec![],
+        }))
+    }
+
     async fn workflow_run_logs(
         &self,
         _configuration: &ConnectionConfiguration,
@@ -106,6 +138,90 @@ impl SourceModule for CountingSourceModule {
             truncated: false,
         })
     }
+}
+
+fn test_issue() -> Issue {
+    Issue {
+        id: "issue-7".to_owned(),
+        number: 7,
+        title: "Diagnostics".to_owned(),
+        author: None,
+        state: crate::domain::IssueState::Open,
+        labels: vec!["bug".to_owned()],
+        assignees: vec![],
+        comment_count: 0,
+        created_at: "2026-09-25T18:00:00Z".to_owned(),
+        updated_at: "2026-09-26T18:00:00Z".to_owned(),
+        web_url: "https://example.com/issues/7".to_owned(),
+    }
+}
+
+#[tokio::test]
+async fn issue_cache_survives_provider_failure_and_is_scoped_to_account()
+-> Result<(), Box<dyn std::error::Error>> {
+    let deps = dependencies()?;
+    let data = ReadThroughSourceData::cached(
+        deps.registry,
+        Arc::new(deps.database.clone()),
+        Arc::new(deps.secrets),
+        Arc::new(deps.database.clone()),
+        SourceDataCachePolicy::uniform(Duration::ZERO),
+    );
+    let repo = test_repository();
+    assert_eq!(
+        data.issues("example", &repo, RefreshMode::Force).await?,
+        Some(vec![test_issue()])
+    );
+    deps.fail_issues.store(true, Ordering::SeqCst);
+    assert_eq!(
+        data.issues("example", &repo, RefreshMode::CacheFirst)
+            .await?,
+        Some(vec![test_issue()])
+    );
+    assert_eq!(deps.issue_requests.load(Ordering::SeqCst), 1);
+    assert!(
+        data.issues("example", &repo, RefreshMode::Force)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        data.issues("example", &repo, RefreshMode::IfStale).await?,
+        Some(vec![test_issue()])
+    );
+    assert!(
+        deps.database
+            .issues("example", "other-account", &repo.id)?
+            .is_none()
+    );
+
+    let details = data
+        .issue_details("example", &repo, 7, RefreshMode::Force)
+        .await?;
+    let count = deps.issue_requests.load(Ordering::SeqCst);
+    assert_eq!(
+        data.issue_details("example", &repo, 7, RefreshMode::CacheFirst)
+            .await?,
+        details
+    );
+    assert_eq!(deps.issue_requests.load(Ordering::SeqCst), count);
+    assert!(
+        deps.database
+            .issue_details("example", "other-account", &repo.id, 7)?
+            .is_none()
+    );
+    assert!(
+        deps.database
+            .issue_details("example", "42", &repo.id, 8)?
+            .is_none()
+    );
+    deps.database.delete("example")?;
+    assert!(deps.database.issues("example", "42", &repo.id)?.is_none());
+    assert!(
+        deps.database
+            .issue_details("example", "42", &repo.id, 7)?
+            .is_none()
+    );
+    Ok(())
 }
 
 fn test_run() -> WorkflowRun {
@@ -142,6 +258,8 @@ fn test_repository() -> Repository {
 }
 
 struct TestDependencies {
+    issue_requests: Arc<AtomicUsize>,
+    fail_issues: Arc<AtomicBool>,
     registry: SourceRegistry,
     database: SqliteDatabase,
     secrets: EncryptedSecretStore,
@@ -152,11 +270,15 @@ struct TestDependencies {
 }
 
 fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
+    let issue_requests = Arc::new(AtomicUsize::new(0));
+    let fail_issues = Arc::new(AtomicBool::new(false));
     let repository_requests = Arc::new(AtomicUsize::new(0));
     let workflow_requests = Arc::new(AtomicUsize::new(0));
     let workflow_run_requests = Arc::new(AtomicUsize::new(0));
     let fail_workflow_runs = Arc::new(AtomicBool::new(false));
     let registry = SourceRegistry::new(vec![Arc::new(CountingSourceModule {
+        issue_requests: issue_requests.clone(),
+        fail_issues: fail_issues.clone(),
         repository_requests: repository_requests.clone(),
         workflow_requests: workflow_requests.clone(),
         workflow_run_requests: workflow_run_requests.clone(),
@@ -181,6 +303,8 @@ fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
     secrets.store(&reference, &ProviderToken::new("secret".to_owned()))?;
     Ok(TestDependencies {
+        issue_requests,
+        fail_issues,
         registry,
         database,
         secrets,
@@ -251,6 +375,8 @@ async fn cache_policy_applies_a_separate_ttl_to_each_resource_kind()
             workflow_runs: Duration::ZERO,
             change_requests: Duration::ZERO,
             change_request_details: Duration::ZERO,
+            issues: Duration::ZERO,
+            issue_details: Duration::ZERO,
         },
     );
 

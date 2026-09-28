@@ -4,6 +4,7 @@ import { ActivityPage } from "./pages/activity/ActivityPage.tsx";
 import { ConnectionsPage } from "./pages/connections/ConnectionsPage.tsx";
 import { ChangeRequestsPage } from "./pages/change-requests/ChangeRequestsPage.tsx";
 import { OverviewPage } from "./pages/overview/OverviewPage.tsx";
+import { IssuesPage } from "./pages/issues/IssuesPage.tsx";
 import { RepositoriesPage } from "./pages/repositories/RepositoriesPage.tsx";
 import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
 
@@ -14,6 +15,7 @@ export function App() {
         <Route index element={<OverviewPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="pull-requests" element={<ChangeRequestsPage />} />
+        <Route path="issues" element={<IssuesPage />} />
         <Route path="repositories" element={<RepositoriesPage />} />
         <Route path="connections" element={<ConnectionsPage />} />
         <Route path="settings" element={<SettingsPage />} />
