@@ -1,0 +1,90 @@
+use super::*;
+use axum::{Json, Router, routing::post};
+use serde_json::{Value, json};
+use tokio::net::TcpListener;
+
+#[test]
+fn requires_an_http_endpoint() {
+    assert!(AppriseNotificationSink::new("https://apprise.test/notify/opsscope").is_ok());
+    assert!(AppriseNotificationSink::new("ftp://apprise.test/notify").is_err());
+    assert!(AppriseNotificationSink::new("not a url").is_err());
+}
+
+#[test]
+fn serializes_the_apprise_failure_contract_without_tags() {
+    let payload = AppriseNotification {
+        title: "Workflow failed",
+        body: "Build",
+        kind: "failure",
+        format: "text",
+        tag: &[],
+    };
+    assert_eq!(
+        serde_json::to_value(payload).expect("payload serializes"),
+        json!({
+            "title": "Workflow failed",
+            "body": "Build",
+            "type": "failure",
+            "format": "text"
+        })
+    );
+}
+
+#[test]
+fn parses_comma_separated_tags_and_ignores_empty_entries() {
+    let sink = AppriseNotificationSink::new("https://apprise.test/notify/opsscope")
+        .expect("valid endpoint")
+        .with_tags(" opsscope, , alerts,, ");
+    assert_eq!(sink.tags, ["opsscope", "alerts"]);
+}
+
+#[test]
+fn empty_or_whitespace_tags_leave_routing_unfiltered() {
+    for tags in ["", "   ", " , , "] {
+        let sink = AppriseNotificationSink::new("https://apprise.test/notify/opsscope")
+            .expect("valid endpoint")
+            .with_tags(tags);
+        assert!(sink.tags.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn sends_routing_tags_in_the_notification_request() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let router = Router::new().route(
+        "/notify/opsscope",
+        post(move |Json(payload): Json<Value>| {
+            let sender = sender.clone();
+            async move {
+                sender.send(payload).await.expect("capture payload");
+                axum::http::StatusCode::OK
+            }
+        }),
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, router).await });
+    let sink = AppriseNotificationSink::new(&format!("http://{address}/notify/opsscope"))
+        .expect("valid endpoint")
+        .with_tags(" opsscope, alerts, ");
+    let result = sink
+        .send(&Notification {
+            title: "Workflow failed".to_owned(),
+            body: "Build".to_owned(),
+            severity: NotificationSeverity::Failure,
+        })
+        .await;
+    server.abort();
+    result.expect("notification sent");
+    let payload = receiver.try_recv().expect("captured request");
+    assert_eq!(
+        payload,
+        json!({
+            "title": "Workflow failed",
+            "body": "Build",
+            "type": "failure",
+            "format": "text",
+            "tag": ["opsscope", "alerts"]
+        })
+    );
+}

@@ -135,6 +135,7 @@ service's `environment` section. They are not desktop settings.
 | `OPSSCOPE_DATA_DIR` | `.opsscope-data`; container: `/data` | SQLite database and default encryption-key directory. |
 | `OPSSCOPE_MASTER_KEY_FILE` | `<data directory>/master.key` | Raw 32-byte credential-encryption key file; created if absent. |
 | `OPSSCOPE_APPRISE_URL` | Unset (delivery disabled) | Apprise HTTP(S) notification endpoint. |
+| `OPSSCOPE_APPRISE_TAGS` | Unset (no tag filter) | Comma-separated Apprise routing tags. |
 | `OPSSCOPE_PUBLIC_URL` | Unset | Browser-visible origin, required with OIDC. |
 | `OPSSCOPE_OIDC_ISSUER` | Unset | OIDC discovery issuer URL. |
 | `OPSSCOPE_OIDC_CLIENT_ID` | Unset | Confidential OIDC client ID. |
@@ -182,6 +183,19 @@ for example `http://apprise:8000/notify/opsscope`. Configure destinations and
 their credentials in Apprise, not in OpsScope. OpsScope sends a notification
 payload to that endpoint; it does not run Apprise for you.
 Leave the variable unset to disable delivery.
+
+To route notifications to tagged destinations in your Apprise configuration,
+set `OPSSCOPE_APPRISE_TAGS`. For example, in the Compose service:
+
+```yaml
+    environment:
+      OPSSCOPE_APPRISE_URL: http://apprise:8000/notify/opsscope
+      OPSSCOPE_APPRISE_TAGS: opsscope,alerts
+```
+
+Whitespace around tags and empty entries are ignored. When unset or blank,
+OpsScope sends no tag filter, preserving the endpoint's default routing.
+Tags alone do not enable notifications; the endpoint must also be configured.
 
 Notifications consider only the actual latest run of each workflow, not
 historical failures. Initial observation establishes a baseline; subsequent

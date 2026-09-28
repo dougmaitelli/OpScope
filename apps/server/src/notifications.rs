@@ -12,15 +12,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub const APPRISE_URL_ENVIRONMENT_VARIABLE: &str = "OPSSCOPE_APPRISE_URL";
+pub const APPRISE_TAGS_ENVIRONMENT_VARIABLE: &str = "OPSSCOPE_APPRISE_TAGS";
+
+const INVALID_ENDPOINT: AppriseConfigurationError = AppriseConfigurationError(
+    "OPSSCOPE_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
+);
 
 #[derive(Debug)]
-pub struct AppriseConfigurationError;
+pub struct AppriseConfigurationError(&'static str);
 
 impl Display for AppriseConfigurationError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(
-            "OPSSCOPE_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
-        )
+        formatter.write_str(self.0)
     }
 }
 
@@ -31,27 +34,54 @@ pub fn notification_sink_from_environment()
     let endpoint = match env::var(APPRISE_URL_ENVIRONMENT_VARIABLE) {
         Ok(endpoint) => endpoint,
         Err(env::VarError::NotPresent) => return Ok(Arc::new(NoopNotificationSink)),
-        Err(env::VarError::NotUnicode(_)) => return Err(AppriseConfigurationError),
+        Err(env::VarError::NotUnicode(_)) => return Err(INVALID_ENDPOINT),
     };
-    Ok(Arc::new(AppriseNotificationSink::new(&endpoint)?))
+    let tags = match env::var(APPRISE_TAGS_ENVIRONMENT_VARIABLE) {
+        Ok(tags) => tags,
+        Err(env::VarError::NotPresent) => String::new(),
+        Err(env::VarError::NotUnicode(_)) => {
+            return Err(AppriseConfigurationError(
+                "OPSSCOPE_APPRISE_TAGS must contain valid Unicode",
+            ));
+        }
+    };
+    Ok(Arc::new(
+        AppriseNotificationSink::new(&endpoint)?.with_tags(&tags),
+    ))
 }
 
 pub struct AppriseNotificationSink {
     client: Client,
     endpoint: Url,
+    tags: Vec<String>,
 }
 
 impl AppriseNotificationSink {
     pub fn new(endpoint: &str) -> Result<Self, AppriseConfigurationError> {
-        let endpoint = Url::parse(endpoint).map_err(|_| AppriseConfigurationError)?;
+        let endpoint = Url::parse(endpoint).map_err(|_| INVALID_ENDPOINT)?;
         if !matches!(endpoint.scheme(), "http" | "https") {
-            return Err(AppriseConfigurationError);
+            return Err(INVALID_ENDPOINT);
         }
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .map_err(|_| AppriseConfigurationError)?;
-        Ok(Self { client, endpoint })
+            .map_err(|_| INVALID_ENDPOINT)?;
+        Ok(Self {
+            client,
+            endpoint,
+            tags: Vec::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn with_tags(mut self, tags: &str) -> Self {
+        self.tags = tags
+            .split(',')
+            .map(str::trim)
+            .filter(|tag| !tag.is_empty())
+            .map(str::to_owned)
+            .collect();
+        self
     }
 }
 
@@ -62,6 +92,8 @@ struct AppriseNotification<'a> {
     #[serde(rename = "type")]
     kind: &'static str,
     format: &'static str,
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    tag: &'a [String],
 }
 
 #[async_trait]
@@ -77,6 +109,7 @@ impl NotificationSink for AppriseNotificationSink {
                 body: &notification.body,
                 kind,
                 format: "text",
+                tag: &self.tags,
             })
             .send()
             .await
@@ -87,33 +120,4 @@ impl NotificationSink for AppriseNotificationSink {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn requires_an_http_endpoint() {
-        assert!(AppriseNotificationSink::new("https://apprise.test/notify/opsscope").is_ok());
-        assert!(AppriseNotificationSink::new("ftp://apprise.test/notify").is_err());
-        assert!(AppriseNotificationSink::new("not a url").is_err());
-    }
-
-    #[test]
-    fn serializes_the_apprise_failure_contract() {
-        let payload = AppriseNotification {
-            title: "Workflow failed",
-            body: "Build",
-            kind: "failure",
-            format: "text",
-        };
-
-        assert_eq!(
-            serde_json::to_value(payload).expect("payload serializes"),
-            serde_json::json!({
-                "title": "Workflow failed",
-                "body": "Build",
-                "type": "failure",
-                "format": "text"
-            })
-        );
-    }
-}
+mod tests;
