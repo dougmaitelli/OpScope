@@ -51,8 +51,26 @@ npm run build
 ```
 
 The check command verifies generated contracts, Rust formatting, Clippy with
-warnings denied, Rust tests, TypeScript compilation, ESLint, and Prettier.
+warnings denied, Rust tests, TypeScript compilation, ESLint, Prettier, and frontend tests.
 The build command builds the Rust workspace and production frontend.
+
+### Frontend tests
+
+The shared web/desktop frontend uses Vitest, React Testing Library, and user-event
+with a jsdom environment. Keep tests beside the code they cover as `*.test.ts`
+(client logic) or `*.test.tsx` (React components). Common DOM matchers and cleanup
+live in `apps/web/src/test/setup.ts`. Tests are type-checked and linted with the app.
+
+```sh
+npm test --workspace @opsscope/web
+npm run test:watch --workspace @opsscope/web
+```
+
+Prefer accessible roles and labels, user interactions, and observable behavior
+over component internals or snapshots. Mock network boundaries, not the components
+under test. The same suite runs in CI through `npm run check`; it does not require
+GitHub credentials or a running server. These are DOM interaction tests, not
+real-browser, layout, or native desktop end-to-end tests.
 
 | Command | Purpose |
 | --- | --- |
