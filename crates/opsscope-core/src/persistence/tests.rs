@@ -230,6 +230,8 @@ fn monitoring_settings_have_defaults_and_persist_updates() -> Result<(), Box<dyn
     );
 
     let updated = MonitoringSettings {
+        pull_requests_enabled: false,
+        issues_enabled: false,
         notifications: crate::application::NotificationPreferences {
             issue_closed: false,
             pull_request_opened: false,
@@ -258,6 +260,8 @@ fn legacy_monitoring_settings_keep_values_and_default_to_all_work()
     let database = SqliteDatabase::open(&path)?;
     let settings = database.load_settings()?;
     assert!(!settings.only_my_work);
+    assert!(settings.pull_requests_enabled);
+    assert!(settings.issues_enabled);
     assert_eq!(
         settings.notifications,
         crate::application::NotificationPreferences::default()

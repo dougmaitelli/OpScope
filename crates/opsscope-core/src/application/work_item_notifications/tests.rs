@@ -205,6 +205,59 @@ fn notifier(db: Arc<SqliteDatabase>, sink: Arc<Sink>) -> NotifyWorkItems {
     NotifyWorkItems::new(db.clone(), db.clone(), db, sink)
 }
 
+#[tokio::test]
+async fn disabled_features_suppress_alerts_and_reenable_with_a_silent_baseline() {
+    let db = Arc::new(SqliteDatabase::in_memory().unwrap());
+    db.save(&connection()).unwrap();
+    let sink = Arc::new(Sink::default());
+    let service = notifier(db.clone(), sink.clone());
+    let details = Details::default();
+    service
+        .observe("source", &repository(), &details, Some(&[]), Some(&[]))
+        .await
+        .unwrap();
+    db.save_settings(MonitoringSettings {
+        pull_requests_enabled: false,
+        issues_enabled: false,
+        ..Default::default()
+    })
+    .unwrap();
+    service
+        .observe(
+            "source",
+            &repository(),
+            &details,
+            Some(&[pull(1)]),
+            Some(&[issue(1)]),
+        )
+        .await
+        .unwrap();
+    assert!(sink.sent.lock().unwrap().is_empty());
+    db.save_settings(MonitoringSettings::default()).unwrap();
+    service
+        .observe(
+            "source",
+            &repository(),
+            &details,
+            Some(&[pull(1)]),
+            Some(&[issue(1)]),
+        )
+        .await
+        .unwrap();
+    assert!(sink.sent.lock().unwrap().is_empty());
+    service
+        .observe(
+            "source",
+            &repository(),
+            &details,
+            Some(&[pull(1), pull(2)]),
+            Some(&[issue(1), issue(2)]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.sent.lock().unwrap().len(), 1);
+}
+
 #[test]
 fn detects_each_pull_request_transition_and_not_unchanged_observations() {
     let settings = MonitoringSettings::default();

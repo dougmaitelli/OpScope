@@ -27,10 +27,14 @@ const groups: { title: string; events: [keyof NotificationPreferencesContract, s
 export function NotificationSettings({
   value,
   disabled,
+  pullRequestsEnabled,
+  issuesEnabled,
   onChange,
 }: {
   value: NotificationPreferencesContract;
   disabled: boolean;
+  pullRequestsEnabled: boolean;
+  issuesEnabled: boolean;
   onChange(value: NotificationPreferencesContract): void;
 }) {
   return (
@@ -43,7 +47,14 @@ export function NotificationSettings({
       </p>
       <div className="notification-settings-groups">
         {groups.map((group) => (
-          <fieldset key={group.title} disabled={disabled}>
+          <fieldset
+            key={group.title}
+            disabled={
+              disabled ||
+              (group.title === "Pull requests" && !pullRequestsEnabled) ||
+              (group.title === "Issues" && !issuesEnabled)
+            }
+          >
             <legend>{group.title}</legend>
             {group.events.map(([key, label]) => (
               <label key={key}>

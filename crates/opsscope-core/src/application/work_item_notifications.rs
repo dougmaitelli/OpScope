@@ -88,6 +88,11 @@ impl NotifyWorkItems {
             .states
             .load_work_items(source_id, &repository.id, account_id)
             .map_err(|_| Failure::StorageUnavailable)?;
+        let pull_requests = pull_requests.filter(|_| settings.pull_requests_enabled);
+        let issues = issues.filter(|_| settings.issues_enabled);
+        if pull_requests.is_none() && issues.is_none() {
+            return Ok(());
+        }
         let mut next = previous.clone();
         let mut events = Vec::new();
 

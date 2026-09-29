@@ -6,13 +6,18 @@ import { settingsLimits, type MonitoringSettingsResponse } from "../../generated
 import { requestErrorMessage } from "../../shared/errors.ts";
 import "./SettingsPage.css";
 import { NotificationSettings } from "./NotificationSettings.tsx";
+import { useMonitoringSettings } from "../../api/monitoring-settings.ts";
+import { FeatureSettings } from "./FeatureSettings.tsx";
 
 export function SettingsPage() {
   const client = useApplicationClient();
+  const { publish } = useMonitoringSettings();
   const [saved, setSaved] = useState<MonitoringSettingsResponse | null>(null);
   const [synchronizationInterval, setSynchronizationInterval] = useState("");
   const [recentRuns, setRecentRuns] = useState("");
   const [onlyMyWork, setOnlyMyWork] = useState(false);
+  const [pullRequestsEnabled, setPullRequestsEnabled] = useState(true);
+  const [issuesEnabled, setIssuesEnabled] = useState(true);
   const [notifications, setNotifications] = useState<
     MonitoringSettingsResponse["notifications"] | null
   >(null);
@@ -31,6 +36,8 @@ export function SettingsPage() {
         setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
         setRecentRuns(String(settings.recentRunsPerWorkflow));
         setOnlyMyWork(settings.onlyMyWork);
+        setPullRequestsEnabled(settings.pullRequestsEnabled);
+        setIssuesEnabled(settings.issuesEnabled);
         setNotifications(settings.notifications);
       })
       .catch((failure: unknown) => {
@@ -58,6 +65,8 @@ export function SettingsPage() {
     (synchronizationIntervalValue !== saved.synchronizationIntervalSeconds ||
       recentRunsValue !== saved.recentRunsPerWorkflow ||
       onlyMyWork !== saved.onlyMyWork ||
+      pullRequestsEnabled !== saved.pullRequestsEnabled ||
+      issuesEnabled !== saved.issuesEnabled ||
       JSON.stringify(notifications) !== JSON.stringify(saved.notifications));
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
@@ -71,9 +80,14 @@ export function SettingsPage() {
         synchronizationIntervalSeconds: synchronizationIntervalValue,
         recentRunsPerWorkflow: recentRunsValue,
         onlyMyWork,
+        pullRequestsEnabled,
+        issuesEnabled,
         notifications,
       });
       setSaved(settings);
+      publish(settings);
+      setPullRequestsEnabled(settings.pullRequestsEnabled);
+      setIssuesEnabled(settings.issuesEnabled);
       setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
       setRecentRuns(String(settings.recentRunsPerWorkflow));
       setOnlyMyWork(settings.onlyMyWork);
@@ -91,6 +105,8 @@ export function SettingsPage() {
     setSynchronizationInterval(String(saved.synchronizationIntervalSeconds));
     setRecentRuns(String(saved.recentRunsPerWorkflow));
     setOnlyMyWork(saved.onlyMyWork);
+    setPullRequestsEnabled(saved.pullRequestsEnabled);
+    setIssuesEnabled(saved.issuesEnabled);
     setNotifications(saved.notifications);
     setError(null);
     setNote(null);
@@ -107,6 +123,19 @@ export function SettingsPage() {
       <section className="panel settings-panel" aria-labelledby="monitoring-settings-title">
         <PanelHeader label="Monitoring" title="Scope, synchronization and history" />
         <form className="settings-form" onSubmit={(event) => void save(event)}>
+          <FeatureSettings
+            pullRequestsEnabled={pullRequestsEnabled}
+            issuesEnabled={issuesEnabled}
+            disabled={loading || saving || saved === null}
+            onPullRequestsChanged={(enabled) => {
+              setPullRequestsEnabled(enabled);
+              setNote(null);
+            }}
+            onIssuesChanged={(enabled) => {
+              setIssuesEnabled(enabled);
+              setNote(null);
+            }}
+          />
           <label className="settings-field">
             <span className="settings-field-title">Synchronization interval</span>
             <span className="settings-field-description">
@@ -183,6 +212,8 @@ export function SettingsPage() {
 
           {notifications ? (
             <NotificationSettings
+              pullRequestsEnabled={pullRequestsEnabled}
+              issuesEnabled={issuesEnabled}
               value={notifications}
               disabled={loading || saving}
               onChange={(value) => {

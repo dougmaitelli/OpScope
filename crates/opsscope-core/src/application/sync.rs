@@ -105,6 +105,14 @@ impl SynchronizeSources {
     }
 
     pub async fn execute(&self) -> Result<SynchronizationSummary, SynchronizationFailure> {
+        let pull_requests_enabled = self
+            .source_data
+            .feature_enabled(super::SourceCapability::ChangeRequests)
+            .map_err(|_| SynchronizationFailure::StorageUnavailable)?;
+        let issues_enabled = self
+            .source_data
+            .feature_enabled(super::SourceCapability::Issues)
+            .map_err(|_| SynchronizationFailure::StorageUnavailable)?;
         let selections = self
             .selections
             .list()
@@ -163,9 +171,10 @@ impl SynchronizeSources {
                 let mut current_pull_requests = None;
                 let mut current_issues = None;
                 let mut item_sync_failed = false;
-                if source
-                    .descriptor
-                    .supports(super::SourceCapability::ChangeRequests)
+                if pull_requests_enabled
+                    && source
+                        .descriptor
+                        .supports(super::SourceCapability::ChangeRequests)
                 {
                     let previous = self
                         .change_request_activity
@@ -214,7 +223,7 @@ impl SynchronizeSources {
                         item_sync_failed = true;
                     }
                 }
-                if source.descriptor.supports(super::SourceCapability::Issues) {
+                if issues_enabled && source.descriptor.supports(super::SourceCapability::Issues) {
                     match self
                         .source_data
                         .issues(&source.id, &repository, RefreshMode::Force)

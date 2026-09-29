@@ -102,11 +102,11 @@ export type SynchronizationResponse = { selectedRepositoryCount: number, synchro
 
 export type SynchronizationStatusResponse = { running: boolean, activeSourceCount: number, lastCompletedAt: number | null, lastFailedRepositoryCount: number, };
 
-export type MonitoringSettingsResponse = { notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+export type MonitoringSettingsResponse = { pullRequestsEnabled: boolean, issuesEnabled: boolean, notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 
 export type NotificationPreferencesContract = { workflowFailures: boolean, pullRequestOpened: boolean, pullRequestReviewRequested: boolean, pullRequestChangesRequested: boolean, pullRequestMerged: boolean, pullRequestClosed: boolean, issueOpened: boolean, issueAssigned: boolean, issueReopened: boolean, issueClosed: boolean, };
 
-export type UpdateMonitoringSettingsRequest = { notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
+export type UpdateMonitoringSettingsRequest = { pullRequestsEnabled: boolean, issuesEnabled: boolean, notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 
 export type MonitoringSettingsErrorResponse = { message: string, };
 

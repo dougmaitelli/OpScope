@@ -1,4 +1,5 @@
 import "./ActivityFilters.css";
+import { useMonitoringSettings } from "../../api/monitoring-settings.ts";
 
 export type ActivityStatusFilter = "all" | "failing" | "running" | "successful" | "other";
 export type ActivityRangeFilter = "all" | "day" | "week" | "month";
@@ -28,6 +29,7 @@ export function ActivityFilters({
   onChange,
   onClear,
 }: ActivityFiltersProps) {
+  const { settings } = useMonitoringSettings();
   const active =
     values.query.trim().length > 0 ||
     values.type !== "all" ||
@@ -61,7 +63,9 @@ export function ActivityFilters({
         >
           <option value="all">All activity</option>
           <option value="workflows">Workflows</option>
-          <option value="pullRequests">Pull requests</option>
+          {settings?.pullRequestsEnabled ? (
+            <option value="pullRequests">Pull requests</option>
+          ) : null}
         </select>
       </label>
       <label className="activity-filter">

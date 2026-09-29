@@ -23,6 +23,7 @@ import {
 import { ActivityListHeader, ActivityRow, type WorkflowActivity } from "./ActivityRow.tsx";
 import { ChangeRequestActivityRow } from "./ChangeRequestActivityRow.tsx";
 import "./ActivityPage.css";
+import { useMonitoringSettings } from "../../api/monitoring-settings.ts";
 
 const STATUS_FILTERS = new Set<ActivityStatusFilter>([
   "all",
@@ -83,6 +84,7 @@ function rangeCutoff(range: ActivityRangeFilter): number | null {
 }
 
 export function ActivityPage() {
+  const { settings } = useMonitoringSettings();
   const client = useApplicationClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
@@ -128,29 +130,31 @@ export function ActivityPage() {
         run,
       })),
     );
-    const changeRequests: TimelineActivity[] = (persistedActivity?.changeRequestEvents ?? []).map(
-      (event) => ({
-        type: "pullRequest",
-        id: event.id,
-        occurredAt: event.occurredAt,
-        repositoryId: `${event.changeRequest.sourceId}:${event.changeRequest.repositoryId}`,
-        repositoryLabel: `${event.changeRequest.repositoryOwner}/${event.changeRequest.repositoryName}`,
-        event,
-      }),
-    );
+    const changeRequests: TimelineActivity[] = (
+      settings?.pullRequestsEnabled ? (persistedActivity?.changeRequestEvents ?? []) : []
+    ).map((event) => ({
+      type: "pullRequest",
+      id: event.id,
+      occurredAt: event.occurredAt,
+      repositoryId: `${event.changeRequest.sourceId}:${event.changeRequest.repositoryId}`,
+      repositoryLabel: `${event.changeRequest.repositoryOwner}/${event.changeRequest.repositoryName}`,
+      event,
+    }));
     return ([...workflows, ...changeRequests] as TimelineActivity[]).sort(
       (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt),
     );
-  }, [inventory, persistedActivity]);
+  }, [inventory, persistedActivity, settings?.pullRequestsEnabled]);
 
   const requestedStatus = searchParams.get("status") ?? "all";
   const requestedRange = searchParams.get("range") ?? "all";
   const requestedType = searchParams.get("type") ?? "all";
   const filters: ActivityFilterValues = {
     query: searchParams.get("q") ?? "",
-    type: TYPE_FILTERS.has(requestedType as ActivityTypeFilter)
-      ? (requestedType as ActivityTypeFilter)
-      : "all",
+    type:
+      TYPE_FILTERS.has(requestedType as ActivityTypeFilter) &&
+      !(requestedType === "pullRequests" && !settings?.pullRequestsEnabled)
+        ? (requestedType as ActivityTypeFilter)
+        : "all",
     status: STATUS_FILTERS.has(requestedStatus as ActivityStatusFilter)
       ? (requestedStatus as ActivityStatusFilter)
       : "all",

@@ -258,6 +258,13 @@ Restarting the server also invalidates existing OIDC sessions.
 | Recent runs per workflow | 10 | Recent-run window, configurable from 1 to 100. |
 | Only show my work | Off | Filters monitoring views and notifications using each connection's token owner. |
 | Notification events | All enabled | Individual switches for workflow, PR, and issue notifications. |
+| Pull request monitoring | On | Enables the PR page, PR activity, synchronization, and PR notifications. |
+| Issue monitoring | On | Enables the Issues page, synchronization, and issue notifications. |
+
+Disabling a feature hides its navigation entry and stops its monitoring requests
+and notifications. Cached data and notification preferences are preserved.
+Re-enabling establishes a fresh notification baseline, without replaying changes
+from the disabled period. Workflows remain available independently.
 
 Personal scope includes PRs you authored, reviewed, or were asked to review;
 issues you authored, subscribed to, or participated in; and workflow runs

@@ -157,6 +157,8 @@ pub struct SynchronizationStatusResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitoringSettingsResponse {
+    pub pull_requests_enabled: bool,
+    pub issues_enabled: bool,
     pub notifications: NotificationPreferencesContract,
     pub only_my_work: bool,
     #[ts(type = "number")]
@@ -167,6 +169,8 @@ pub struct MonitoringSettingsResponse {
 impl From<MonitoringSettings> for MonitoringSettingsResponse {
     fn from(settings: MonitoringSettings) -> Self {
         Self {
+            pull_requests_enabled: settings.pull_requests_enabled,
+            issues_enabled: settings.issues_enabled,
             notifications: settings.notifications.into(),
             only_my_work: settings.only_my_work,
             synchronization_interval_seconds: settings.synchronization_interval_seconds,
@@ -178,6 +182,10 @@ impl From<MonitoringSettings> for MonitoringSettingsResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMonitoringSettingsRequest {
+    #[serde(default = "enabled_by_default")]
+    pub pull_requests_enabled: bool,
+    #[serde(default = "enabled_by_default")]
+    pub issues_enabled: bool,
     #[serde(default)]
     pub notifications: NotificationPreferencesContract,
     #[serde(default)]
@@ -190,12 +198,18 @@ pub struct UpdateMonitoringSettingsRequest {
 impl From<UpdateMonitoringSettingsRequest> for MonitoringSettings {
     fn from(request: UpdateMonitoringSettingsRequest) -> Self {
         Self {
+            pull_requests_enabled: request.pull_requests_enabled,
+            issues_enabled: request.issues_enabled,
             notifications: request.notifications.into(),
             only_my_work: request.only_my_work,
             synchronization_interval_seconds: request.synchronization_interval_seconds,
             recent_runs_per_workflow: request.recent_runs_per_workflow,
         }
     }
+}
+
+const fn enabled_by_default() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]

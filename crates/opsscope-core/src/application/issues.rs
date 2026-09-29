@@ -61,16 +61,22 @@ impl ListIssues {
     }
 
     pub async fn execute(&self) -> Result<IssueInventory, ListIssuesFailure> {
-        let only_my_work = self
+        let settings = self
             .settings
             .load_settings()
-            .map_err(|_| ListIssuesFailure::StorageUnavailable)?
-            .only_my_work;
+            .map_err(|_| ListIssuesFailure::StorageUnavailable)?;
+        let only_my_work = settings.only_my_work;
         let selections = self
             .selections
             .list()
             .map_err(|_| ListIssuesFailure::StorageUnavailable)?;
         let selected_repository_count = selections.len();
+        if !settings.issues_enabled {
+            return Ok(IssueInventory {
+                selected_repository_count,
+                issues: Vec::new(),
+            });
+        }
         let mut issues = Vec::new();
         for source in self.source_data.sources().map_err(list_issues_failure)? {
             if !source.descriptor.supports(SourceCapability::Issues) {

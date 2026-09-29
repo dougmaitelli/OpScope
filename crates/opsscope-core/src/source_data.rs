@@ -255,6 +255,12 @@ impl Error for SourceDataFailure {}
 
 #[async_trait]
 pub trait SourceData: Send + Sync {
+    fn feature_enabled(
+        &self,
+        _capability: crate::application::SourceCapability,
+    ) -> Result<bool, SourceDataFailure> {
+        Ok(true)
+    }
     fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure>;
 
     async fn repositories(
@@ -328,6 +334,7 @@ pub trait SourceData: Send + Sync {
 
 #[derive(Clone)]
 pub struct ReadThroughSourceData {
+    settings: Option<Arc<dyn crate::application::SettingsRepository>>,
     registry: SourceRegistry,
     connections: Arc<dyn ConnectionRepository>,
     secrets: Arc<dyn SecretStore>,
@@ -345,6 +352,7 @@ impl ReadThroughSourceData {
         cache_policy: SourceDataCachePolicy,
     ) -> Self {
         Self {
+            settings: None,
             registry,
             connections,
             secrets,
@@ -360,6 +368,7 @@ impl ReadThroughSourceData {
         secrets: Arc<dyn SecretStore>,
     ) -> Self {
         Self {
+            settings: None,
             registry,
             connections,
             secrets,
@@ -373,6 +382,15 @@ impl ReadThroughSourceData {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs()
+    }
+
+    #[must_use]
+    pub fn with_settings(
+        mut self,
+        settings: Arc<dyn crate::application::SettingsRepository>,
+    ) -> Self {
+        self.settings = Some(settings);
+        self
     }
 
     fn is_fresh(refreshed_at: u64, now: u64, max_age: Duration) -> bool {
@@ -401,6 +419,23 @@ impl ReadThroughSourceData {
 
 #[async_trait]
 impl SourceData for ReadThroughSourceData {
+    fn feature_enabled(
+        &self,
+        capability: crate::application::SourceCapability,
+    ) -> Result<bool, SourceDataFailure> {
+        let settings = self
+            .settings
+            .as_ref()
+            .map(|settings| settings.load_settings())
+            .transpose()
+            .map_err(|_| SourceDataFailure::StorageUnavailable)?
+            .unwrap_or_default();
+        Ok(match capability {
+            crate::application::SourceCapability::ChangeRequests => settings.pull_requests_enabled,
+            crate::application::SourceCapability::Issues => settings.issues_enabled,
+            _ => true,
+        })
+    }
     fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure> {
         self.connections
             .list()
@@ -637,6 +672,9 @@ impl SourceData for ReadThroughSourceData {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
+        if !self.feature_enabled(crate::application::SourceCapability::ChangeRequests)? {
+            return Ok(None);
+        }
         self.load_change_requests(source_id, repository, refresh)
             .await
     }
@@ -648,6 +686,9 @@ impl SourceData for ReadThroughSourceData {
         number: u64,
         refresh: RefreshMode,
     ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
+        if !self.feature_enabled(crate::application::SourceCapability::ChangeRequests)? {
+            return Ok(None);
+        }
         self.load_change_request_details(source_id, repository, number, refresh)
             .await
     }
@@ -658,6 +699,9 @@ impl SourceData for ReadThroughSourceData {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<Issue>>, SourceDataFailure> {
+        if !self.feature_enabled(crate::application::SourceCapability::Issues)? {
+            return Ok(None);
+        }
         self.load_issues(source_id, repository, refresh).await
     }
 
@@ -668,6 +712,9 @@ impl SourceData for ReadThroughSourceData {
         number: u64,
         refresh: RefreshMode,
     ) -> Result<Option<IssueDetails>, SourceDataFailure> {
+        if !self.feature_enabled(crate::application::SourceCapability::Issues)? {
+            return Ok(None);
+        }
         self.load_issue_details(source_id, repository, number, refresh)
             .await
     }

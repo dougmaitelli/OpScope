@@ -263,6 +263,16 @@ impl SqliteDatabase {
         for (table, column, declaration) in [
             (
                 "monitoring_settings",
+                "pull_requests_enabled",
+                "INTEGER NOT NULL DEFAULT 1",
+            ),
+            (
+                "monitoring_settings",
+                "issues_enabled",
+                "INTEGER NOT NULL DEFAULT 1",
+            ),
+            (
+                "monitoring_settings",
                 "notifications",
                 "TEXT NOT NULL DEFAULT '{}'",
             ),
@@ -626,10 +636,10 @@ impl RepositorySelectionRepository for SqliteDatabase {
 
 impl SettingsRepository for SqliteDatabase {
     fn load_settings(&self) -> Result<MonitoringSettings, PersistenceFailure> {
-        let (synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications) = self
+        let (synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications, pull_requests_enabled, issues_enabled) = self
             .lock()?
             .query_row(
-                "SELECT synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications
+                "SELECT synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications, pull_requests_enabled, issues_enabled
                  FROM monitoring_settings WHERE id = 1",
                 [],
                 |row| {
@@ -638,11 +648,15 @@ impl SettingsRepository for SqliteDatabase {
                         row.get::<_, i64>(1)?,
                         row.get::<_, bool>(2)?,
                         row.get::<_, String>(3)?,
+                        row.get::<_, bool>(4)?,
+                        row.get::<_, bool>(5)?,
                     ))
                 },
             )
             .map_err(|_| PersistenceFailure)?;
         Ok(MonitoringSettings {
+            pull_requests_enabled,
+            issues_enabled,
             notifications: serde_json::from_str(&notifications).map_err(|_| PersistenceFailure)?,
             only_my_work,
             synchronization_interval_seconds: synchronization_interval_seconds
@@ -663,24 +677,41 @@ impl SettingsRepository for SqliteDatabase {
             .recent_runs_per_workflow
             .try_into()
             .map_err(|_| PersistenceFailure)?;
-        self.lock()?
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction().map_err(|_| PersistenceFailure)?;
+        transaction
             .execute(
                 "UPDATE monitoring_settings SET
                    synchronization_interval_seconds = ?1,
                    recent_runs_per_workflow = ?2,
                    only_my_work = ?3,
-                   notifications = ?4
+                   notifications = ?4,
+                   pull_requests_enabled = ?5,
+                   issues_enabled = ?6
                  WHERE id = 1",
                 params![
                     synchronization_interval_seconds,
                     recent_runs_per_workflow,
                     settings.only_my_work,
                     serde_json::to_string(&settings.notifications)
-                        .map_err(|_| PersistenceFailure)?
+                        .map_err(|_| PersistenceFailure)?,
+                    settings.pull_requests_enabled,
+                    settings.issues_enabled
                 ],
             )
-            .map(|_| ())
-            .map_err(|_| PersistenceFailure)
+            .map_err(|_| PersistenceFailure)?;
+        // Notification baselines are independent of cached data. Re-enabling a
+        // feature starts quietly rather than replaying changes made while disabled.
+        for (enabled, path) in [
+            (settings.pull_requests_enabled, "$.pull_requests"),
+            (settings.issues_enabled, "$.issues"),
+        ] {
+            if !enabled {
+                transaction.execute("UPDATE work_item_notification_states SET snapshot = json_set(snapshot, ?1, NULL)", [path])
+                    .map_err(|_| PersistenceFailure)?;
+            }
+        }
+        transaction.commit().map_err(|_| PersistenceFailure)
     }
 }
 

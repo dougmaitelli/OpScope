@@ -36,6 +36,90 @@ use tower::ServiceExt;
 struct TestSourceModule;
 
 #[tokio::test]
+async fn feature_settings_gate_sync_lists_and_details_and_are_reversible()
+-> Result<(), Box<dyn std::error::Error>> {
+    use opsscope_core::application::WorkItemNotificationRepository;
+    let database = SqliteDatabase::in_memory()?;
+    let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
+    let app = router(test_dependencies(
+        &database,
+        secrets,
+        WebAuthentication::disabled_for_tests(),
+    ));
+    let connected = app
+        .clone()
+        .oneshot(
+            Request::post(CONNECTIONS_HTTP_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"sourceId":"example","configuration":{},"credential":"test_credential"}"#,
+                ))?,
+        )
+        .await?;
+    let connection: ConnectionSummary =
+        serde_json::from_slice(&connected.into_body().collect().await?.to_bytes())?;
+    let selected = app.clone().oneshot(Request::put(REPOSITORY_SELECTIONS_HTTP_PATH)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::json!({"sources":[{"sourceId":connection.id,"repositoryIds":["repository-1"]}]}).to_string()))?).await?;
+    assert_eq!(selected.status(), StatusCode::OK);
+
+    for enabled in [false, true, false] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put(SETTINGS_HTTP_PATH)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "synchronizationIntervalSeconds":60,"recentRunsPerWorkflow":10,
+                            "pullRequestsEnabled":enabled,"issuesEnabled":enabled
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let saved: MonitoringSettingsResponse =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(saved.pull_requests_enabled, enabled);
+        assert_eq!(saved.issues_enabled, enabled);
+        let synced = app
+            .clone()
+            .oneshot(Request::post(SYNCHRONIZATION_HTTP_PATH).body(Body::empty())?)
+            .await?;
+        let summary: SynchronizationResponse =
+            serde_json::from_slice(&synced.into_body().collect().await?.to_bytes())?;
+        assert_eq!(summary.failed_repository_count, 0);
+        let state = database.load_work_items(&connection.id, "repository-1", "42")?;
+        assert_eq!(state.pull_requests.is_some(), enabled);
+        assert_eq!(state.issues.is_some(), enabled);
+        for (route, key) in [
+            (CHANGE_REQUESTS_HTTP_PATH, "changeRequests"),
+            (ISSUES_HTTP_PATH, "issues"),
+            (ACTIVITY_HTTP_PATH, "changeRequestEvents"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(Request::get(route).body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: serde_json::Value =
+                serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+            assert_eq!(!body[key].as_array().unwrap().is_empty(), enabled);
+        }
+        if !enabled {
+            for route in [CHANGE_REQUEST_DETAILS_HTTP_PATH, ISSUE_DETAILS_HTTP_PATH] {
+                let response = app.clone().oneshot(Request::post(route)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({"sourceId":connection.id,"repositoryId":"repository-1","number":1}).to_string()))?).await?;
+                assert_ne!(response.status(), StatusCode::OK);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn personal_scope_filters_cached_routes_and_is_reversible()
 -> Result<(), Box<dyn std::error::Error>> {
     use opsscope_core::application::{

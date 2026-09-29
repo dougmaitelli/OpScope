@@ -280,7 +280,11 @@ impl ListActivity {
     }
 
     pub fn execute(&self) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
-        let only_my_work = self.settings.load_settings()?.only_my_work;
+        let settings = self.settings.load_settings()?;
+        if !settings.pull_requests_enabled {
+            return Ok(Vec::new());
+        }
+        let only_my_work = settings.only_my_work;
         let accounts = self
             .connections
             .list()?

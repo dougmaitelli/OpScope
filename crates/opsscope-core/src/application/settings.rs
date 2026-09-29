@@ -14,6 +14,8 @@ pub const MAX_RECENT_RUNS_PER_WORKFLOW: usize = 100;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitoringSettings {
+    pub pull_requests_enabled: bool,
+    pub issues_enabled: bool,
     pub notifications: NotificationPreferences,
     pub only_my_work: bool,
     pub synchronization_interval_seconds: u64,
@@ -23,6 +25,8 @@ pub struct MonitoringSettings {
 impl Default for MonitoringSettings {
     fn default() -> Self {
         Self {
+            pull_requests_enabled: true,
+            issues_enabled: true,
             notifications: NotificationPreferences::default(),
             only_my_work: false,
             synchronization_interval_seconds: DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
@@ -136,6 +140,8 @@ mod tests {
 
         assert_eq!(
             update.execute(MonitoringSettings {
+                pull_requests_enabled: true,
+                issues_enabled: true,
                 notifications: NotificationPreferences::default(),
                 only_my_work: false,
                 synchronization_interval_seconds: 1,

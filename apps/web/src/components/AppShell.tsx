@@ -5,6 +5,7 @@ import { applicationVersion, type UpdateStatusResponse } from "../generated/cont
 import { useWebAuthentication } from "../auth/WebAuthentication.tsx";
 import "./AppShell.css";
 import { PersonalScopeNotice } from "./PersonalScopeNotice.tsx";
+import { useMonitoringSettings } from "../api/monitoring-settings.ts";
 
 const pageTitles: Record<string, string> = {
   "/": "Workflows",
@@ -17,6 +18,7 @@ const pageTitles: Record<string, string> = {
 };
 
 export function AppShell() {
+  const { settings } = useMonitoringSettings();
   const location = useLocation();
   const authentication = useWebAuthentication();
   const client = useApplicationClient();
@@ -63,18 +65,22 @@ export function AppShell() {
             </span>
             Activity
           </NavLink>
-          <NavLink className={navClass} to="/pull-requests">
-            <span className="nav-symbol" aria-hidden="true">
-              P
-            </span>
-            Pull requests
-          </NavLink>
-          <NavLink className={navClass} to="/issues">
-            <span className="nav-symbol" aria-hidden="true">
-              I
-            </span>
-            Issues
-          </NavLink>
+          {settings?.pullRequestsEnabled ? (
+            <NavLink className={navClass} to="/pull-requests">
+              <span className="nav-symbol" aria-hidden="true">
+                P
+              </span>
+              Pull requests
+            </NavLink>
+          ) : null}
+          {settings?.issuesEnabled ? (
+            <NavLink className={navClass} to="/issues">
+              <span className="nav-symbol" aria-hidden="true">
+                I
+              </span>
+              Issues
+            </NavLink>
+          ) : null}
           <NavLink className={navClass} to="/repositories">
             <span className="nav-symbol" aria-hidden="true">
               R

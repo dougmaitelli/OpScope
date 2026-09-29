@@ -63,16 +63,22 @@ impl ListChangeRequests {
     }
 
     pub async fn execute(&self) -> Result<ChangeRequestInventory, ListChangeRequestsFailure> {
-        let only_my_work = self
+        let settings = self
             .settings
             .load_settings()
-            .map_err(|_| ListChangeRequestsFailure::StorageUnavailable)?
-            .only_my_work;
+            .map_err(|_| ListChangeRequestsFailure::StorageUnavailable)?;
+        let only_my_work = settings.only_my_work;
         let selections = self
             .selections
             .list()
             .map_err(|_| ListChangeRequestsFailure::StorageUnavailable)?;
         let selected_repository_count = selections.len();
+        if !settings.pull_requests_enabled {
+            return Ok(ChangeRequestInventory {
+                selected_repository_count,
+                change_requests: Vec::new(),
+            });
+        }
         let mut change_requests = Vec::new();
         for source in self
             .source_data

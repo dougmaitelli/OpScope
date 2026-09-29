@@ -158,6 +158,67 @@ fn test_issue() -> Issue {
 }
 
 #[tokio::test]
+async fn disabled_features_skip_provider_access_and_preserve_cached_data()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::application::{MonitoringSettings, SettingsRepository};
+    let deps = dependencies()?;
+    let database = Arc::new(deps.database);
+    let data = ReadThroughSourceData::cached(
+        deps.registry,
+        database.clone(),
+        Arc::new(deps.secrets),
+        database.clone(),
+        SourceDataCachePolicy::default(),
+    )
+    .with_settings(database.clone());
+    let repo = test_repository();
+    assert_eq!(
+        data.issues("example", &repo, RefreshMode::Force).await?,
+        Some(vec![test_issue()])
+    );
+    database.save_settings(MonitoringSettings {
+        pull_requests_enabled: false,
+        issues_enabled: false,
+        ..Default::default()
+    })?;
+    assert!(!data.feature_enabled(SourceCapability::ChangeRequests)?);
+    assert!(!data.feature_enabled(SourceCapability::Issues)?);
+    for mode in [
+        RefreshMode::Force,
+        RefreshMode::CacheFirst,
+        RefreshMode::IfStale,
+    ] {
+        assert!(data.issues("example", &repo, mode).await?.is_none());
+        assert!(
+            data.issue_details("example", &repo, 7, mode)
+                .await?
+                .is_none()
+        );
+        // An invalid connection proves guards run before provider/credential access.
+        assert!(
+            data.change_requests("not-connected", &repo, mode)
+                .await?
+                .is_none()
+        );
+        assert!(
+            data.change_request_details("not-connected", &repo, 1, mode)
+                .await?
+                .is_none()
+        );
+    }
+    assert_eq!(deps.issue_requests.load(Ordering::SeqCst), 1);
+    assert!(data.feature_enabled(SourceCapability::Workflows)?);
+    database.save_settings(MonitoringSettings::default())?;
+    assert_eq!(
+        data.issues("example", &repo, RefreshMode::CacheFirst)
+            .await?,
+        Some(vec![test_issue()])
+    );
+    assert_eq!(deps.issue_requests.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn issue_cache_survives_provider_failure_and_is_scoped_to_account()
 -> Result<(), Box<dyn std::error::Error>> {
     let deps = dependencies()?;

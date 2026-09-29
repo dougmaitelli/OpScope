@@ -71,13 +71,16 @@ impl AppState {
             failure_notifications,
             work_item_notifications,
         } = dependencies;
-        let source_data = Arc::new(ReadThroughSourceData::cached(
-            registry.clone(),
-            connections.clone(),
-            secrets.clone(),
-            source_data_cache,
-            SourceDataCachePolicy::default(),
-        ));
+        let source_data = Arc::new(
+            ReadThroughSourceData::cached(
+                registry.clone(),
+                connections.clone(),
+                secrets.clone(),
+                source_data_cache,
+                SourceDataCachePolicy::default(),
+            )
+            .with_settings(settings.clone()),
+        );
         Self {
             check_for_updates: CheckForUpdates::github(),
             list_workflows: ListWorkflows::new(
