@@ -995,6 +995,10 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
             )
             .await?;
         assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED, "{path}");
+        assert_eq!(
+            anonymous.headers()[crate::auth::SESSION_ERROR_HEADER],
+            "unauthenticated"
+        );
     }
 
     let missing_csrf = app

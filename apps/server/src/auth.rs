@@ -31,6 +31,7 @@ pub const AUTH_LOGIN_PATH: &str = "/api/auth/login";
 pub const AUTH_CALLBACK_PATH: &str = "/api/auth/callback";
 pub const AUTH_LOGOUT_PATH: &str = "/api/auth/logout";
 pub const CSRF_HEADER: &str = "x-csrf-token";
+pub const SESSION_ERROR_HEADER: &str = "x-opsscope-session-error";
 
 const LOGIN_LIFETIME: Duration = Duration::from_secs(10 * 60);
 
@@ -236,13 +237,25 @@ async fn login(
         .add_scope(Scope::new("email".to_owned()))
         .set_pkce_challenge(pkce_challenge)
         .url();
-    let login_token = authentication.sessions.create_login(PendingLogin {
+    let login_token = match authentication.sessions.create_login(PendingLogin {
         state: csrf_state.secret().clone(),
         nonce: nonce.secret().clone(),
         pkce_verifier: pkce_verifier.secret().clone(),
         return_to: safe_return_to(query.return_to.as_deref()),
         expires_at: now() + LOGIN_LIFETIME.as_secs(),
-    });
+    }) {
+        Ok(token) => token,
+        Err(()) => {
+            return no_store(
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [(axum::http::header::RETRY_AFTER, "60")],
+                    "Too many login attempts; try again later",
+                )
+                    .into_response(),
+            );
+        }
+    };
     no_store(redirect_with_cookie(
         authorization_url.as_str(),
         build_cookie(
@@ -328,10 +341,9 @@ async fn callback(
     let (session_token, _) = authentication.sessions.create_session(user);
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::SEE_OTHER;
-    response.headers_mut().insert(
-        LOCATION,
-        HeaderValue::from_str(&pending.return_to).expect("validated return path"),
-    );
+    response
+        .headers_mut()
+        .insert(LOCATION, return_location(&pending.return_to));
     response.headers_mut().append(
         SET_COOKIE,
         cookie_header(build_cookie(
@@ -362,7 +374,12 @@ pub async fn require_authenticated_session(
         return no_store(next.run(request).await);
     }
     let Some(session) = authentication.session_from_headers(request.headers()) else {
-        return no_store(StatusCode::UNAUTHORIZED.into_response());
+        let mut response = StatusCode::UNAUTHORIZED.into_response();
+        response.headers_mut().insert(
+            SESSION_ERROR_HEADER,
+            HeaderValue::from_static("unauthenticated"),
+        );
+        return no_store(response);
     };
     if is_state_changing(request.method()) {
         let csrf = request
@@ -397,23 +414,48 @@ pub async fn logout(
 }
 
 fn safe_return_to(value: Option<&str>) -> String {
-    value
-        .filter(|value| {
-            value.starts_with('/')
-                && !value.starts_with("//")
-                && !value.contains(['\r', '\n', '\\'])
-        })
-        .unwrap_or("/")
-        .to_owned()
+    let Some(value) = value.filter(|value| {
+        value.len() <= 2048
+            && value.starts_with('/')
+            && !value.starts_with("//")
+            && !value.contains('\\')
+            && !value.chars().any(char::is_control)
+    }) else {
+        return "/".to_owned();
+    };
+    let Ok(base) = reqwest::Url::parse("https://opsscope.invalid/") else {
+        return "/".to_owned();
+    };
+    let Ok(destination) = base.join(value) else {
+        return "/".to_owned();
+    };
+    if destination.origin() != base.origin() || destination.path().starts_with("//") {
+        return "/".to_owned();
+    }
+    let mut path = destination.path().to_owned();
+    if let Some(query) = destination.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+    if let Some(fragment) = destination.fragment() {
+        path.push('#');
+        path.push_str(fragment);
+    }
+    path
+}
+
+fn return_location(value: &str) -> HeaderValue {
+    HeaderValue::from_str(&safe_return_to(Some(value)))
+        .unwrap_or_else(|_| HeaderValue::from_static("/"))
 }
 
 fn redirect_with_cookie(location: &str, cookie: String) -> Response {
+    let Ok(location) = HeaderValue::from_str(location) else {
+        return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    };
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
-    response.headers_mut().insert(
-        LOCATION,
-        HeaderValue::from_str(location).expect("OIDC authorization URL is a valid header"),
-    );
+    response.headers_mut().insert(LOCATION, location);
     response
         .headers_mut()
         .insert(SET_COOKIE, cookie_header(cookie));
@@ -436,22 +478,4 @@ fn no_store(mut response: Response) -> Response {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn return_paths_cannot_escape_the_application_origin() {
-        assert_eq!(
-            safe_return_to(Some("/settings?tab=sync")),
-            "/settings?tab=sync"
-        );
-        for unsafe_path in [
-            "https://example.com",
-            "//example.com",
-            "/\\example.com",
-            "/\r\nX: y",
-        ] {
-            assert_eq!(safe_return_to(Some(unsafe_path)), "/");
-        }
-    }
-}
+mod tests;

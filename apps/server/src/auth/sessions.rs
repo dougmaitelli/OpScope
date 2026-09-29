@@ -4,11 +4,14 @@ use axum::http::{HeaderMap, HeaderValue};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(super) const SESSION_LIFETIME: Duration = Duration::from_secs(12 * 60 * 60);
+const MAX_PENDING_LOGINS: usize = 64;
+const LOGIN_RATE_LIMIT: usize = 10;
+const LOGIN_RATE_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Default)]
 pub(super) struct SessionStore {
@@ -17,6 +20,7 @@ pub(super) struct SessionStore {
 
 #[derive(Default)]
 struct SessionState {
+    login_attempts: VecDeque<Instant>,
     sessions: HashMap<[u8; 32], StoredSession>,
     logins: HashMap<[u8; 32], PendingLogin>,
 }
@@ -36,19 +40,39 @@ pub(super) struct PendingLogin {
 }
 
 impl SessionStore {
-    pub(super) fn create_login(&self, pending: PendingLogin) -> String {
+    pub(super) fn create_login(&self, pending: PendingLogin) -> Result<String, ()> {
+        self.create_login_at(pending, Instant::now())
+    }
+
+    fn create_login_at(&self, pending: PendingLogin, instant: Instant) -> Result<String, ()> {
+        let mut state = self.lock();
+        while state
+            .login_attempts
+            .front()
+            .is_some_and(|attempt| instant.duration_since(*attempt) >= LOGIN_RATE_WINDOW)
+        {
+            state.login_attempts.pop_front();
+        }
+        if state.login_attempts.len() >= LOGIN_RATE_LIMIT {
+            return Err(());
+        }
+        state.login_attempts.push_back(instant);
+        state.remove_expired();
+        if state.logins.len() >= MAX_PENDING_LOGINS {
+            return Err(());
+        }
         let token = random_token();
         let id = token_hash(&token);
-        let mut state = self.lock();
-        state.remove_expired();
         state.logins.insert(id, pending);
-        token
+        Ok(token)
     }
 
     pub(super) fn take_login(&self, token: &str) -> Option<PendingLogin> {
         let mut state = self.lock();
-        state.remove_expired();
-        state.logins.remove(&token_hash(token))
+        state
+            .logins
+            .remove(&token_hash(token))
+            .filter(|pending| pending.expires_at > now())
     }
 
     pub(super) fn create_session(&self, user: AuthenticatedUser) -> (String, String) {
@@ -71,7 +95,14 @@ impl SessionStore {
     pub(super) fn session(&self, token: &str) -> Option<AuthenticatedSession> {
         let id = token_hash(token);
         let mut state = self.lock();
-        state.remove_expired();
+        if state
+            .sessions
+            .get(&id)
+            .is_some_and(|session| session.expires_at <= now())
+        {
+            state.sessions.remove(&id);
+            return None;
+        }
         let session = state.sessions.get(&id)?;
         Some(AuthenticatedSession {
             id,
@@ -152,29 +183,4 @@ fn token_hash(token: &str) -> [u8; 32] {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn session_tokens_are_stored_by_hash_and_expire_on_delete() {
-        let store = SessionStore::default();
-        let (token, _) = store.create_session(AuthenticatedUser {
-            subject: "subject".to_owned(),
-            email: None,
-        });
-        let session = store.session(&token).expect("session exists");
-        assert!(!store.lock().sessions.contains_key(token.as_bytes()));
-        store.delete_session(&session.id);
-        assert!(store.session(&token).is_none());
-    }
-
-    #[test]
-    fn production_cookie_has_host_prefix_and_security_attributes() {
-        let cookie = build_cookie("__Host-opsscope-session", "token", 60, true, "Strict");
-        assert!(cookie.starts_with("__Host-opsscope-session=token; Path=/;"));
-        assert!(cookie.contains("HttpOnly"));
-        assert!(cookie.contains("SameSite=Strict"));
-        assert!(cookie.ends_with("; Secure"));
-        assert!(!cookie.contains("Domain="));
-    }
-}
+mod tests;

@@ -24,6 +24,13 @@ retained in server memory. Restarting the server invalidates them.
 Production session cookies are HttpOnly, Secure, and SameSite=Strict.
 Authenticated mutations require CSRF validation.
 
+Pending OIDC logins are capped at 64 per server process, with a global limit of
+10 new login attempts per minute. Excess attempts receive HTTP 429 with
+`Retry-After`; they do not evict active login attempts or invalidate sessions.
+Session lookup does not scan the pending-login collection. Operators exposing
+OIDC publicly should also apply proxy-level rate limiting for broader traffic
+protection.
+
 OIDC is disabled when issuer, client ID, and client secret are all absent or
 blank. Public URL and allowed subjects alone do not enable it. In disabled mode,
 the UI and API require neither a session nor a CSRF token. Restrict network

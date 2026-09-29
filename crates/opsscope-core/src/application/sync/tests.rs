@@ -223,6 +223,11 @@ fn synchronization_permits_are_exclusive_per_source() {
     );
     let other = SourceSynchronizationPermit::acquire(active_sources.clone(), "source-b".to_owned())
         .expect("another source can synchronize");
+    assert!(
+        SourceSynchronizationPermit::acquire(active_sources.clone(), "source-a".to_owned())
+            .is_none()
+    );
+    assert_eq!(lock_active_sources(&active_sources).len(), 2);
 
     drop(first);
     assert!(SourceSynchronizationPermit::acquire(active_sources, "source-a".to_owned()).is_some());

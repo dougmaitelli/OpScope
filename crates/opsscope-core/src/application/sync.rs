@@ -305,7 +305,7 @@ struct SourceSynchronizationPermit {
 impl SourceSynchronizationPermit {
     fn acquire(active_sources: Arc<Mutex<HashSet<String>>>, source_id: String) -> Option<Self> {
         let inserted = lock_active_sources(&active_sources).insert(source_id.clone());
-        inserted.then_some(Self {
+        inserted.then(|| Self {
             active_sources,
             source_id,
         })

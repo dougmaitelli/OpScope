@@ -112,10 +112,11 @@ export class DesktopClient implements ApplicationClient {
 
 export class HttpClient implements ApplicationClient {
   private csrfToken: string | null = null;
+  private readonly fetcher: typeof fetch;
 
-  constructor(
-    private readonly fetcher: typeof fetch = (input, init) => globalThis.fetch(input, init),
-  ) {}
+  constructor(fetcher: typeof fetch = (input, init) => globalThis.fetch(input, init)) {
+    this.fetcher = fetcher;
+  }
 
   setCsrfToken(csrfToken: string | null): void {
     this.csrfToken = csrfToken;
@@ -260,7 +261,10 @@ export class HttpClient implements ApplicationClient {
   }
 
   private async responseError(response: Response): Promise<Error> {
-    if (response.status === 401) {
+    if (
+      response.status === 401 &&
+      response.headers.get("x-opsscope-session-error") === "unauthenticated"
+    ) {
       globalThis.dispatchEvent(new Event("opsscope:unauthorized"));
     }
     const fallback =
