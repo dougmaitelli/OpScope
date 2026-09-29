@@ -10,10 +10,18 @@ export function ChangeRequestProjectGroup({
   project: ProjectItems<ChangeRequestSummary>;
   onOpen: (item: ChangeRequestSummary) => void;
 }) {
+  const hasFailures = project.items.some(
+    (item) =>
+      item.checkStatus === "failing" ||
+      item.reviewStatus === "changesRequested" ||
+      item.mergeStatus === "conflicting",
+  );
+  const hasRunning = project.items.some((item) => item.checkStatus === "running");
   return (
     <ProjectGroup
       project={project}
       defaultExpanded
+      status={hasFailures ? "failure" : hasRunning ? "running" : "default"}
       itemCount={project.items.length}
       countLabel={`${project.items.length} pull request${project.items.length === 1 ? "" : "s"}`}
     >

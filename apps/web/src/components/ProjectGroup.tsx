@@ -7,6 +7,7 @@ export function ProjectGroup({
   countLabel,
   itemCount,
   defaultExpanded = false,
+  status = "default",
   metadata,
   children,
 }: {
@@ -14,6 +15,7 @@ export function ProjectGroup({
   countLabel: string;
   itemCount: number;
   defaultExpanded?: boolean;
+  status?: "default" | "running" | "failure";
   metadata?: ReactNode;
   children: ReactNode;
 }) {
@@ -24,6 +26,7 @@ export function ProjectGroup({
   return (
     <details
       className="project-group"
+      data-status={status}
       open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
     >

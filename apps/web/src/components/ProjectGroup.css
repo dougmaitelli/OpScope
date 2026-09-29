@@ -18,6 +18,14 @@
   background: #1a2330;
 }
 
+.project-group[data-status="running"] {
+  border-left-color: var(--warning);
+}
+
+.project-group[data-status="failure"] {
+  border-left-color: var(--danger);
+}
+
 .project-header::-webkit-details-marker {
   display: none;
 }
