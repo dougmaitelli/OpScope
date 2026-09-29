@@ -48,8 +48,7 @@ fn empty_or_whitespace_tags_leave_routing_unfiltered() {
     }
 }
 
-#[tokio::test]
-async fn sends_routing_tags_in_the_notification_request() {
+async fn captured_payload(severity: NotificationSeverity) -> Value {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
     let address = listener.local_addr().expect("address");
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
@@ -71,12 +70,17 @@ async fn sends_routing_tags_in_the_notification_request() {
         .send(&Notification {
             title: "Workflow failed".to_owned(),
             body: "Build".to_owned(),
-            severity: NotificationSeverity::Failure,
+            severity,
         })
         .await;
     server.abort();
     result.expect("notification sent");
-    let payload = receiver.try_recv().expect("captured request");
+    receiver.try_recv().expect("captured request")
+}
+
+#[tokio::test]
+async fn sends_routing_tags_in_the_notification_request() {
+    let payload = captured_payload(NotificationSeverity::Failure).await;
     assert_eq!(
         payload,
         json!({
@@ -87,4 +91,11 @@ async fn sends_routing_tags_in_the_notification_request() {
             "tag": ["opsscope", "alerts"]
         })
     );
+}
+
+#[tokio::test]
+async fn work_item_notifications_are_informational_and_keep_routing_tags() {
+    let payload = captured_payload(NotificationSeverity::Info).await;
+    assert_eq!(payload["type"], "info");
+    assert_eq!(payload["tag"], json!(["opsscope", "alerts"]));
 }

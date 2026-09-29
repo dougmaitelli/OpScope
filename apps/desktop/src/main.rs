@@ -34,11 +34,16 @@ fn main() {
             let database = Arc::new(SqliteDatabase::open(data_dir.join("opsscope.sqlite3"))?);
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
-            let failure_notifications = NotifyRepositoryFailures::new(
+            let notification_sink = Arc::new(DesktopNotificationSink::new(app.handle().clone()));
+            let work_item_notifications = Some(opsscope_core::application::NotifyWorkItems::new(
                 database.clone(),
-                Arc::new(DesktopNotificationSink::new(app.handle().clone())),
-            )
-            .with_settings(database.clone());
+                database.clone(),
+                database.clone(),
+                notification_sink.clone(),
+            ));
+            let failure_notifications =
+                NotifyRepositoryFailures::new(database.clone(), notification_sink)
+                    .with_settings(database.clone());
             let state = DesktopState::new(DesktopStateDependencies {
                 sources,
                 connections: database.clone(),
@@ -48,6 +53,7 @@ fn main() {
                 settings: database.clone(),
                 activity_events: database,
                 failure_notifications,
+                work_item_notifications,
             });
             let scheduler = SynchronizationScheduler::start(
                 state.synchronize_sources.clone(),

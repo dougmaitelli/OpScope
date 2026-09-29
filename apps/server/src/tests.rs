@@ -453,6 +453,12 @@ fn test_dependencies(
         settings: Arc::new(database.clone()),
         activity_events: Arc::new(database.clone()),
         failure_notifications: test_failure_notifications(database),
+        work_item_notifications: Some(opsscope_core::application::NotifyWorkItems::new(
+            Arc::new(database.clone()),
+            Arc::new(database.clone()),
+            Arc::new(database.clone()),
+            Arc::new(opsscope_core::application::NoopNotificationSink),
+        )),
         authentication,
     }
 }
@@ -686,6 +692,8 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let decoded: MonitoringSettingsResponse = serde_json::from_slice(&body)?;
     assert_eq!(decoded.synchronization_interval_seconds, 60);
     assert_eq!(decoded.recent_runs_per_workflow, 10);
+    assert!(decoded.notifications.issue_opened);
+    assert!(decoded.notifications.workflow_failures);
 
     let settings = app
         .clone()
@@ -693,7 +701,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
             authenticated(Request::put(SETTINGS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5}"#,
+                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5,"notifications":{"issueOpened":false,"pullRequestReviewRequested":false}}"#,
                 ))?,
         )
         .await?;
@@ -702,6 +710,14 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     let decoded: MonitoringSettingsResponse = serde_json::from_slice(&body)?;
     assert_eq!(decoded.synchronization_interval_seconds, 120);
     assert_eq!(decoded.recent_runs_per_workflow, 5);
+    assert!(!decoded.notifications.issue_opened);
+    assert!(!decoded.notifications.pull_request_review_requested);
+    assert!(decoded.notifications.workflow_failures);
+    assert!(
+        !opsscope_core::application::SettingsRepository::load_settings(&database)?
+            .notifications
+            .issue_opened
+    );
 
     let synchronization = app
         .clone()

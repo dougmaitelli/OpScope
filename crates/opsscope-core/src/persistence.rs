@@ -1,6 +1,7 @@
 //! SQLite persistence for metadata, source snapshots, and encrypted server-side credentials.
 
 mod source_cache;
+mod work_item_notifications;
 
 use crate::application::{
     ActivityEventRepository, ChangeRequestActivityEvent, ConnectionRepository,
@@ -236,6 +237,14 @@ impl SqliteDatabase {
                    PRIMARY KEY (source_id, repository_id),
                    FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
                  );
+                 CREATE TABLE IF NOT EXISTS work_item_notification_states (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   account_id TEXT NOT NULL,
+                   snapshot TEXT NOT NULL,
+                   PRIMARY KEY (source_id, repository_id, account_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
                  CREATE TABLE IF NOT EXISTS notification_workflow_states (
                    source_id TEXT NOT NULL,
                    repository_id TEXT NOT NULL,
@@ -252,6 +261,11 @@ impl SqliteDatabase {
             )
             .map_err(|_| PersistenceFailure)?;
         for (table, column, declaration) in [
+            (
+                "monitoring_settings",
+                "notifications",
+                "TEXT NOT NULL DEFAULT '{}'",
+            ),
             (
                 "monitoring_settings",
                 "only_my_work",
@@ -612,10 +626,10 @@ impl RepositorySelectionRepository for SqliteDatabase {
 
 impl SettingsRepository for SqliteDatabase {
     fn load_settings(&self) -> Result<MonitoringSettings, PersistenceFailure> {
-        let (synchronization_interval_seconds, recent_runs_per_workflow, only_my_work) = self
+        let (synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications) = self
             .lock()?
             .query_row(
-                "SELECT synchronization_interval_seconds, recent_runs_per_workflow, only_my_work
+                "SELECT synchronization_interval_seconds, recent_runs_per_workflow, only_my_work, notifications
                  FROM monitoring_settings WHERE id = 1",
                 [],
                 |row| {
@@ -623,11 +637,13 @@ impl SettingsRepository for SqliteDatabase {
                         row.get::<_, i64>(0)?,
                         row.get::<_, i64>(1)?,
                         row.get::<_, bool>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 },
             )
             .map_err(|_| PersistenceFailure)?;
         Ok(MonitoringSettings {
+            notifications: serde_json::from_str(&notifications).map_err(|_| PersistenceFailure)?,
             only_my_work,
             synchronization_interval_seconds: synchronization_interval_seconds
                 .try_into()
@@ -652,12 +668,15 @@ impl SettingsRepository for SqliteDatabase {
                 "UPDATE monitoring_settings SET
                    synchronization_interval_seconds = ?1,
                    recent_runs_per_workflow = ?2,
-                   only_my_work = ?3
+                   only_my_work = ?3,
+                   notifications = ?4
                  WHERE id = 1",
                 params![
                     synchronization_interval_seconds,
                     recent_runs_per_workflow,
-                    settings.only_my_work
+                    settings.only_my_work,
+                    serde_json::to_string(&settings.notifications)
+                        .map_err(|_| PersistenceFailure)?
                 ],
             )
             .map(|_| ())

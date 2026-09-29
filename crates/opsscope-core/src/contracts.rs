@@ -3,6 +3,8 @@
 mod activity;
 mod change_requests;
 mod issues;
+mod notification_preferences;
+pub use notification_preferences::NotificationPreferencesContract;
 mod repositories;
 mod sources;
 mod workflows;
@@ -155,6 +157,7 @@ pub struct SynchronizationStatusResponse {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitoringSettingsResponse {
+    pub notifications: NotificationPreferencesContract,
     pub only_my_work: bool,
     #[ts(type = "number")]
     pub synchronization_interval_seconds: u64,
@@ -164,6 +167,7 @@ pub struct MonitoringSettingsResponse {
 impl From<MonitoringSettings> for MonitoringSettingsResponse {
     fn from(settings: MonitoringSettings) -> Self {
         Self {
+            notifications: settings.notifications.into(),
             only_my_work: settings.only_my_work,
             synchronization_interval_seconds: settings.synchronization_interval_seconds,
             recent_runs_per_workflow: settings.recent_runs_per_workflow,
@@ -175,6 +179,8 @@ impl From<MonitoringSettings> for MonitoringSettingsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMonitoringSettingsRequest {
     #[serde(default)]
+    pub notifications: NotificationPreferencesContract,
+    #[serde(default)]
     pub only_my_work: bool,
     #[ts(type = "number")]
     pub synchronization_interval_seconds: u64,
@@ -184,6 +190,7 @@ pub struct UpdateMonitoringSettingsRequest {
 impl From<UpdateMonitoringSettingsRequest> for MonitoringSettings {
     fn from(request: UpdateMonitoringSettingsRequest) -> Self {
         Self {
+            notifications: request.notifications.into(),
             only_my_work: request.only_my_work,
             synchronization_interval_seconds: request.synchronization_interval_seconds,
             recent_runs_per_workflow: request.recent_runs_per_workflow,
@@ -343,6 +350,7 @@ pub fn render_typescript_contract() -> String {
         SynchronizationResponse::decl(&config),
         SynchronizationStatusResponse::decl(&config),
         MonitoringSettingsResponse::decl(&config),
+        NotificationPreferencesContract::decl(&config),
         UpdateMonitoringSettingsRequest::decl(&config),
         MonitoringSettingsErrorResponse::decl(&config),
         RepositorySelectionSourceRequest::decl(&config),

@@ -230,6 +230,11 @@ fn monitoring_settings_have_defaults_and_persist_updates() -> Result<(), Box<dyn
     );
 
     let updated = MonitoringSettings {
+        notifications: crate::application::NotificationPreferences {
+            issue_closed: false,
+            pull_request_opened: false,
+            ..Default::default()
+        },
         only_my_work: true,
         synchronization_interval_seconds: 120,
         recent_runs_per_workflow: 25,
@@ -253,6 +258,10 @@ fn legacy_monitoring_settings_keep_values_and_default_to_all_work()
     let database = SqliteDatabase::open(&path)?;
     let settings = database.load_settings()?;
     assert!(!settings.only_my_work);
+    assert_eq!(
+        settings.notifications,
+        crate::application::NotificationPreferences::default()
+    );
     assert_eq!(settings.synchronization_interval_seconds, 120);
     assert_eq!(settings.recent_runs_per_workflow, 25);
     drop(database);

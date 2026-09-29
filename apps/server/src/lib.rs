@@ -46,6 +46,7 @@ pub struct ServerDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
+    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
     pub authentication: WebAuthentication,
 }
 
@@ -59,6 +60,7 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
         settings,
         activity_events,
         failure_notifications,
+        work_item_notifications,
         authentication,
     } = dependencies;
     let state = AppState::new(AppStateDependencies {
@@ -70,6 +72,7 @@ pub fn application(dependencies: ServerDependencies) -> ServerApplication {
         settings,
         activity_events,
         failure_notifications,
+        work_item_notifications,
     });
     let synchronizer = state.synchronizer();
     let settings = state.settings_reader();

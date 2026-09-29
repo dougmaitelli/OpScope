@@ -31,6 +31,50 @@ struct RecordingSink(Mutex<Vec<Notification>>);
 
 struct PersonalSettings(Mutex<bool>);
 
+#[tokio::test]
+async fn disabling_workflow_alerts_advances_state_without_replay() {
+    use crate::application::{MonitoringSettings, SettingsRepository};
+    let settings = Arc::new(crate::persistence::SqliteDatabase::in_memory().unwrap());
+    let mut disabled = MonitoringSettings::default();
+    disabled.notifications.workflow_failures = false;
+    settings.save_settings(disabled).unwrap();
+    let sink = Arc::new(RecordingSink::default());
+    let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
+        .with_settings(settings.clone());
+    notifier
+        .observe("source", &repository(), &workflows(), &[])
+        .await
+        .unwrap();
+    let failed = run("workflow-1", "run-1", 1, RunOutcome::Failure);
+    notifier
+        .observe(
+            "source",
+            &repository(),
+            &workflows(),
+            std::slice::from_ref(&failed),
+        )
+        .await
+        .unwrap();
+    settings
+        .save_settings(MonitoringSettings::default())
+        .unwrap();
+    notifier
+        .observe("source", &repository(), &workflows(), &[failed])
+        .await
+        .unwrap();
+    assert!(sink.0.lock().unwrap().is_empty());
+    notifier
+        .observe(
+            "source",
+            &repository(),
+            &workflows(),
+            &[run("workflow-1", "run-2", 2, RunOutcome::Failure)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+}
+
 impl crate::application::SettingsRepository for PersonalSettings {
     fn load_settings(&self) -> Result<crate::application::MonitoringSettings, PersistenceFailure> {
         Ok(crate::application::MonitoringSettings {

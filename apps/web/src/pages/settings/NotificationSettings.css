@@ -1,0 +1,48 @@
+.notification-settings {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-settings h3 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.notification-settings > p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.notification-settings-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.notification-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.notification-settings legend {
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.notification-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 11px;
+}
+
+.notification-settings input {
+  margin: 0;
+  accent-color: var(--accent);
+}

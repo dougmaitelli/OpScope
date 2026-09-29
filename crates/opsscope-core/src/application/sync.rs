@@ -55,6 +55,7 @@ impl SynchronizationSummary {
 
 #[derive(Clone)]
 pub struct SynchronizeSources {
+    work_item_notifications: Option<super::NotifyWorkItems>,
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
     failure_notifications: NotifyRepositoryFailures,
@@ -73,6 +74,7 @@ impl SynchronizeSources {
         change_request_activity: TrackChangeRequestActivity,
     ) -> Self {
         Self {
+            work_item_notifications: None,
             source_data,
             selections,
             failure_notifications,
@@ -91,6 +93,15 @@ impl SynchronizeSources {
             last_completed_at: nonzero_timestamp(last_completed_at),
             last_failed_repository_count: self.last_failed_repository_count.load(Ordering::Relaxed),
         }
+    }
+
+    #[must_use]
+    pub fn with_work_item_notifications(
+        mut self,
+        notifications: Option<super::NotifyWorkItems>,
+    ) -> Self {
+        self.work_item_notifications = notifications;
+        self
     }
 
     pub async fn execute(&self) -> Result<SynchronizationSummary, SynchronizationFailure> {
@@ -149,6 +160,9 @@ impl SynchronizeSources {
                 .into_iter()
                 .filter(|repository| selected_ids.contains(&repository.id))
             {
+                let mut current_pull_requests = None;
+                let mut current_issues = None;
+                let mut item_sync_failed = false;
                 if source
                     .descriptor
                     .supports(super::SourceCapability::ChangeRequests)
@@ -193,20 +207,45 @@ impl SynchronizeSources {
                             &current,
                             &departed,
                         );
+                        let mut observed = current;
+                        observed.extend(departed);
+                        current_pull_requests = Some(observed);
+                    } else {
+                        item_sync_failed = true;
                     }
                 }
-                let mut issue_sync_failed = false;
-                if source.descriptor.supports(super::SourceCapability::Issues)
-                    && let Err(failure) = self
+                if source.descriptor.supports(super::SourceCapability::Issues) {
+                    match self
                         .source_data
                         .issues(&source.id, &repository, RefreshMode::Force)
                         .await
+                    {
+                        Ok(items) => current_issues = items,
+                        Err(failure) => {
+                            eprintln!(
+                                "failed to synchronize issues for {}/{}: {failure}",
+                                repository.owner, repository.name
+                            );
+                            item_sync_failed = true;
+                        }
+                    }
+                }
+                if let Some(notifications) = &self.work_item_notifications
+                    && let Err(failure) = notifications
+                        .observe(
+                            &source.id,
+                            &repository,
+                            self.source_data.as_ref(),
+                            current_pull_requests.as_deref(),
+                            current_issues.as_deref(),
+                        )
+                        .await
                 {
                     eprintln!(
-                        "failed to synchronize issues for {}/{}: {failure}",
+                        "failed to process notifications for {}/{}: {failure}",
                         repository.owner, repository.name
                     );
-                    issue_sync_failed = true;
+                    item_sync_failed = true;
                 }
                 let workflows = self
                     .source_data
@@ -218,15 +257,22 @@ impl SynchronizeSources {
                     .await;
                 match (workflows, runs) {
                     (Ok(workflows), Ok(runs)) if !runs.stale => {
-                        if issue_sync_failed {
+                        if let Err(failure) = self
+                            .failure_notifications
+                            .observe(&source.id, &repository, &workflows, &runs.runs)
+                            .await
+                        {
+                            eprintln!(
+                                "failed to process workflow notifications for {}/{}: {failure}",
+                                repository.owner, repository.name
+                            );
+                            item_sync_failed = true;
+                        }
+                        if item_sync_failed {
                             summary.failed_repository_count += 1;
                         } else {
                             summary.synchronized_repository_count += 1;
                         }
-                        _ = self
-                            .failure_notifications
-                            .observe(&source.id, &repository, &workflows, &runs.runs)
-                            .await;
                     }
                     _ => summary.failed_repository_count += 1,
                 }

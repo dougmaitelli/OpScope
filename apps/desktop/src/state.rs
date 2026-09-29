@@ -37,6 +37,7 @@ pub(crate) struct DesktopStateDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
+    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
 }
 
 impl DesktopState {
@@ -50,6 +51,7 @@ impl DesktopState {
             settings,
             activity_events,
             failure_notifications,
+            work_item_notifications,
         } = dependencies;
         let source_data = Arc::new(ReadThroughSourceData::cached(
             sources.clone(),
@@ -99,7 +101,8 @@ impl DesktopState {
                 repository_selections.clone(),
                 failure_notifications,
                 TrackChangeRequestActivity::new(activity_events),
-            ),
+            )
+            .with_work_item_notifications(work_item_notifications),
             save_repository_selection: SaveRepositorySelection::new(
                 connections.clone(),
                 repository_selections,

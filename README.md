@@ -33,8 +33,8 @@ information to be added without building a separate application for each.
 - **Activity:** a combined feed of workflow runs and observed PR changes.
 - **Background monitoring:** scheduled and manual refresh, cached results on
   reload, and freshness information when a source is unavailable.
-- **Failure notifications:** native desktop notifications or Apprise delivery
-  from the server, grouped by repository.
+- **Notifications:** workflow failures, PR updates, and issue updates through
+  native desktop notifications or Apprise, with event controls in Settings.
 - **Personal scope:** optionally show only work relevant to each connection's
   token owner, including notification filtering.
 
@@ -197,11 +197,29 @@ Whitespace around tags and empty entries are ignored. When unset or blank,
 OpsScope sends no tag filter, preserving the endpoint's default routing.
 Tags alone do not enable notifications; the endpoint must also be configured.
 
-Notifications consider only the actual latest run of each workflow, not
-historical failures. Initial observation establishes a baseline; subsequent
-new failures are grouped into one notification per repository for that
-observation. Unchanged failures do not repeatedly notify. Personal scope
-also applies to notification eligibility.
+Choose notification events in **Settings → Notifications**:
+
+| Area | Events |
+| --- | --- |
+| Workflows | Actual latest run fails (not historical failures). |
+| Pull requests | New PR, review requested from you, changes requested, merged, or closed. |
+| Issues | New issue, assigned to you, reopened, or closed. |
+
+All event types are enabled by default. “You” is the connection's token owner.
+**Only show my work** applies to every event, including assignment alerts.
+Comments and successful workflow runs do not trigger notifications.
+
+The first successful observation establishes a baseline without notifying about
+existing items. Subsequent changes are grouped per repository: PR and issue
+events share one message with titles and links; workflow failures use a separate
+message. Observations persist across restarts, and disabled or filtered events
+are still recorded so enabling them does not replay old changes.
+
+Polling detects changes observed between refreshes, not every intermediate event.
+Closures require a successful detail lookup; disappearance from an open-items list
+alone is not treated as a closure. Reopens can be identified for issues previously
+observed as closed. Notifications are recorded before delivery to prevent duplicates;
+a failed delivery is logged but not automatically retried.
 
 ### Persistence, backups, and upgrades
 
@@ -239,6 +257,7 @@ Restarting the server also invalidates existing OIDC sessions.
 | Synchronization interval | 60 seconds | Background refresh, configurable from 30 to 3,600 seconds. |
 | Recent runs per workflow | 10 | Recent-run window, configurable from 1 to 100. |
 | Only show my work | Off | Filters monitoring views and notifications using each connection's token owner. |
+| Notification events | All enabled | Individual switches for workflow, PR, and issue notifications. |
 
 Personal scope includes PRs you authored, reviewed, or were asked to review;
 issues you authored, subscribed to, or participated in; and workflow runs

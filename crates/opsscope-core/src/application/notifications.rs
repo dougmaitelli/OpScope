@@ -8,6 +8,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationSeverity {
     Failure,
+    Info,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -69,12 +70,12 @@ pub trait NotificationStateRepository: Send + Sync {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NotifyRepositoryFailuresFailure {
+pub enum NotificationProcessingFailure {
     StorageUnavailable,
     DeliveryUnavailable,
 }
 
-impl Display for NotifyRepositoryFailuresFailure {
+impl Display for NotificationProcessingFailure {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::StorageUnavailable => "notification state storage unavailable",
@@ -83,7 +84,7 @@ impl Display for NotifyRepositoryFailuresFailure {
     }
 }
 
-impl Error for NotifyRepositoryFailuresFailure {}
+impl Error for NotificationProcessingFailure {}
 
 #[derive(Clone)]
 pub struct NotifyRepositoryFailures {
@@ -117,19 +118,19 @@ impl NotifyRepositoryFailures {
         repository: &Repository,
         workflows: &[Workflow],
         runs: &[WorkflowRun],
-    ) -> Result<(), NotifyRepositoryFailuresFailure> {
-        let only_my_work = self
+    ) -> Result<(), NotificationProcessingFailure> {
+        let settings = self
             .settings
             .as_ref()
             .map(|settings| settings.load_settings())
             .transpose()
-            .map_err(|_| NotifyRepositoryFailuresFailure::StorageUnavailable)?
-            .unwrap_or_default()
-            .only_my_work;
+            .map_err(|_| NotificationProcessingFailure::StorageUnavailable)?
+            .unwrap_or_default();
+        let only_my_work = settings.only_my_work;
         let previous = self
             .states
             .load(source_id, &repository.id)
-            .map_err(|_| NotifyRepositoryFailuresFailure::StorageUnavailable)?;
+            .map_err(|_| NotificationProcessingFailure::StorageUnavailable)?;
         let current = latest_states(workflows, runs);
         let newly_failed = previous.as_ref().map(|previous| {
             let previous = previous
@@ -164,16 +165,19 @@ impl NotifyRepositoryFailures {
         // This provides at-most-once behavior if a delivery response is lost.
         self.states
             .replace(source_id, &repository.id, &current)
-            .map_err(|_| NotifyRepositoryFailuresFailure::StorageUnavailable)?;
+            .map_err(|_| NotificationProcessingFailure::StorageUnavailable)?;
 
         let Some(newly_failed) = newly_failed.filter(|failures| !failures.is_empty()) else {
             return Ok(());
         };
+        if !settings.notifications.workflow_failures {
+            return Ok(());
+        }
         let notification = failure_notification(repository, &newly_failed);
         self.sink
             .send(&notification)
             .await
-            .map_err(|_| NotifyRepositoryFailuresFailure::DeliveryUnavailable)
+            .map_err(|_| NotificationProcessingFailure::DeliveryUnavailable)
     }
 }
 

@@ -101,6 +101,7 @@ impl NotificationSink for AppriseNotificationSink {
     async fn send(&self, notification: &Notification) -> Result<(), NotificationDeliveryFailure> {
         let kind = match notification.severity {
             NotificationSeverity::Failure => "failure",
+            NotificationSeverity::Info => "info",
         };
         self.client
             .post(self.endpoint.clone())

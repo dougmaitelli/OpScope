@@ -55,6 +55,7 @@ pub(crate) struct AppStateDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
+    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
 }
 
 impl AppState {
@@ -68,6 +69,7 @@ impl AppState {
             settings,
             activity_events,
             failure_notifications,
+            work_item_notifications,
         } = dependencies;
         let source_data = Arc::new(ReadThroughSourceData::cached(
             registry.clone(),
@@ -117,7 +119,8 @@ impl AppState {
                 repository_selections.clone(),
                 failure_notifications,
                 TrackChangeRequestActivity::new(activity_events),
-            ),
+            )
+            .with_work_item_notifications(work_item_notifications),
             save_repository_selection: SaveRepositorySelection::new(
                 connections.clone(),
                 repository_selections,

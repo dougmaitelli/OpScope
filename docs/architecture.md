@@ -82,6 +82,19 @@ implementations of the notification port deliver native notifications or
 Apprise requests. Initial observations establish a baseline rather than
 alerting on existing failures.
 
+PR and issue notifications have independent, account-scoped SQLite observation
+state, separate from Activity. Successful open-item lists are compared with prior
+observations; missing items require a detail lookup before detecting closure or
+merge. Unresolved items remain eligible for a later lookup. Closed issue state is
+retained to detect subsequent reopens. Failed list fetches do not advance that
+resource kind's baseline.
+
+Settings select individual event types. Observations advance even for disabled
+or personally irrelevant events, and are persisted before delivery for
+at-most-once notification attempts. PR and issue events are grouped per repository
+and delivered as informational messages through the same platform notification
+port. Workflow failure grouping remains separate.
+
 The Activity view combines workflow runs with locally observed PR changes;
 it is not a complete provider audit log.
 

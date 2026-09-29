@@ -32,11 +32,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let master_key = ServerMasterKey::load_or_create(master_key_path)?;
     let secrets = EncryptedSecretStore::new(database.clone(), master_key);
     let database = Arc::new(database);
-    let failure_notifications = NotifyRepositoryFailures::new(
+    let notification_sink = opsscope_server::notifications::notification_sink_from_environment()?;
+    let work_item_notifications = Some(opsscope_core::application::NotifyWorkItems::new(
         database.clone(),
-        opsscope_server::notifications::notification_sink_from_environment()?,
-    )
-    .with_settings(database.clone());
+        database.clone(),
+        database.clone(),
+        notification_sink.clone(),
+    ));
+    let failure_notifications = NotifyRepositoryFailures::new(database.clone(), notification_sink)
+        .with_settings(database.clone());
     let application = opsscope_server::application(opsscope_server::ServerDependencies {
         registry: sources,
         connections: database.clone(),
@@ -46,6 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         settings: database.clone(),
         activity_events: database,
         failure_notifications,
+        work_item_notifications,
         authentication,
     });
     let opsscope_server::ServerApplication {

@@ -6,6 +6,10 @@ mod change_requests;
 mod connections;
 mod issues;
 mod notifications;
+mod work_item_notifications;
+pub use work_item_notifications::{
+    NotifyWorkItems, WorkItemNotificationRepository, WorkItemNotificationState,
+};
 mod run_logs;
 mod settings;
 mod sources;
@@ -19,15 +23,15 @@ pub use repositories::*;
 
 pub use notifications::{
     LatestRunNotificationState, NoopNotificationSink, Notification, NotificationDeliveryFailure,
-    NotificationSeverity, NotificationSink, NotificationStateRepository, NotifyRepositoryFailures,
-    NotifyRepositoryFailuresFailure,
+    NotificationProcessingFailure, NotificationSeverity, NotificationSink,
+    NotificationStateRepository, NotifyRepositoryFailures,
 };
 pub use run_logs::{GetWorkflowRunLogs, ResolvedWorkflowRunLogs};
 pub use settings::{
     DEFAULT_RECENT_RUNS_PER_WORKFLOW, DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS,
     GetMonitoringSettings, MAX_RECENT_RUNS_PER_WORKFLOW, MAX_SYNCHRONIZATION_INTERVAL_SECONDS,
     MIN_RECENT_RUNS_PER_WORKFLOW, MIN_SYNCHRONIZATION_INTERVAL_SECONDS, MonitoringSettings,
-    SettingsFailure, SettingsRepository, UpdateMonitoringSettings,
+    NotificationPreferences, SettingsFailure, SettingsRepository, UpdateMonitoringSettings,
 };
 
 pub use sync::{

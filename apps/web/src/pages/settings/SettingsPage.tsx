@@ -5,6 +5,7 @@ import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { settingsLimits, type MonitoringSettingsResponse } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import "./SettingsPage.css";
+import { NotificationSettings } from "./NotificationSettings.tsx";
 
 export function SettingsPage() {
   const client = useApplicationClient();
@@ -12,6 +13,9 @@ export function SettingsPage() {
   const [synchronizationInterval, setSynchronizationInterval] = useState("");
   const [recentRuns, setRecentRuns] = useState("");
   const [onlyMyWork, setOnlyMyWork] = useState(false);
+  const [notifications, setNotifications] = useState<
+    MonitoringSettingsResponse["notifications"] | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +31,7 @@ export function SettingsPage() {
         setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
         setRecentRuns(String(settings.recentRunsPerWorkflow));
         setOnlyMyWork(settings.onlyMyWork);
+        setNotifications(settings.notifications);
       })
       .catch((failure: unknown) => {
         if (active) setError(requestErrorMessage(failure));
@@ -52,11 +57,12 @@ export function SettingsPage() {
     saved !== null &&
     (synchronizationIntervalValue !== saved.synchronizationIntervalSeconds ||
       recentRunsValue !== saved.recentRunsPerWorkflow ||
-      onlyMyWork !== saved.onlyMyWork);
+      onlyMyWork !== saved.onlyMyWork ||
+      JSON.stringify(notifications) !== JSON.stringify(saved.notifications));
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!valid) return;
+    if (!valid || !notifications) return;
     setSaving(true);
     setError(null);
     setNote(null);
@@ -65,11 +71,13 @@ export function SettingsPage() {
         synchronizationIntervalSeconds: synchronizationIntervalValue,
         recentRunsPerWorkflow: recentRunsValue,
         onlyMyWork,
+        notifications,
       });
       setSaved(settings);
       setSynchronizationInterval(String(settings.synchronizationIntervalSeconds));
       setRecentRuns(String(settings.recentRunsPerWorkflow));
       setOnlyMyWork(settings.onlyMyWork);
+      setNotifications(settings.notifications);
       setNote("Monitoring settings saved.");
     } catch (failure) {
       setError(requestErrorMessage(failure));
@@ -83,6 +91,7 @@ export function SettingsPage() {
     setSynchronizationInterval(String(saved.synchronizationIntervalSeconds));
     setRecentRuns(String(saved.recentRunsPerWorkflow));
     setOnlyMyWork(saved.onlyMyWork);
+    setNotifications(saved.notifications);
     setError(null);
     setNote(null);
   };
@@ -171,6 +180,17 @@ export function SettingsPage() {
               }}
             />
           </label>
+
+          {notifications ? (
+            <NotificationSettings
+              value={notifications}
+              disabled={loading || saving}
+              onChange={(value) => {
+                setNotifications(value);
+                setNote(null);
+              }}
+            />
+          ) : null}
 
           {error ? <p className="settings-message settings-error">{error}</p> : null}
           {note ? <p className="settings-message settings-success">{note}</p> : null}
