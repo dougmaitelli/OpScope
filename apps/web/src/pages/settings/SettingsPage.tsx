@@ -137,7 +137,7 @@ export function SettingsPage() {
           <label className="settings-field">
             <span className="settings-field-title">Recent runs per workflow</span>
             <span className="settings-field-description">
-              Number of runs available from each workflow on the overview screen.
+              Number of runs available from each workflow on the Workflows page.
             </span>
             <span className="settings-number-control">
               <input

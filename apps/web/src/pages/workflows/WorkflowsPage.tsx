@@ -10,7 +10,7 @@ import { WorkflowProjectGroup } from "./WorkflowProjectGroup.tsx";
 import { WorkflowFilters, type WorkflowStatusFilter } from "../../components/WorkflowFilters.tsx";
 import type { ListWorkflowsResponse, WorkflowSummary } from "../../generated/contracts.ts";
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
-import "./OverviewPage.css";
+import "./WorkflowsPage.css";
 
 const SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS = 10_000;
 const WORKFLOW_STATUS_FILTERS = new Set<WorkflowStatusFilter>([
@@ -34,7 +34,7 @@ function workflowMatchesStatus(workflow: WorkflowSummary, status: WorkflowStatus
   return !running && !failing && !successful;
 }
 
-export function OverviewPage() {
+export function WorkflowsPage() {
   const client = useApplicationClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
@@ -197,10 +197,10 @@ export function OverviewPage() {
   };
 
   return (
-    <section className="page-view" aria-labelledby="overview-title">
+    <section className="page-view" aria-label="Workflows">
       <PageHeader
         eyebrow="Monitored repositories"
-        title="Overview"
+        title="Workflows"
         description="Workflows discovered across your selected repositories."
         actions={
           <button
@@ -297,7 +297,7 @@ export function OverviewPage() {
         </div>
       ) : null}
 
-      <div className="overview-content">
+      <div className="workflows-content">
         <section className="panel workflows-panel" aria-labelledby="workflows-heading">
           <PanelHeader
             label="Workflows"

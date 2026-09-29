@@ -3,7 +3,7 @@ import { AppShell } from "./components/AppShell.tsx";
 import { ActivityPage } from "./pages/activity/ActivityPage.tsx";
 import { ConnectionsPage } from "./pages/connections/ConnectionsPage.tsx";
 import { ChangeRequestsPage } from "./pages/change-requests/ChangeRequestsPage.tsx";
-import { OverviewPage } from "./pages/overview/OverviewPage.tsx";
+import { WorkflowsPage } from "./pages/workflows/WorkflowsPage.tsx";
 import { IssuesPage } from "./pages/issues/IssuesPage.tsx";
 import { RepositoriesPage } from "./pages/repositories/RepositoriesPage.tsx";
 import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
@@ -12,7 +12,7 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<OverviewPage />} />
+        <Route index element={<WorkflowsPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="pull-requests" element={<ChangeRequestsPage />} />
         <Route path="issues" element={<IssuesPage />} />

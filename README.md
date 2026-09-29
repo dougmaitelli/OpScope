@@ -96,7 +96,7 @@ unauthenticated instance to an untrusted network.
    token. Keep `https://github.com` or enter your GitHub Enterprise Server
    origin, such as `https://github.example.com`.
 2. In **Repositories**, select the repositories to monitor.
-3. Open **Overview**, **Pull requests**, **Issues**, or **Activity**. Use Refresh
+3. Open **Workflows**, **Pull requests**, **Issues**, or **Activity**. Use Refresh
    for an immediate update; synchronization also runs in the background.
 4. Adjust refresh frequency, history, or personal scope in **Settings**.
 

@@ -7,7 +7,7 @@ import "./AppShell.css";
 import { PersonalScopeNotice } from "./PersonalScopeNotice.tsx";
 
 const pageTitles: Record<string, string> = {
-  "/": "Overview",
+  "/": "Workflows",
   "/activity": "Activity",
   "/pull-requests": "Pull requests",
   "/issues": "Issues",
@@ -23,7 +23,7 @@ export function AppShell() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusResponse | null>(null);
 
   useEffect(() => {
-    document.title = `${pageTitles[location.pathname] ?? "Overview"} · OpsScope`;
+    document.title = `${pageTitles[location.pathname] ?? "Workflows"} · OpsScope`;
   }, [location.pathname]);
 
   useEffect(() => {
@@ -53,9 +53,9 @@ export function AppShell() {
         <nav aria-label="Primary navigation">
           <NavLink className={navClass} to="/" end>
             <span className="nav-symbol" aria-hidden="true">
-              O
+              W
             </span>
-            Overview
+            Workflows
           </NavLink>
           <NavLink className={navClass} to="/activity">
             <span className="nav-symbol" aria-hidden="true">
