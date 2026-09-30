@@ -99,6 +99,40 @@ describe("provider actions", () => {
     expect(screen.getByText("Resolve conflicts first.")).toBeInTheDocument();
   });
 
+  it("keeps buttons together and groups shared disabled explanations outside the button row", async () => {
+    const reason = "GitHub is still checking mergeability. Reload actions shortly.";
+    client.actionOptions.mockResolvedValue({
+      revision: "head-sha",
+      actions: [
+        { ...options.actions[0], disabledReason: reason },
+        {
+          ...options.actions[0],
+          action: "mergeChangeRequest",
+          label: "Merge PR",
+          disabledReason: reason,
+        },
+        {
+          ...options.actions[0],
+          action: "dependabotRebase",
+          label: "Rebase",
+          disabledReason: null,
+        },
+      ],
+    });
+    render(<SourceActions {...props} />);
+    const update = await screen.findByRole("button", { name: "Update branch" });
+    const merge = screen.getByRole("button", { name: "Merge PR" });
+    const rebase = screen.getByRole("button", { name: "Rebase" });
+    expect(update.parentElement).toHaveClass("source-actions-buttons");
+    expect(update.nextElementSibling).toBe(merge);
+    expect(merge.nextElementSibling).toBe(rebase);
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    expect(update.parentElement).not.toContainElement(screen.getByText(reason));
+    expect(update).toHaveAccessibleDescription(`Update branch, Merge PR: ${reason}`);
+    expect(merge).toHaveAccessibleDescription(`Update branch, Merge PR: ${reason}`);
+    expect(rebase).toBeEnabled();
+  });
+
   it("reports a failed mutation and checks actions again when reopened", async () => {
     client.executeAction.mockRejectedValue({
       message: "The provider did not confirm the result. Check before retrying.",

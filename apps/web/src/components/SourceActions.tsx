@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useApplicationClient } from "../api/application-client.tsx";
 import type {
   ActionOptions,
@@ -29,6 +29,14 @@ export function SourceActions({
   const [accepted, setAccepted] = useState(false);
   const submitting = useRef(false);
   const targetKey = JSON.stringify(target);
+  const descriptionId = useId();
+  const disabledReasons = [
+    ...new Set(
+      (options?.actions ?? []).flatMap((option) =>
+        option.disabledReason ? [option.disabledReason] : [],
+      ),
+    ),
+  ];
 
   useEffect(() => {
     let active = true;
@@ -83,25 +91,46 @@ export function SourceActions({
     <section className="source-actions" aria-label="Provider actions" aria-busy={loading || busy}>
       {loading ? <span>Checking available actions…</span> : null}
       {!loading && !selected && !accepted ? (
-        <div className="source-actions-buttons">
-          {options?.actions.map((option) => (
-            <span key={option.action}>
+        <>
+          <div className="source-actions-buttons">
+            {options?.actions.map((option) => (
               <button
+                key={option.action}
                 type="button"
                 className="secondary-button compact-button"
                 disabled={busy || option.disabledReason !== null}
                 title={option.disabledReason ?? option.confirmation}
+                aria-describedby={
+                  option.disabledReason
+                    ? `${descriptionId}-${disabledReasons.indexOf(option.disabledReason)}`
+                    : undefined
+                }
                 onClick={() => setSelected(option)}
               >
                 {option.label}
               </button>
-              {option.disabledReason ? <small>{option.disabledReason}</small> : null}
-            </span>
-          ))}
-          {options?.actions.length === 0 ? (
-            <span>No supported actions for this resource.</span>
+            ))}
+            {options?.actions.length === 0 ? (
+              <span>No supported actions for this resource.</span>
+            ) : null}
+          </div>
+          {disabledReasons.length > 0 ? (
+            <div className="source-actions-notes">
+              {disabledReasons.map((reason, index) => (
+                <p className="source-actions-note" id={`${descriptionId}-${index}`} key={reason}>
+                  <strong>
+                    {options?.actions
+                      .filter((option) => option.disabledReason === reason)
+                      .map((option) => option.label)
+                      .join(", ")}
+                    :{" "}
+                  </strong>{" "}
+                  <span>{reason}</span>
+                </p>
+              ))}
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
       {selected ? (
         <div className="source-actions-confirmation">
