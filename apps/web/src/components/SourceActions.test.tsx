@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceActions } from "./SourceActions";
@@ -67,6 +67,11 @@ describe("provider actions", () => {
     render(<SourceActions {...props} onAccepted={onAccepted} />);
     await user.click(await screen.findByRole("button", { name: "Update branch" }));
     expect(client.executeAction).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "Confirm action" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(confirm.parentElement).toHaveClass("source-actions-confirmation-buttons");
+    expect(confirm.nextElementSibling).toBe(cancel);
+    expect(cancel).toHaveClass("danger-button", "compact-button");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(client.executeAction).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Update branch" }));
@@ -94,19 +99,21 @@ describe("provider actions", () => {
     expect(screen.getByText("Resolve conflicts first.")).toBeInTheDocument();
   });
 
-  it("reports a failed mutation and requires reloading before a retry", async () => {
+  it("reports a failed mutation and checks actions again when reopened", async () => {
     client.executeAction.mockRejectedValue({
       message: "The provider did not confirm the result. Check before retrying.",
     });
     const user = userEvent.setup();
-    render(<SourceActions {...props} />);
+    const { unmount } = render(<SourceActions {...props} />);
     await user.click(await screen.findByRole("button", { name: "Update branch" }));
     await user.click(screen.getByRole("button", { name: "Confirm action" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Check before retrying");
     expect(screen.queryByRole("button", { name: "Update branch" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reload actions" }));
-    await waitFor(() => expect(client.actionOptions).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Reload actions" })).not.toBeInTheDocument();
+    unmount();
+    render(<SourceActions {...props} />);
     expect(await screen.findByRole("button", { name: "Update branch" })).toBeEnabled();
+    expect(client.actionOptions).toHaveBeenCalledTimes(2);
     expect(client.executeAction).toHaveBeenCalledTimes(1);
   });
 
@@ -114,6 +121,7 @@ describe("provider actions", () => {
     client.actionOptions.mockResolvedValue({ actions: [], revision: null });
     render(<SourceActions {...props} />);
     expect(await screen.findByText("No supported actions for this resource.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload actions" })).not.toBeInTheDocument();
     expect(client.executeAction).not.toHaveBeenCalled();
   });
 });

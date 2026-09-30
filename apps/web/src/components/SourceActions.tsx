@@ -27,7 +27,6 @@ export function SourceActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
-  const [reload, setReload] = useState(0);
   const submitting = useRef(false);
   const targetKey = JSON.stringify(target);
 
@@ -52,7 +51,7 @@ export function SourceActions({
     return () => {
       active = false;
     };
-  }, [client, sourceId, repositoryId, targetKey, reload]);
+  }, [client, sourceId, repositoryId, targetKey]);
 
   async function execute() {
     if (!selected || !options || submitting.current) return;
@@ -107,25 +106,27 @@ export function SourceActions({
       {selected ? (
         <div className="source-actions-confirmation">
           <p>{selected.confirmation}</p>
-          <button
-            type="button"
-            className="primary-button compact-button"
-            disabled={busy}
-            aria-busy={busy}
-            onClick={() => {
-              void execute();
-            }}
-          >
-            {busy ? "Sending…" : "Confirm action"}
-          </button>
-          <button
-            type="button"
-            className="secondary-button compact-button"
-            disabled={busy}
-            onClick={() => setSelected(null)}
-          >
-            Cancel
-          </button>
+          <div className="source-actions-confirmation-buttons">
+            <button
+              type="button"
+              className="primary-button compact-button"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() => {
+                void execute();
+              }}
+            >
+              {busy ? "Sending…" : "Confirm action"}
+            </button>
+            <button
+              type="button"
+              className="danger-button compact-button"
+              disabled={busy}
+              onClick={() => setSelected(null)}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : null}
       {error ? (
@@ -139,15 +140,6 @@ export function SourceActions({
           Request accepted by the provider. Completion may take a moment; subsequent synchronization
           will pick up the result.
         </p>
-      ) : null}
-      {!loading && !busy && !selected ? (
-        <button
-          type="button"
-          className="secondary-button compact-button"
-          onClick={() => setReload((value) => value + 1)}
-        >
-          Reload actions
-        </button>
       ) : null}
     </section>
   );

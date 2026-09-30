@@ -30,6 +30,13 @@
 .source-actions [role="alert"] {
   color: var(--danger);
 }
-.source-actions-confirmation button + button {
-  margin-left: 6px;
+.source-actions-confirmation-buttons {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+}
+.source-actions-confirmation-buttons > button {
+  width: auto;
+  margin: 0;
 }
