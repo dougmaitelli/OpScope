@@ -45,6 +45,7 @@ pub(super) fn relevance_run(sha: &str) -> crate::domain::WorkflowRun {
 }
 
 pub(super) struct Exchange {
+    pub method: String,
     pub request_body: Option<serde_json::Value>,
     pub path: String,
     pub authorization: String,
@@ -66,6 +67,7 @@ impl Exchange {
         // of production query builders and insignificant query whitespace.
         exchange.request_body =
             Some(serde_json::json!({"variables": variables, "query_fragments": query_fragments}));
+        exchange.method = "POST".into();
         exchange
     }
 
@@ -77,6 +79,7 @@ impl Exchange {
 
     pub fn json(path: &str, authorization: &str, body: serde_json::Value) -> Self {
         Self {
+            method: "GET".into(),
             request_body: None,
             path: path.into(),
             authorization: authorization.into(),
@@ -136,15 +139,7 @@ impl MockApi {
                 let request = String::from_utf8(request).unwrap();
                 assert_eq!(
                     request.lines().next().unwrap(),
-                    format!(
-                        "{} {} HTTP/1.1",
-                        if exchange.request_body.is_some() {
-                            "POST"
-                        } else {
-                            "GET"
-                        },
-                        exchange.path
-                    )
+                    format!("{} {} HTTP/1.1", exchange.method, exchange.path)
                 );
                 assert!(
                     request
@@ -164,13 +159,17 @@ impl MockApi {
                     let mut body = vec![0; length];
                     stream.read_exact(&mut body).unwrap();
                     let actual: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                    assert_eq!(actual["variables"], expected["variables"]);
-                    let query = actual["query"].as_str().expect("GraphQL query");
-                    for fragment in expected["query_fragments"].as_array().unwrap() {
-                        assert!(
-                            query.contains(fragment.as_str().unwrap()),
-                            "missing GraphQL selection: {fragment}"
-                        );
+                    if let Some(fragments) = expected["query_fragments"].as_array() {
+                        assert_eq!(actual["variables"], expected["variables"]);
+                        let query = actual["query"].as_str().expect("GraphQL query");
+                        for fragment in fragments {
+                            assert!(
+                                query.contains(fragment.as_str().unwrap()),
+                                "missing GraphQL selection: {fragment}"
+                            );
+                        }
+                    } else {
+                        assert_eq!(&actual, expected);
                     }
                 }
                 write!(

@@ -8,6 +8,7 @@ import type {
 import { requestErrorMessage } from "../shared/errors.ts";
 import { DialogCloseButton } from "./DialogCloseButton.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
+import { SourceActions } from "./SourceActions.tsx";
 import "./WorkflowRunLogsDialog.css";
 
 export interface WorkflowRunReference {
@@ -144,13 +145,19 @@ export function WorkflowRunLogsDialog({
         </div>
       </header>
 
-      {truncated ? (
-        <p className="run-logs-notice">
-          This log bundle was shortened to keep the viewer responsive. Open it in {sourceName} for
-          the complete output.
-        </p>
-      ) : null}
-
+      <div>
+        <SourceActions
+          sourceId={workflow?.sourceId ?? reference?.sourceId ?? ""}
+          repositoryId={workflow?.repositoryId ?? reference?.repositoryId ?? ""}
+          target={{ type: "workflowRun", runId: run?.id ?? reference?.runId ?? "" }}
+        />
+        {truncated ? (
+          <p className="run-logs-notice">
+            This log bundle was shortened to keep the viewer responsive. Open it in {sourceName} for
+            the complete output.
+          </p>
+        ) : null}
+      </div>
       <div className="run-logs-content" aria-busy={loading}>
         {loading ? <p className="run-logs-message">Loading run logs…</p> : null}
         {error ? (

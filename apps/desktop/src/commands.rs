@@ -1,16 +1,51 @@
 use crate::state::DesktopState;
 use opsscope_core::contracts::{
-    ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
-    ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, IssueDetailsErrorResponse,
-    IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse, ListChangeRequestsResponse,
-    ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
-    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
-    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    ActionErrorResponse, ActionOptions, ActionOptionsRequest, ChangeRequestDetailsErrorResponse,
+    ChangeRequestDetailsRequest, ChangeRequestDetailsResponse, ConnectSourceRequest,
+    ConnectionSummary, ConnectionValidationErrorResponse, DisconnectSourceRequest,
+    DisconnectSourceResponse, ExecuteActionRequest, ExecuteActionResponse, HealthResponse,
+    IssueDetailsErrorResponse, IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse,
+    ListChangeRequestsResponse, ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
+    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
+
+#[tauri::command]
+pub(crate) async fn action_options(
+    state: State<'_, DesktopState>,
+    request: ActionOptionsRequest,
+) -> Result<ActionOptions, ActionErrorResponse> {
+    state
+        .source_actions
+        .options(&request.source_id, &request.repository_id, &request.target)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub(crate) async fn execute_action(
+    state: State<'_, DesktopState>,
+    request: ExecuteActionRequest,
+) -> Result<ExecuteActionResponse, ActionErrorResponse> {
+    state
+        .source_actions
+        .execute(
+            &request.source_id,
+            &request.repository_id,
+            &request.target,
+            request.action,
+            request.revision.as_deref(),
+        )
+        .await
+        .map(|()| ExecuteActionResponse {
+            accepted: true,
+        })
+        .map_err(Into::into)
+}
 
 #[tauri::command]
 pub(crate) fn health() -> HealthResponse {

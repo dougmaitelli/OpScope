@@ -1,4 +1,5 @@
 //! Small transport helpers; provider routes and response models stay in their modules.
+pub(crate) mod actions;
 
 use super::SERVER_URL_KEY;
 use crate::application::{

@@ -4,6 +4,7 @@ import { StatusPill } from "../../components/StatusPill.tsx";
 import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
 import { MarkdownContent } from "../../components/MarkdownContent.tsx";
+import { SourceActions } from "../../components/SourceActions.tsx";
 import {
   WorkflowRunLogsDialog,
   type WorkflowRunReference,
@@ -33,6 +34,7 @@ export function ChangeRequestDetailsDialog({
   const [details, setDetails] = useState<ChangeRequestDetailsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionRevision, setActionRevision] = useState(0);
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [selectedRun, setSelectedRun] = useState<{
     workflow: WorkflowSummary;
@@ -65,7 +67,13 @@ export function ChangeRequestDetailsDialog({
     return () => {
       active = false;
     };
-  }, [changeRequest.number, changeRequest.repositoryId, changeRequest.sourceId, client]);
+  }, [
+    changeRequest.number,
+    changeRequest.repositoryId,
+    changeRequest.sourceId,
+    client,
+    actionRevision,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -144,6 +152,12 @@ export function ChangeRequestDetailsDialog({
             />
           </div>
         </header>
+        <SourceActions
+          sourceId={changeRequest.sourceId}
+          repositoryId={changeRequest.repositoryId}
+          target={{ type: "changeRequest", number: changeRequest.number }}
+          onAccepted={() => setActionRevision((value) => value + 1)}
+        />
         <div className="change-request-dialog-statuses">
           <StatusPill tone={changeRequestStatusTone[changeRequest.reviewStatus]}>
             Review · {statusLabel(changeRequest.reviewStatus)}

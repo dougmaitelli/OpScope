@@ -3,6 +3,10 @@ import {
   desktopCommands,
   httpRoutes,
   type ApplicationClient,
+  type ActionOptions,
+  type ActionOptionsRequest,
+  type ExecuteActionRequest,
+  type ExecuteActionResponse,
   type ChangeRequestDetailsRequest,
   type ChangeRequestDetailsResponse,
   type ConnectionSummary,
@@ -31,6 +35,13 @@ import {
 } from "./generated/contracts.ts";
 
 export class DesktopClient implements ApplicationClient {
+  actionOptions(request: ActionOptionsRequest): Promise<ActionOptions> {
+    return invoke<ActionOptions>(desktopCommands.actionOptions, { request });
+  }
+
+  executeAction(request: ExecuteActionRequest): Promise<ExecuteActionResponse> {
+    return invoke<ExecuteActionResponse>(desktopCommands.executeAction, { request });
+  }
   health(): Promise<HealthResponse> {
     return invoke<HealthResponse>(desktopCommands.health);
   }
@@ -111,6 +122,13 @@ export class DesktopClient implements ApplicationClient {
 }
 
 export class HttpClient implements ApplicationClient {
+  actionOptions(request: ActionOptionsRequest): Promise<ActionOptions> {
+    return this.post<ActionOptions>(httpRoutes.actionOptions, request);
+  }
+
+  executeAction(request: ExecuteActionRequest): Promise<ExecuteActionResponse> {
+    return this.post<ExecuteActionResponse>(httpRoutes.executeAction, request);
+  }
   private csrfToken: string | null = null;
   private readonly fetcher: typeof fetch;
 

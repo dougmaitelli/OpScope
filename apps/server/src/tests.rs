@@ -973,6 +973,14 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
         (Method::GET, CHANGE_REQUESTS_HTTP_PATH),
         (Method::POST, CHANGE_REQUEST_DETAILS_HTTP_PATH),
         (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),
+        (
+            Method::POST,
+            opsscope_core::contracts::ACTION_OPTIONS_HTTP_PATH,
+        ),
+        (
+            Method::POST,
+            opsscope_core::contracts::EXECUTE_ACTION_HTTP_PATH,
+        ),
         (Method::GET, SETTINGS_HTTP_PATH),
         (Method::PUT, SETTINGS_HTTP_PATH),
         (Method::GET, ISSUES_HTTP_PATH),
@@ -1001,6 +1009,19 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
             "unauthenticated"
         );
     }
+
+    let missing_csrf = app
+        .clone()
+        .oneshot(
+            authenticated(
+                Request::post(opsscope_core::contracts::EXECUTE_ACTION_HTTP_PATH),
+                &session,
+                false,
+            )
+            .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
 
     let missing_csrf = app
         .clone()

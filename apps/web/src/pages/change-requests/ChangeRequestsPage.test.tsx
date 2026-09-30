@@ -8,6 +8,7 @@ const client = vi.hoisted(() => ({
   listChangeRequests: vi.fn(),
   changeRequestDetails: vi.fn(),
   listWorkflows: vi.fn(),
+  actionOptions: vi.fn().mockResolvedValue({ actions: [], revision: null }),
 }));
 vi.mock("../../api/application-client.tsx", () => ({
   useApplicationClient: () => client,

@@ -8,10 +8,10 @@ mod state;
 mod tray;
 
 use crate::commands::{
-    change_request_details, connect_source, disconnect_source, get_settings, health, issue_details,
-    list_activity, list_change_requests, list_issues, list_repositories, list_sources,
-    list_workflows, save_repository_selection, synchronization_status, synchronize_sources,
-    update_settings, update_status, workflow_run_logs,
+    action_options, change_request_details, connect_source, disconnect_source, execute_action,
+    get_settings, health, issue_details, list_activity, list_change_requests, list_issues,
+    list_repositories, list_sources, list_workflows, save_repository_selection,
+    synchronization_status, synchronize_sources, update_settings, update_status, workflow_run_logs,
 };
 use crate::keyring::KeyringSecretStore;
 use crate::notifications::DesktopNotificationSink;
@@ -64,6 +64,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            action_options,
+            execute_action,
             health,
             update_status,
             list_workflows,

@@ -1,5 +1,6 @@
 //! Gitea Actions adapter (requires the workflow API available in Gitea 1.26+).
 
+mod actions;
 mod change_requests;
 mod issues;
 mod relationships;
@@ -127,6 +128,29 @@ impl From<Repo> for Repository {
 
 #[async_trait]
 impl SourceModule for GiteaClient {
+    async fn action_options(
+        &self,
+        config: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repo: &Repository,
+        target: &crate::application::ActionTarget,
+    ) -> Result<crate::application::ActionOptions, crate::application::ActionFailure> {
+        self.actions(config, token, repo, target).await
+    }
+
+    async fn execute_action(
+        &self,
+        config: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repo: &Repository,
+        target: &crate::application::ActionTarget,
+        action: crate::application::SourceAction,
+        revision: Option<&str>,
+    ) -> Result<(), crate::application::ActionFailure> {
+        self.perform_action(config, token, repo, target, action, revision)
+            .await
+    }
+
     fn descriptor(&self) -> SourceDescriptor {
         SourceDescriptor {
             id: "gitea".into(),

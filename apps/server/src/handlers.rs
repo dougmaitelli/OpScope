@@ -9,25 +9,28 @@ use opsscope_core::application::{
     ListIssuesFailure, ListRepositories, ListRepositoriesFailure, ListSources, ListWorkflows,
     ListWorkflowsFailure, NotifyRepositoryFailures, RepositorySelectionRepository,
     SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
-    SettingsRepository, SourceRegistry, SynchronizeSources, TrackChangeRequestActivity,
-    UpdateMonitoringSettings, WorkflowRunLogsFailure,
+    SettingsRepository, SourceActions, SourceRegistry, SynchronizeSources,
+    TrackChangeRequestActivity, UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
-    ChangeRequestDetailsErrorResponse, ChangeRequestDetailsRequest, ChangeRequestDetailsResponse,
-    ConnectSourceRequest, ConnectionSummary, ConnectionValidationErrorResponse,
-    DisconnectSourceRequest, DisconnectSourceResponse, HealthResponse, IssueDetailsErrorResponse,
-    IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse, ListChangeRequestsResponse,
-    ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse, ListWorkflowsResponse,
-    MonitoringSettingsErrorResponse, MonitoringSettingsResponse, RepositorySelectionErrorResponse,
-    SaveRepositorySelectionRequest, SaveRepositorySelectionResponse, SynchronizationResponse,
-    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
-    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    ActionErrorResponse, ActionOptions, ActionOptionsRequest, ChangeRequestDetailsErrorResponse,
+    ChangeRequestDetailsRequest, ChangeRequestDetailsResponse, ConnectSourceRequest,
+    ConnectionSummary, ConnectionValidationErrorResponse, DisconnectSourceRequest,
+    DisconnectSourceResponse, ExecuteActionRequest, ExecuteActionResponse, HealthResponse,
+    IssueDetailsErrorResponse, IssueDetailsRequest, IssueDetailsResponse, ListActivityResponse,
+    ListChangeRequestsResponse, ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse,
+    ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
+    RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
+    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
+    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
+    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
+    source_actions: SourceActions,
     check_for_updates: CheckForUpdates,
     list_workflows: ListWorkflows,
     list_change_requests: ListChangeRequests,
@@ -82,6 +85,12 @@ impl AppState {
             .with_settings(settings.clone()),
         );
         Self {
+            source_actions: SourceActions::new(
+                registry.clone(),
+                connections.clone(),
+                secrets.clone(),
+                source_data.clone(),
+            ),
             check_for_updates: CheckForUpdates::github(),
             list_workflows: ListWorkflows::new(
                 source_data.clone(),
@@ -141,6 +150,63 @@ impl AppState {
     pub(crate) fn settings_reader(&self) -> GetMonitoringSettings {
         self.get_settings.clone()
     }
+}
+
+pub(crate) async fn action_options(
+    State(state): State<AppState>,
+    Json(request): Json<ActionOptionsRequest>,
+) -> Result<Json<ActionOptions>, (StatusCode, Json<ActionErrorResponse>)> {
+    state
+        .source_actions
+        .options(&request.source_id, &request.repository_id, &request.target)
+        .await
+        .map(Json)
+        .map_err(http_action_error)
+}
+
+pub(crate) async fn execute_action(
+    State(state): State<AppState>,
+    Json(request): Json<ExecuteActionRequest>,
+) -> Result<Json<ExecuteActionResponse>, (StatusCode, Json<ActionErrorResponse>)> {
+    state
+        .source_actions
+        .execute(
+            &request.source_id,
+            &request.repository_id,
+            &request.target,
+            request.action,
+            request.revision.as_deref(),
+        )
+        .await
+        .map(|()| {
+            Json(ExecuteActionResponse {
+                accepted: true,
+            })
+        })
+        .map_err(http_action_error)
+}
+
+fn http_action_error(
+    failure: opsscope_core::application::ActionFailure,
+) -> (StatusCode, Json<ActionErrorResponse>) {
+    use opsscope_core::application::ActionFailure;
+    eprintln!("source action failed: {failure}");
+    let status = match failure {
+        ActionFailure::NotFound => StatusCode::NOT_FOUND,
+        ActionFailure::Unsupported | ActionFailure::Conflict | ActionFailure::Busy => {
+            StatusCode::CONFLICT
+        }
+        ActionFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+        ActionFailure::Source(
+            ConnectionValidationFailure::InvalidCredentials
+            | ConnectionValidationFailure::PermissionDenied,
+        ) => StatusCode::FORBIDDEN,
+        ActionFailure::Source(ConnectionValidationFailure::RateLimited) => {
+            StatusCode::TOO_MANY_REQUESTS
+        }
+        _ => StatusCode::BAD_GATEWAY,
+    };
+    (status, Json(failure.into()))
 }
 
 pub(crate) async fn change_request_details(

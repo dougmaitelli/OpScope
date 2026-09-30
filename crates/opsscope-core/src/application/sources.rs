@@ -163,6 +163,28 @@ impl Error for WorkflowRunLogsFailure {}
 
 #[async_trait]
 pub trait SourceModule: Send + Sync {
+    async fn action_options(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _target: &super::ActionTarget,
+    ) -> Result<super::ActionOptions, super::ActionFailure> {
+        Ok(super::ActionOptions::default())
+    }
+
+    async fn execute_action(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        _target: &super::ActionTarget,
+        _action: super::SourceAction,
+        _revision: Option<&str>,
+    ) -> Result<(), super::ActionFailure> {
+        Err(super::ActionFailure::Unsupported)
+    }
+
     fn descriptor(&self) -> SourceDescriptor;
 
     fn configure(

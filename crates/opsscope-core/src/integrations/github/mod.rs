@@ -9,6 +9,7 @@ use workflows::{GitHubWorkflow, read_log_archive};
 mod repositories;
 #[cfg(test)]
 use repositories::{GitHubRepository, map_available_repositories};
+mod actions;
 mod change_requests;
 #[cfg(test)]
 use change_requests::GitHubChangeRequest;
@@ -224,6 +225,29 @@ fn log_response_failure(response: &reqwest::Response) -> WorkflowRunLogsFailure 
 
 #[async_trait]
 impl SourceModule for GitHubClient {
+    async fn action_options(
+        &self,
+        config: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repo: &Repository,
+        target: &crate::application::ActionTarget,
+    ) -> Result<crate::application::ActionOptions, crate::application::ActionFailure> {
+        self.actions(config, token, repo, target).await
+    }
+
+    async fn execute_action(
+        &self,
+        config: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repo: &Repository,
+        target: &crate::application::ActionTarget,
+        action: crate::application::SourceAction,
+        revision: Option<&str>,
+    ) -> Result<(), crate::application::ActionFailure> {
+        self.perform_action(config, token, repo, target, action, revision)
+            .await
+    }
+
     fn descriptor(&self) -> SourceDescriptor {
         SourceDescriptor {
             id: "github".to_owned(),

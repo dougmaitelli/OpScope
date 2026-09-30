@@ -1,6 +1,8 @@
 //! Application use cases and the ports they require.
 
+mod actions;
 mod activity;
+pub use actions::*;
 mod change_request_details;
 mod change_requests;
 mod connections;

@@ -82,6 +82,22 @@ export type IssueDetailsErrorResponse = { message: string, };
 
 export type WorkflowState = "active" | "disabled";
 
+export type ActionTarget = { "type": "workflowRun", runId: string, } | { "type": "changeRequest", number: number, };
+
+export type SourceAction = "rerunWorkflow" | "updateBranch" | "mergeChangeRequest" | "dependabotRebase" | "dependabotRecreate";
+
+export type AvailableAction = { action: SourceAction, label: string, confirmation: string, disabledReason: string | null, };
+
+export type ActionOptions = { actions: Array<AvailableAction>, revision: string | null, };
+
+export type ActionOptionsRequest = { sourceId: string, repositoryId: string, target: ActionTarget, };
+
+export type ExecuteActionRequest = { sourceId: string, repositoryId: string, target: ActionTarget, action: SourceAction, revision: string | null, };
+
+export type ExecuteActionResponse = { accepted: boolean, };
+
+export type ActionErrorResponse = { code: string, message: string, };
+
 export type RunLifecycle = "queued" | "running" | "completed" | "unknown";
 
 export type RunOutcome = "success" | "warning" | "failure" | "cancelled" | "skipped" | "unknown";
@@ -128,6 +144,8 @@ export const settingsLimits = {
 } as const;
 
 export const httpRoutes = {
+  actionOptions: "/api/action-options",
+  executeAction: "/api/actions",
   health: "/api/health",
   updateStatus: "/api/update-status",
   workflows: "/api/workflows",
@@ -146,6 +164,8 @@ export const httpRoutes = {
 } as const;
 
 export const desktopCommands = {
+  actionOptions: "action_options",
+  executeAction: "execute_action",
   health: "health",
   updateStatus: "update_status",
   listWorkflows: "list_workflows",
@@ -167,6 +187,8 @@ export const desktopCommands = {
 } as const;
 
 export interface ApplicationClient {
+  actionOptions(request: ActionOptionsRequest): Promise<ActionOptions>;
+  executeAction(request: ExecuteActionRequest): Promise<ExecuteActionResponse>;
   health(): Promise<HealthResponse>;
   updateStatus(): Promise<UpdateStatusResponse>;
   listWorkflows(): Promise<ListWorkflowsResponse>;
