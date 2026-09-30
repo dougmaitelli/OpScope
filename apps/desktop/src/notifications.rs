@@ -9,7 +9,9 @@ pub(crate) struct DesktopNotificationSink {
 
 impl DesktopNotificationSink {
     pub(crate) fn new(app: AppHandle) -> Self {
-        Self { app }
+        Self {
+            app,
+        }
     }
 }
 

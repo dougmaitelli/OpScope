@@ -2,6 +2,10 @@
 
 mod relevance;
 pub use relevance::{Relevance, RelevanceReason};
+mod relationships;
+pub use relationships::{
+    AccountEmails, AccountSet, ChangeRequestReference, Relationships, ViewerRelationships,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +61,7 @@ pub enum ChangeRequestMergeStatus {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ChangeRequest {
     #[serde(default)]
-    pub relevance: Relevance,
+    pub relationships: Relationships,
     pub id: String,
     pub number: u64,
     pub title: String,
@@ -117,7 +121,7 @@ pub enum IssueState {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Issue {
     #[serde(default)]
-    pub relevance: Relevance,
+    pub relationships: Relationships,
     pub id: String,
     pub number: u64,
     pub title: String,
@@ -185,7 +189,7 @@ pub enum RunOutcome {
 /// A provider-independent execution of an automation workflow.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkflowRun {
-    pub relevance: Relevance,
+    pub relationships: Relationships,
     pub id: String,
     pub workflow_id: String,
     pub run_number: u64,

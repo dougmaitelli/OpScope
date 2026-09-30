@@ -132,7 +132,10 @@ impl ListWorkflows {
                         .runs
                         .iter()
                         .filter(|run| run.workflow_id == workflow.id)
-                        .filter(|run| !settings.only_my_work || run.relevance.matches())
+                        .filter(|run| {
+                            !settings.only_my_work
+                                || run.relationships.evaluate(&source.account_id).matches()
+                        })
                         .take(recent_runs_per_workflow)
                         .cloned()
                         .collect();

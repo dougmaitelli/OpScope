@@ -48,7 +48,7 @@ fn change_request_activity_is_deduplicated_persisted_and_removed_with_its_source
         repository_owner: "owner".to_owned(),
         repository_name: "project".to_owned(),
         change_request: ChangeRequest {
-            relevance: Default::default(),
+            relationships: Default::default(),
             id: "pr-1".to_owned(),
             number: 1,
             title: "Add activity".to_owned(),

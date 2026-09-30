@@ -449,6 +449,7 @@ impl SourceData for ReadThroughSourceData {
                             ConnectionValidationFailure::UnexpectedResponse,
                         ))?;
                 Ok(ConnectedSource {
+                    account_id: connection.account.external_id.clone(),
                     id: connection.id,
                     descriptor: descriptor.descriptor(),
                     label: connection.label,

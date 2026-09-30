@@ -71,7 +71,9 @@ async fn login_endpoint_returns_retry_after_when_rate_limited() {
     }
     let response = login(
         Extension(authentication),
-        Query(LoginQuery { return_to: None }),
+        Query(LoginQuery {
+            return_to: None,
+        }),
     )
     .await;
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);

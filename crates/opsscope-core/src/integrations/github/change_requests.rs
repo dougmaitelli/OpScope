@@ -1,13 +1,12 @@
 use super::*;
 
 impl GitHubClient {
-    pub(super) fn change_requests_request(
+    pub(super) async fn pull_requests(
         &self,
         configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
-        after: Option<&str>,
-    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
+    ) -> Result<Option<Vec<ChangeRequest>>, ConnectionValidationFailure> {
         const QUERY: &str = r#"
           query OpenChangeRequests($owner: String!, $name: String!, $first: Int!, $after: String) {
             repository(owner: $owner, name: $name) {
@@ -26,94 +25,23 @@ impl GitHubClient {
             }
           }
         "#;
-        Ok(self
-            .client
-            .post(Self::graphql_url(configuration)?)
-            .bearer_auth(token.expose())
-            .header(ACCEPT, ACCEPT_VALUE)
-            .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
-            .json(&serde_json::json!({
-                "query": QUERY,
-                "variables": {
-                    "owner": repository.owner,
-                    "name": repository.name,
-                    "first": CHANGE_REQUESTS_PER_PAGE,
-                    "after": after,
-                }
-            })))
-    }
-
-    pub(super) fn change_request_details_request(
-        &self,
-        configuration: &ConnectionConfiguration,
-        token: &ProviderToken,
-        repository: &Repository,
-        number: u64,
-    ) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
-        const QUERY: &str = r#"
-          query ChangeRequestDetails($owner: String!, $name: String!, $number: Int!) {
-            repository(owner: $owner, name: $name) {
-              pullRequest(number: $number) {
-                id number title state isDraft reviewDecision mergeStateStatus createdAt updatedAt url body
-                author { login }
-                headRefName
-                baseRefName
-                labels(first: 50) { nodes { name } }
-                reviews(first: 100) { nodes { author { login } state submittedAt } }
-                commits(last: 1) {
-                  nodes {
-                    commit {
-                      oid messageHeadline committedDate
-                      author { name user { login } }
-                      statusCheckRollup {
-                        state
-                        contexts(first: 100) {
-                          nodes {
-                            __typename
-                            ... on CheckRun {
-                              name status conclusion detailsUrl
-                              checkSuite { workflowRun { databaseId } }
-                            }
-                            ... on StatusContext { context state targetUrl }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        "#;
-        Ok(self
-            .client
-            .post(Self::graphql_url(configuration)?)
-            .bearer_auth(token.expose())
-            .header(ACCEPT, ACCEPT_VALUE)
-            .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
-            .json(&serde_json::json!({
-                "query": QUERY,
-                "variables": {
-                    "owner": repository.owner,
-                    "name": repository.name,
-                    "number": number,
-                }
-            })))
-    }
-
-    pub(super) async fn fetch_change_requests(
-        &self,
-        configuration: &ConnectionConfiguration,
-        token: &ProviderToken,
-        repository: &Repository,
-    ) -> Result<Option<Vec<ChangeRequest>>, ConnectionValidationFailure> {
         let mut change_requests = Vec::new();
         let mut after = None;
         for _ in 0..MAX_CHANGE_REQUEST_PAGES {
             let response = self
-                .change_requests_request(configuration, token, repository, after.as_deref())?
+                .graphql_request(
+                    configuration,
+                    token,
+                    serde_json::json!({
+                        "query": QUERY,
+                        "variables": {
+                            "owner": repository.owner,
+                            "name": repository.name,
+                            "first": CHANGE_REQUESTS_PER_PAGE,
+                            "after": after,
+                        }
+                    }),
+                )?
                 .send()
                 .await
                 .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -150,9 +78,9 @@ impl GitHubClient {
                     .iter()
                     .map(|item| item.id.clone())
                     .collect::<Vec<_>>();
-                let relevance = relevance::items(self, configuration, token, &ids).await;
+                let relevance = relationships::items(self, configuration, token, &ids).await;
                 for item in &mut change_requests {
-                    item.relevance = relevance.get(&item.id).cloned().unwrap_or_default();
+                    item.relationships = relevance.get(&item.id).cloned().unwrap_or_default();
                 }
                 return Ok(Some(change_requests));
             }
@@ -164,15 +92,61 @@ impl GitHubClient {
         Err(ConnectionValidationFailure::UnexpectedResponse)
     }
 
-    pub(super) async fn fetch_change_request_details(
+    pub(super) async fn pull_details(
         &self,
         configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
         number: u64,
     ) -> Result<Option<ChangeRequestDetails>, ConnectionValidationFailure> {
+        const QUERY: &str = r#"
+          query ChangeRequestDetails($owner: String!, $name: String!, $number: Int!) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                id number title state isDraft reviewDecision mergeStateStatus createdAt updatedAt url body
+                author { login }
+                headRefName
+                baseRefName
+                labels(first: 50) { nodes { name } }
+                reviews(first: 100) { nodes { author { login } state submittedAt } }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      oid messageHeadline committedDate
+                      author { name user { login } }
+                      statusCheckRollup {
+                        state
+                        contexts(first: 100) {
+                          nodes {
+                            __typename
+                            ... on CheckRun {
+                              name status conclusion detailsUrl
+                              checkSuite { workflowRun { databaseId } }
+                            }
+                            ... on StatusContext { context state targetUrl }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        "#;
         let response = self
-            .change_request_details_request(configuration, token, repository, number)?
+            .graphql_request(
+                configuration,
+                token,
+                serde_json::json!({
+                    "query": QUERY,
+                    "variables": {
+                        "owner": repository.owner,
+                        "name": repository.name,
+                        "number": number,
+                    }
+                }),
+            )?
             .send()
             .await
             .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -200,14 +174,14 @@ impl GitHubClient {
             .pull_request
             .map(GitHubChangeRequest::into_details);
         if let Some(details) = &mut details {
-            let relevance = relevance::items(
+            let relevance = relationships::items(
                 self,
                 configuration,
                 token,
                 std::slice::from_ref(&details.change_request.id),
             )
             .await;
-            details.change_request.relevance = relevance
+            details.change_request.relationships = relevance
                 .get(&details.change_request.id)
                 .cloned()
                 .unwrap_or_default();
@@ -397,7 +371,7 @@ impl From<GitHubChangeRequest> for ChangeRequest {
             _ => ChangeRequestMergeStatus::Unknown,
         };
         Self {
-            relevance: Default::default(),
+            relationships: Default::default(),
             id: change_request.id,
             number: change_request.number,
             title: change_request.title,

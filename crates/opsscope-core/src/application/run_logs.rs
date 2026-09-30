@@ -17,7 +17,9 @@ pub struct ResolvedWorkflowRunLogs {
 impl GetWorkflowRunLogs {
     #[must_use]
     pub fn new(source_data: Arc<dyn SourceData>) -> Self {
-        Self { source_data }
+        Self {
+            source_data,
+        }
     }
 
     pub async fn execute(
@@ -73,7 +75,10 @@ impl GetWorkflowRunLogs {
             .source_data
             .workflow_run_logs(source_id, &repository, &run)
             .await?;
-        Ok(ResolvedWorkflowRunLogs { run, logs })
+        Ok(ResolvedWorkflowRunLogs {
+            run,
+            logs,
+        })
     }
 }
 

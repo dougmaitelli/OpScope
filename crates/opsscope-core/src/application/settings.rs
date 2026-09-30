@@ -75,7 +75,9 @@ pub struct GetMonitoringSettings {
 impl GetMonitoringSettings {
     #[must_use]
     pub fn new(settings: Arc<dyn SettingsRepository>) -> Self {
-        Self { settings }
+        Self {
+            settings,
+        }
     }
 
     pub fn execute(&self) -> Result<MonitoringSettings, SettingsFailure> {
@@ -93,7 +95,9 @@ pub struct UpdateMonitoringSettings {
 impl UpdateMonitoringSettings {
     #[must_use]
     pub fn new(settings: Arc<dyn SettingsRepository>) -> Self {
-        Self { settings }
+        Self {
+            settings,
+        }
     }
 
     pub fn execute(

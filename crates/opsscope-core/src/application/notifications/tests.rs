@@ -42,12 +42,13 @@ async fn disabling_workflow_alerts_advances_state_without_replay() {
     let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
         .with_settings(settings.clone());
     notifier
-        .observe("source", &repository(), &workflows(), &[])
+        .observe("1", "source", &repository(), &workflows(), &[])
         .await
         .unwrap();
     let failed = run("workflow-1", "run-1", 1, RunOutcome::Failure);
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -59,12 +60,13 @@ async fn disabling_workflow_alerts_advances_state_without_replay() {
         .save_settings(MonitoringSettings::default())
         .unwrap();
     notifier
-        .observe("source", &repository(), &workflows(), &[failed])
+        .observe("1", "source", &repository(), &workflows(), &[failed])
         .await
         .unwrap();
     assert!(sink.0.lock().unwrap().is_empty());
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -99,16 +101,15 @@ async fn personal_scope_filters_before_aggregation_without_replaying_on_toggle()
     let notifier =
         NotifyRepositoryFailures::new(states, sink.clone()).with_settings(settings.clone());
     notifier
-        .observe("source", &repository(), &workflows(), &[])
+        .observe("1", "source", &repository(), &workflows(), &[])
         .await
         .unwrap();
     let mut mine = run("workflow-1", "mine", 1, RunOutcome::Failure);
-    mine.relevance
-        .reasons
-        .push(crate::domain::RelevanceReason::CommitAuthored);
+    mine.relationships.commit_authors.ids.push("1".into());
     let other = run("workflow-2", "other", 2, RunOutcome::Failure);
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -123,12 +124,13 @@ async fn personal_scope_filters_before_aggregation_without_replaying_on_toggle()
     }
     *settings.0.lock().unwrap() = false;
     notifier
-        .observe("source", &repository(), &workflows(), &[mine, other])
+        .observe("1", "source", &repository(), &workflows(), &[mine, other])
         .await
         .unwrap();
     assert_eq!(sink.0.lock().unwrap().len(), 1);
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -145,16 +147,18 @@ async fn personal_history_never_replaces_the_actual_latest_run_for_notifications
     let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
         .with_settings(Arc::new(PersonalSettings(Mutex::new(true))));
     notifier
-        .observe("source", &repository(), &workflows(), &[])
+        .observe("1", "source", &repository(), &workflows(), &[])
         .await
         .unwrap();
     let mut history = run("workflow-1", "mine", 1, RunOutcome::Failure);
     history
-        .relevance
-        .reasons
-        .push(crate::domain::RelevanceReason::ChangeRequestAuthored);
+        .relationships
+        .change_request_authors
+        .ids
+        .push("1".into());
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -202,7 +206,7 @@ fn workflows() -> Vec<Workflow> {
 
 fn run(workflow_id: &str, id: &str, number: u64, outcome: RunOutcome) -> WorkflowRun {
     WorkflowRun {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: id.to_owned(),
         workflow_id: workflow_id.to_owned(),
         run_number: number,
@@ -231,6 +235,7 @@ async fn establishes_a_baseline_without_notifying_about_an_existing_failure() {
 
     notifier
         .observe(
+            "1",
             "source",
             &repository(),
             &workflows(),
@@ -250,7 +255,7 @@ async fn groups_new_latest_failures_once_per_repository() {
     let repository = repository();
     let workflows = workflows();
     notifier
-        .observe("source", &repository, &workflows, &[])
+        .observe("1", "source", &repository, &workflows, &[])
         .await
         .expect("baseline succeeds");
     let failed_runs = vec![
@@ -259,11 +264,11 @@ async fn groups_new_latest_failures_once_per_repository() {
     ];
 
     notifier
-        .observe("source", &repository, &workflows, &failed_runs)
+        .observe("1", "source", &repository, &workflows, &failed_runs)
         .await
         .expect("notification succeeds");
     notifier
-        .observe("source", &repository, &workflows, &failed_runs)
+        .observe("1", "source", &repository, &workflows, &failed_runs)
         .await
         .expect("repeated observation succeeds");
 
@@ -282,13 +287,14 @@ async fn notifies_when_a_new_latest_run_fails_after_an_earlier_failure() {
     let repository = repository();
     let workflows = workflows();
     notifier
-        .observe("source", &repository, &workflows, &[])
+        .observe("1", "source", &repository, &workflows, &[])
         .await
         .expect("baseline succeeds");
 
     for (id, number) in [("run-1", 1), ("run-2", 2)] {
         notifier
             .observe(
+                "1",
                 "source",
                 &repository,
                 &workflows,
@@ -314,6 +320,7 @@ async fn ignores_failed_history_and_notifies_when_the_latest_run_enters_failure(
 
     notifier
         .observe(
+            "1",
             "source",
             &repository,
             &workflows,
@@ -323,6 +330,7 @@ async fn ignores_failed_history_and_notifies_when_the_latest_run_enters_failure(
         .expect("baseline succeeds");
     notifier
         .observe(
+            "1",
             "source",
             &repository,
             &workflows,
@@ -334,6 +342,7 @@ async fn ignores_failed_history_and_notifies_when_the_latest_run_enters_failure(
 
     notifier
         .observe(
+            "1",
             "source",
             &repository,
             &workflows,

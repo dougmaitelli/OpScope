@@ -540,7 +540,11 @@ pub(crate) async fn save_repository_selection(
     state
         .save_repository_selection
         .execute(&request.into_domain())
-        .map(|selected_count| Json(SaveRepositorySelectionResponse { selected_count }))
+        .map(|selected_count| {
+            Json(SaveRepositorySelectionResponse {
+                selected_count,
+            })
+        })
         .map_err(|failure| {
             let status = match failure {
                 SaveRepositorySelectionFailure::InvalidSelection => StatusCode::BAD_REQUEST,
@@ -560,6 +564,10 @@ pub(crate) async fn disconnect_source(
     state
         .disconnect_source
         .execute(&request.connection_id)
-        .map(|disconnected| Json(DisconnectSourceResponse { disconnected }))
+        .map(|disconnected| {
+            Json(DisconnectSourceResponse {
+                disconnected,
+            })
+        })
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)
 }

@@ -3,8 +3,7 @@ use super::{
     NotificationSeverity, NotificationSink, PersistenceFailure, SettingsRepository,
 };
 use crate::domain::{
-    ChangeRequest, ChangeRequestReviewStatus, ChangeRequestState, Issue, IssueState,
-    RelevanceReason, Repository,
+    ChangeRequest, ChangeRequestReviewStatus, ChangeRequestState, Issue, IssueState, Repository,
 };
 use crate::source_data::{RefreshMode, SourceData};
 use serde::{Deserialize, Serialize};
@@ -128,8 +127,38 @@ impl NotifyWorkItems {
                 .collect();
             for mut item in observed {
                 if let Some(old) = merged.get(&item.id) {
-                    if review_requested(&item).is_none() {
-                        item.relevance = old.relevance.clone();
+                    if review_requested(&item, account_id).is_none() {
+                        // Retain the last review-request evidence, not a computed eligibility result.
+                        item.relationships.requested_reviewers =
+                            old.relationships.requested_reviewers.clone();
+                        item.relationships.assigned_reviewers =
+                            old.relationships.assigned_reviewers.clone();
+                        item.relationships.completed_reviewers =
+                            old.relationships.completed_reviewers.clone();
+                        if let Some(value) = old
+                            .relationships
+                            .viewers
+                            .iter()
+                            .find(|viewer| viewer.account_id == *account_id)
+                            .and_then(|viewer| viewer.review_requested)
+                        {
+                            if let Some(viewer) = item
+                                .relationships
+                                .viewers
+                                .iter_mut()
+                                .find(|viewer| viewer.account_id == *account_id)
+                            {
+                                viewer.review_requested = Some(value);
+                            } else {
+                                item.relationships.viewers.push(
+                                    crate::domain::ViewerRelationships {
+                                        account_id: account_id.clone(),
+                                        review_requested: Some(value),
+                                        ..Default::default()
+                                    },
+                                );
+                            }
+                        }
                     }
                     if item.review_status == ChangeRequestReviewStatus::Unknown {
                         item.review_status = old.review_status;
@@ -202,18 +231,8 @@ impl NotifyWorkItems {
     }
 }
 
-fn review_requested(item: &ChangeRequest) -> Option<bool> {
-    if item
-        .relevance
-        .reasons
-        .contains(&RelevanceReason::ReviewRequested)
-    {
-        Some(true)
-    } else if item.relevance.complete {
-        Some(false)
-    } else {
-        None
-    }
+fn review_requested(item: &ChangeRequest, account_id: &str) -> Option<bool> {
+    item.relationships.review_requested(account_id)
 }
 
 #[cfg(test)]

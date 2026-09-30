@@ -114,6 +114,7 @@ impl NotifyRepositoryFailures {
 
     pub async fn observe(
         &self,
+        account_id: &str,
         source_id: &str,
         repository: &Repository,
         workflows: &[Workflow],
@@ -149,7 +150,7 @@ impl NotifyRepositoryFailures {
                             run.workflow_id == state.workflow_id
                                 && Some(&run.id) == state.run_id.as_ref()
                                 && Some(run.attempt) == state.attempt
-                                && run.relevance.matches()
+                                && run.relationships.evaluate(account_id).matches()
                         })
                 })
                 .filter_map(|state| {

@@ -1,16 +1,10 @@
-use serde::{Deserialize, Serialize};
-
-/// Relationship to the token owner, scoped by the connection/account cache key.
-/// An incomplete observation must not be interpreted as a confirmed non-match.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(default)]
+/// A local policy result. Only the underlying relationships are persisted.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Relevance {
-    pub account_id: Option<String>,
     pub reasons: Vec<RelevanceReason>,
-    pub complete: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RelevanceReason {
     Authored,
     Reviewed,

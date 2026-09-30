@@ -268,7 +268,13 @@ impl SynchronizeSources {
                     (Ok(workflows), Ok(runs)) if !runs.stale => {
                         if let Err(failure) = self
                             .failure_notifications
-                            .observe(&source.id, &repository, &workflows, &runs.runs)
+                            .observe(
+                                &source.account_id,
+                                &source.id,
+                                &repository,
+                                &workflows,
+                                &runs.runs,
+                            )
                             .await
                         {
                             eprintln!(

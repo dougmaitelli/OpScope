@@ -285,6 +285,7 @@ impl ListSources {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConnectedSource {
+    pub account_id: String,
     pub id: String,
     pub descriptor: SourceDescriptor,
     pub label: String,

@@ -130,7 +130,7 @@ export function ConnectionDialog({ sources, existing, onSaved, onClose }: Connec
                   <label htmlFor={`connection-${field.key}`}>{field.label}</label>
                   <input
                     id={`connection-${field.key}`}
-                    type="url"
+                    type={field.inputType}
                     autoComplete="off"
                     autoCapitalize="none"
                     spellCheck={false}

@@ -102,6 +102,7 @@ impl RecordingSourceData {
 impl SourceData for RecordingSourceData {
     fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure> {
         Ok(vec![ConnectedSource {
+            account_id: "42".into(),
             id: "source".to_owned(),
             label: "Source".to_owned(),
             descriptor: SourceDescriptor {

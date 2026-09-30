@@ -1,7 +1,210 @@
 use super::*;
+use crate::integrations::test_support::{Exchange, MockApi, relevance_repository, relevance_run};
 use reqwest::header::AUTHORIZATION;
+use serde_json::json;
 use std::io::Write;
 use zip::write::SimpleFileOptions;
+
+#[tokio::test]
+async fn feature_operations_execute_authenticated_enterprise_routes() {
+    let auth = "authorization: Bearer test-token";
+    let repository = relevance_repository();
+    let mut run = relevance_run("abc");
+    run.id = "42".into();
+    run.attempt = 2;
+    let mut missing = Exchange::json("/api/v3/repos/team/app/actions/runs/42", auth, json!({}));
+    missing.status = 404;
+    let mut logs = Exchange::json(
+        "/api/v3/repos/team/app/actions/runs/42/attempts/2/logs",
+        auth,
+        json!({}),
+    );
+    logs.status = 302;
+    logs.headers
+        .push_str("Location: http://127.0.0.1/unsafe-archive\r\n");
+    let api = MockApi::start(vec![
+        Exchange::json(
+            "/api/v3/user",
+            auth,
+            json!({"id":1,"login":"alice","name":null,"html_url":"https://github.example/alice"}),
+        ),
+        Exchange::json("/api/v3/user/repos?per_page=100&page=1", auth, json!([])),
+        Exchange::json(
+            "/api/v3/repos/team/app/actions/workflows?per_page=100&page=1",
+            auth,
+            json!({"workflows":[]}),
+        ),
+        Exchange::json(
+            "/api/v3/repos/team/app/actions/runs?per_page=100&page=1",
+            auth,
+            json!({"workflow_runs":[]}),
+        ),
+        missing,
+        logs,
+    ]);
+    let client = GitHubClient::new().unwrap();
+    let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+        .into_iter()
+        .collect();
+    let token = ProviderToken::new("test-token".into());
+    assert_eq!(
+        client.validate(&config, &token).await.unwrap().external_id,
+        "1"
+    );
+    assert!(
+        client
+            .list_repositories(&config, &token)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        client
+            .list_workflows(&config, &token, &repository)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        client
+            .list_workflow_runs(&config, &token, &repository)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        client
+            .workflow_run(&config, &token, &repository, "42")
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        client
+            .workflow_run_logs(&config, &token, &repository, &run)
+            .await,
+        Err(WorkflowRunLogsFailure::UnexpectedResponse)
+    );
+    assert_eq!(
+        client
+            .workflow_run(&config, &token, &repository, "../42")
+            .await,
+        Err(ConnectionValidationFailure::UnexpectedResponse)
+    );
+    api.finish();
+}
+
+#[tokio::test]
+async fn workflow_operations_keep_pagination_in_the_feature_module() {
+    let auth = "authorization: Bearer test-token";
+    let workflow = json!({"id":1,"name":"Build","path":"ci.yml","state":"active","html_url":"https://github.example/team/app/actions/1"});
+    let api = MockApi::start(vec![
+        Exchange::json(
+            "/api/v3/repos/team/app/actions/workflows?per_page=100&page=1",
+            auth,
+            json!({"workflows":vec![workflow;100]}),
+        ),
+        Exchange::json(
+            "/api/v3/repos/team/app/actions/workflows?per_page=100&page=2",
+            auth,
+            json!({"workflows":[]}),
+        ),
+    ]);
+    let client = GitHubClient::new().unwrap();
+    let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+        .into_iter()
+        .collect();
+    assert_eq!(
+        client
+            .list_workflows(
+                &config,
+                &ProviderToken::new("test-token".into()),
+                &relevance_repository()
+            )
+            .await
+            .unwrap()
+            .len(),
+        100
+    );
+    api.finish();
+}
+
+#[tokio::test]
+async fn pull_requests_execute_graphql_with_cursor_and_details_variables() {
+    let auth = "authorization: Bearer test-token";
+    let repo = relevance_repository();
+    let api = MockApi::start(vec![
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","first":100,"after":null}),
+            &[
+                "query OpenChangeRequests",
+                "pullRequests(first:",
+                "statusCheckRollup { state }",
+            ],
+            json!({"data":{"repository":{"pullRequests":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"next"}}}}}),
+        ),
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","first":100,"after":"next"}),
+            &["query OpenChangeRequests"],
+            json!({"data":{"repository":{"pullRequests":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}),
+        ),
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","number":7}),
+            &[
+                "query ChangeRequestDetails",
+                "reviews(first: 100)",
+                "checkSuite { workflowRun { databaseId } }",
+            ],
+            json!({"data":{"repository":{"pullRequest":null}}}),
+        ),
+    ]);
+    let client = GitHubClient::new().unwrap();
+    let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+        .into_iter()
+        .collect();
+    let token = ProviderToken::new("test-token".into());
+    assert_eq!(
+        client
+            .list_change_requests(&config, &token, &repo)
+            .await
+            .unwrap(),
+        Some(vec![])
+    );
+    assert_eq!(
+        client
+            .change_request_details(&config, &token, &repo, 7)
+            .await
+            .unwrap(),
+        None
+    );
+    api.finish();
+}
+
+#[test]
+fn shared_rest_builder_encodes_provider_identifiers_as_segments() {
+    let client = GitHubClient::new().unwrap();
+    let token = ProviderToken::new("test-token".into());
+    let request = client
+        .request(
+            &github_com(),
+            &token,
+            &["repos", "team/other", "app?query", "actions", "runs"],
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+    assert_eq!(
+        request.url().path(),
+        "/repos/team%2Fother/app%3Fquery/actions/runs"
+    );
+    assert!(request.url().query().is_none());
+}
 
 fn github_com() -> ConnectionConfiguration {
     [(SERVER_URL_KEY.to_owned(), DEFAULT_SERVER_URL.to_owned())]
@@ -23,7 +226,7 @@ fn enterprise_server_is_normalized_and_uses_the_api_v3_prefix()
     )?;
     let token = ProviderToken::new("enterprise_token".to_owned());
     let request = client
-        .validation_request(&configured.configuration, &token)?
+        .request(&configured.configuration, &token, &["user"])?
         .build()?;
 
     assert_eq!(configured.unique_key, "https://github.example.com");
@@ -63,7 +266,7 @@ fn validation_request_targets_only_github_with_required_headers()
 -> Result<(), Box<dyn std::error::Error>> {
     let client = GitHubClient::new()?;
     let token = ProviderToken::new("github_pat_test".to_owned());
-    let request = client.validation_request(&github_com(), &token)?.build()?;
+    let request = client.request(&github_com(), &token, &["user"])?.build()?;
 
     assert_eq!(request.method(), reqwest::Method::GET);
     assert_eq!(request.url().as_str(), "https://api.github.com/user");
@@ -96,7 +299,8 @@ fn repository_request_is_authenticated_and_paginated() -> Result<(), Box<dyn std
     let client = GitHubClient::new()?;
     let token = ProviderToken::new("github_pat_test".to_owned());
     let request = client
-        .repositories_request(&github_com(), &token, 2)?
+        .request(&github_com(), &token, &["user", "repos"])?
+        .query(&[("per_page", REPOSITORIES_PER_PAGE), ("page", 2)])
         .build()?;
 
     assert_eq!(request.method(), reqwest::Method::GET);
@@ -150,7 +354,18 @@ fn workflow_request_targets_selected_repository_with_required_headers()
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let request = client
-        .workflows_request(&github_com(), &token, &repository, 2)?
+        .request(
+            &github_com(),
+            &token,
+            &[
+                "repos",
+                &repository.owner,
+                &repository.name,
+                "actions",
+                "workflows",
+            ],
+        )?
+        .query(&[("per_page", WORKFLOWS_PER_PAGE), ("page", 2)])
         .build()?;
 
     assert_eq!(
@@ -176,38 +391,6 @@ fn github_workflow_maps_to_provider_independent_domain() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn change_request_request_uses_graphql_without_provider_data_in_the_contract()
--> Result<(), Box<dyn std::error::Error>> {
-    let client = GitHubClient::new()?;
-    let token = ProviderToken::new("github_pat_test".to_owned());
-    let repository = Repository {
-        id: "1296269".to_owned(),
-        owner: "octocat".to_owned(),
-        name: "Hello-World".to_owned(),
-        description: None,
-        visibility: RepositoryVisibility::Public,
-        web_url: "https://github.com/octocat/Hello-World".to_owned(),
-    };
-    let request = client
-        .change_requests_request(&github_com(), &token, &repository, Some("cursor"))?
-        .build()?;
-    let body: serde_json::Value = serde_json::from_slice(
-        request
-            .body()
-            .and_then(reqwest::Body::as_bytes)
-            .expect("JSON body"),
-    )?;
-
-    assert_eq!(request.url().as_str(), "https://api.github.com/graphql");
-    assert_eq!(request.method(), reqwest::Method::POST);
-    assert_eq!(body["variables"]["owner"], "octocat");
-    assert_eq!(body["variables"]["name"], "Hello-World");
-    assert_eq!(body["variables"]["after"], "cursor");
-    assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
-    Ok(())
-}
-
-#[test]
 fn github_change_request_maps_review_checks_and_merge_readiness()
 -> Result<(), Box<dyn std::error::Error>> {
     let change_request: GitHubChangeRequest = serde_json::from_str(
@@ -226,44 +409,6 @@ fn github_change_request_maps_review_checks_and_merge_readiness()
     assert_eq!(mapped.review_status, ChangeRequestReviewStatus::Approved);
     assert_eq!(mapped.check_status, ChangeRequestCheckStatus::Passed);
     assert_eq!(mapped.merge_status, ChangeRequestMergeStatus::Ready);
-    Ok(())
-}
-
-#[test]
-fn change_request_details_request_targets_the_selected_pull_request()
--> Result<(), Box<dyn std::error::Error>> {
-    let client = GitHubClient::new()?;
-    let token = ProviderToken::new("github_pat_test".to_owned());
-    let repository = Repository {
-        id: "1296269".to_owned(),
-        owner: "octocat".to_owned(),
-        name: "Hello-World".to_owned(),
-        description: None,
-        visibility: RepositoryVisibility::Public,
-        web_url: "https://github.com/octocat/Hello-World".to_owned(),
-    };
-    let request = client
-        .change_request_details_request(&github_com(), &token, &repository, 42)?
-        .build()?;
-    let body: serde_json::Value = serde_json::from_slice(
-        request
-            .body()
-            .and_then(reqwest::Body::as_bytes)
-            .expect("JSON body"),
-    )?;
-
-    assert_eq!(request.url().as_str(), "https://api.github.com/graphql");
-    assert_eq!(body["variables"]["number"], 42);
-    assert!(
-        body["query"]
-            .as_str()
-            .is_some_and(|query| query.contains("reviews(first: 100)"))
-    );
-    assert!(
-        body["query"]
-            .as_str()
-            .is_some_and(|query| query.contains("checkSuite { workflowRun { databaseId } }"))
-    );
     Ok(())
 }
 
@@ -313,7 +458,18 @@ fn workflow_run_request_targets_selected_repository_with_required_headers()
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let request = client
-        .workflow_runs_request(&github_com(), &token, &repository, 2)?
+        .request(
+            &github_com(),
+            &token,
+            &[
+                "repos",
+                &repository.owner,
+                &repository.name,
+                "actions",
+                "runs",
+            ],
+        )?
+        .query(&[("per_page", WORKFLOW_RUNS_PER_PAGE), ("page", 2)])
         .build()?;
 
     assert_eq!(
@@ -341,7 +497,18 @@ fn workflow_run_request_targets_a_run_outside_cached_history()
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let request = client
-        .workflow_run_request(&github_com(), &token, &repository, "30433642")?
+        .request(
+            &github_com(),
+            &token,
+            &[
+                "repos",
+                &repository.owner,
+                &repository.name,
+                "actions",
+                "runs",
+                "30433642",
+            ],
+        )?
         .build()?;
 
     assert_eq!(
@@ -366,7 +533,7 @@ fn workflow_run_log_request_targets_the_selected_attempt() -> Result<(), Box<dyn
         web_url: "https://github.com/octocat/Hello-World".to_owned(),
     };
     let run = WorkflowRun {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: "30433642".to_owned(),
         workflow_id: "161335".to_owned(),
         run_number: 562,
@@ -386,7 +553,21 @@ fn workflow_run_log_request_targets_the_selected_attempt() -> Result<(), Box<dyn
         provider_conclusion: Some("success".to_owned()),
     };
     let request = client
-        .workflow_run_logs_request(&github_com(), &token, &repository, &run)?
+        .request(
+            &github_com(),
+            &token,
+            &[
+                "repos",
+                &repository.owner,
+                &repository.name,
+                "actions",
+                "runs",
+                &run.id,
+                "attempts",
+                &run.attempt.to_string(),
+                "logs",
+            ],
+        )?
         .build()?;
 
     assert_eq!(
@@ -482,4 +663,39 @@ fn unfinished_github_run_has_no_outcome() -> Result<(), Box<dyn std::error::Erro
     assert!(mapped.actor.is_none());
     assert!(mapped.provider_conclusion.is_none());
     Ok(())
+}
+
+#[test]
+fn graphql_transport_preserves_headers_body_and_enterprise_endpoint() {
+    let client = GitHubClient::new().unwrap();
+    let token = ProviderToken::new("test-token".into());
+    let body = json!({"query":"query Viewer { viewer { login } }","variables":{}});
+    for (server, url) in [
+        ("https://github.com", "https://api.github.com/graphql"),
+        (
+            "https://github.example",
+            "https://github.example/api/graphql",
+        ),
+    ] {
+        let config = [(SERVER_URL_KEY.into(), server.into())]
+            .into_iter()
+            .collect();
+        let request = client
+            .graphql_request(&config, &token, body.clone())
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(request.url().as_str(), url);
+        assert_eq!(request.method(), reqwest::Method::POST);
+        assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
+        assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
+        assert_eq!(request.headers()[AUTHORIZATION], "Bearer test-token");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(
+                request.body().unwrap().as_bytes().unwrap()
+            )
+            .unwrap(),
+            body
+        );
+    }
 }

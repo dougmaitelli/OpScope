@@ -19,9 +19,8 @@ activity, and run logs here; open the original page when you need to act.
 Credentials and cached data stay on your machine or server, with no
 OpsScope-hosted service required.
 
-GitHub.com and GitHub Enterprise Server are supported today. The shared core
-and source-module architecture allow other providers and kinds of operational
-information to be added without building a separate application for each.
+GitHub, GitLab, Gitea, and Bitbucket Cloud connect through the same source-module
+architecture. Available features depend on the provider; see [Sources](#sources).
 
 ## Features
 
@@ -41,7 +40,7 @@ information to be added without building a separate application for each.
 Both editions share the same core and UI. Each installation is intended for a
 single user: there are no separate workspaces or per-user data permissions.
 Integrations are read-only; rerunning jobs, editing issues, and merging PRs are
-not supported. GitHub is currently the only source module.
+not supported.
 
 ## Quick start
 
@@ -92,19 +91,60 @@ unauthenticated instance to an untrusted network.
 
 ### Connect your repositories
 
-1. Open **Connections**, add a GitHub connection, and provide a personal access
-   token. Keep `https://github.com` or enter your GitHub Enterprise Server
-   origin, such as `https://github.example.com`.
+1. Open **Connections**, choose a source, and enter its connection details and
+   token (see [Sources](#sources) below).
 2. In **Repositories**, select the repositories to monitor.
 3. Open **Workflows**, **Pull requests**, **Issues**, or **Activity**. Use Refresh
    for an immediate update; synchronization also runs in the background.
 4. Adjust refresh frequency, history, or personal scope in **Settings**.
 
-Multiple GitHub servers are supported, but duplicate connections to the same
-normalized server URL are not. Replace a connection's token from Connections
-when it expires or needs different permissions.
+Replace a connection's token from Connections when it expires or needs different
+permissions. GitHub, GitLab, and Gitea support multiple instances, with one
+connection per normalized server URL per provider. Bitbucket Cloud supports one
+connection per workspace. Custom server URLs must be HTTPS origins (no path,
+query, or embedded credentials); HTTP is allowed only for loopback development.
 
-For a fine-grained token, grant access to the selected repositories and read
+## Sources
+
+| Source | Connection | Available monitoring |
+| --- | --- | --- |
+| GitHub | GitHub.com or GitHub Enterprise Server URL; personal access token | Workflows, logs, pull requests, issues, and personal scope |
+| GitLab | GitLab.com or self-managed server URL; personal access token with `read_api` | CI/CD pipelines, job logs, merge requests, issues, and personal scope |
+| Gitea | Gitea 1.26+ server URL with Actions enabled; token with `read:user`, `read:repository`, and `read:issue` | Actions workflows, runs, job logs, pull requests, issues, and personal scope |
+| Bitbucket Cloud | Workspace slug, Atlassian account email, and scoped API token | Pipelines, build/service-container logs, and pull requests |
+
+GitLab, Gitea, and Bitbucket use the shared Workflows, Pull requests, and Activity
+pages, cache, synchronization, and notification settings. PR details include
+reviews, checks, and the latest commit where available. Checks open native run
+details when their provider metadata identifies a run in the monitored repository;
+other checks retain their external links. Unavailable review or merge-readiness
+information is reported as unknown, not inferred from passing checks. GitLab
+approval information depends on the instance's API availability and permissions.
+
+All four sources support **Only my work** for pull requests and workflow runs,
+using the token owner of each connection. GitHub, GitLab, and Gitea also support
+issues, including labels, assignees, milestones, discussion, personal scope, and
+the existing issue notification settings. Disabled issue trackers and Gitea
+external trackers are skipped. For Gitea, update existing tokens to include
+`read:issue` before enabling issue monitoring.
+
+Bitbucket Cloud does not support issues: Atlassian
+[removed its native issue tracker API](https://developer.atlassian.com/cloud/bitbucket/changelog/)
+on August 20, 2026.
+
+GitLab and Bitbucket display one pipeline stream per repository; Gitea displays
+individual Actions workflows. Run history is bounded to the latest 100 runs
+fetched per repository. Timing and actor information can be absent when the
+provider's list API does not supply it; OpsScope does not substitute fetch time
+for execution time. Bitbucket Data Center and app passwords are not supported.
+
+For Bitbucket Cloud, grant the API token **`read:user:bitbucket`**,
+**`read:repository:bitbucket`**, **`read:pipeline:bitbucket`**, and
+**`read:pullrequest:bitbucket`** scopes. Update existing workflow-only tokens before
+enabling pull request monitoring. Use the
+workspace slug from its URL, not its display name.
+
+For a GitHub fine-grained token, grant access to the selected repositories and read
 access to **Metadata, Actions, Pull requests, Issues, Checks, and Commit
 statuses**. A classic token with **repo** scope is also supported; it grants
 broader permissions than OpsScope uses. Organization token approval and access
@@ -174,7 +214,7 @@ subjects alone do not enable authentication.
 Without an allowed-subject list, restrict admission through the identity
 provider's client policy. OIDC controls access to the installation, not
 individual connections: every admitted user shares the same data and
-credentials. The GitHub token owner—not the OIDC login—defines “me.”
+credentials. The source token owner—not the OIDC login—defines “me.”
 
 ### Apprise notifications
 
@@ -269,6 +309,18 @@ from the disabled period. Workflows remain available independently.
 Personal scope includes PRs you authored, reviewed, or were asked to review;
 issues you authored, subscribed to, or participated in; and workflow runs
 associated with your commits or PRs.
+
+For GitLab, approvals and published non-system MR comments count as reviews;
+for Gitea, submitted reviews (including review comments) count, but drafts do not.
+Bitbucket uses approvals, change requests, and published PR comments. Commit
+ownership uses provider-linked account IDs where available; GitLab compares
+the commit's author email with the token owner's account emails, including
+confirmed secondary addresses. Triggering or rerunning someone else's work
+does not make it personal.
+
+These lookups use the connection's existing read permissions. If identity,
+review history, or commit associations are inaccessible, only proven matches
+are shown; normal monitoring remains available with personal scope disabled.
 
 The displayed latest matching workflow run may not be the repository's actual
 latest run. Notifications still use the actual latest run. Relevance is

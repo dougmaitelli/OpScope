@@ -22,6 +22,60 @@ fn test_connection() -> StoredConnection {
 }
 
 #[test]
+fn queued_runs_without_timestamps_remain_latest_after_cache_reload()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let database = SqliteDatabase::open(directory.path().join("opsscope.sqlite3"))?;
+    database.save(&test_connection())?;
+    let queued = WorkflowRun {
+        relationships: Default::default(),
+        id: "new".into(),
+        workflow_id: "build.yml".into(),
+        run_number: 8,
+        attempt: 1,
+        title: "Queued build".into(),
+        lifecycle: RunLifecycle::Queued,
+        outcome: RunOutcome::Unknown,
+        branch: Some("main".into()),
+        commit_sha: "abc".into(),
+        actor: None,
+        trigger: "push".into(),
+        created_at: String::new(),
+        started_at: None,
+        updated_at: String::new(),
+        web_url: "https://gitea.example.com/team/app/actions/runs/8".into(),
+        provider_status: "queued".into(),
+        provider_conclusion: None,
+    };
+    let older = WorkflowRun {
+        id: "old".into(),
+        run_number: 7,
+        attempt: 3,
+        lifecycle: RunLifecycle::Completed,
+        outcome: RunOutcome::Failure,
+        created_at: "2026-09-28T00:00:00Z".into(),
+        ..queued.clone()
+    };
+    database.replace_workflow_runs(
+        "example",
+        "42",
+        "repository-1",
+        &WorkflowRunSnapshot {
+            last_attempted_at: 123,
+            last_successful_at: Some(123),
+            last_error: None,
+            runs: vec![older, queued],
+        },
+    )?;
+    let cached = database
+        .workflow_runs("example", "42", "repository-1")?
+        .unwrap();
+    assert_eq!(cached.runs[0].id, "new");
+    assert_eq!(cached.runs[0].lifecycle, RunLifecycle::Queued);
+    Ok(())
+}
+
+#[test]
 fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
     let database_path = directory.path().join("opsscope.sqlite3");
@@ -45,10 +99,9 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
         last_successful_at: Some(125),
         last_error: None,
         runs: vec![WorkflowRun {
-            relevance: crate::domain::Relevance {
-                account_id: Some("42".to_owned()),
-                reasons: vec![crate::domain::RelevanceReason::Authored],
-                complete: true,
+            relationships: crate::domain::Relationships {
+                commit_authors: crate::domain::AccountSet::new(["42".into()], true),
+                ..Default::default()
             },
             id: "run-1".to_owned(),
             workflow_id: "workflow-1".to_owned(),
@@ -72,10 +125,15 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
     let change_requests = ChangeRequestSnapshot {
         refreshed_at: 126,
         change_requests: vec![ChangeRequest {
-            relevance: crate::domain::Relevance {
-                account_id: Some("42".to_owned()),
-                reasons: vec![crate::domain::RelevanceReason::Authored],
-                complete: true,
+            relationships: crate::domain::Relationships {
+                authors: crate::domain::AccountSet::new(["42".into()], true),
+                reviewers: crate::domain::AccountSet::new(["99".into()], true),
+                viewers: vec![crate::domain::ViewerRelationships {
+                    account_id: "42".into(),
+                    review_requested: Some(false),
+                    ..Default::default()
+                }],
+                ..Default::default()
             },
             id: "change-1".to_owned(),
             number: 42,
@@ -149,6 +207,24 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
     assert_eq!(
         database.workflow_runs("example", "42", "repository-1")?,
         Some(runs)
+    );
+    let persisted = database
+        .change_requests("example", "42", "repository-1")?
+        .unwrap();
+    let facts = &persisted.change_requests[0].relationships;
+    assert_eq!(
+        facts.evaluate("42").reasons,
+        [crate::domain::RelevanceReason::Authored]
+    );
+    assert_eq!(
+        facts.evaluate("99").reasons,
+        [crate::domain::RelevanceReason::Reviewed]
+    );
+    assert_eq!(facts.review_requested("99"), None);
+    assert!(
+        database
+            .change_requests("example", "99", "repository-1")?
+            .is_none()
     );
     assert_eq!(
         database.change_requests("example", "42", "repository-1")?,

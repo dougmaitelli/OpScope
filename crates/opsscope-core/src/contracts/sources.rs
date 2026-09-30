@@ -51,11 +51,20 @@ pub struct CredentialFieldSummary {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionFieldSummary {
+    pub input_type: ConnectionFieldType,
     pub key: String,
     pub label: String,
     pub placeholder: String,
     pub help: String,
     pub default_value: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectionFieldType {
+    Url,
+    Text,
+    Email,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
@@ -112,6 +121,13 @@ impl From<SourceState> for SourceSummary {
                 .connection_fields
                 .into_iter()
                 .map(|field| ConnectionFieldSummary {
+                    input_type: match field.input_type {
+                        crate::application::ConnectionFieldType::Url => ConnectionFieldType::Url,
+                        crate::application::ConnectionFieldType::Text => ConnectionFieldType::Text,
+                        crate::application::ConnectionFieldType::Email => {
+                            ConnectionFieldType::Email
+                        }
+                    },
                     key: field.key,
                     label: field.label,
                     placeholder: field.placeholder,

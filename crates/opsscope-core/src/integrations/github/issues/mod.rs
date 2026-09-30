@@ -1,25 +1,23 @@
 use super::{
-    ACCEPT_VALUE, API_VERSION, GitHubChangeRequestAuthor, GitHubClient, GitHubGraphQlResponse,
-    GitHubLabelConnection, GitHubPageInfo, USER_AGENT, graphql_failure, report_graphql_errors,
-    response_failure,
+    GitHubChangeRequestAuthor, GitHubClient, GitHubGraphQlResponse, GitHubLabelConnection,
+    GitHubPageInfo, graphql_failure, report_graphql_errors, response_failure,
 };
 use crate::application::{ConnectionConfiguration, ConnectionValidationFailure, ProviderToken};
 use crate::domain::{Issue, IssueComment, IssueDetails, IssueState, Repository};
 use reqwest::StatusCode;
-use reqwest::header::{ACCEPT, USER_AGENT as USER_AGENT_HEADER};
 use serde::Deserialize;
 
 const ISSUES_PER_PAGE: usize = 100;
 const MAX_ISSUE_PAGES: usize = 10;
 
-fn request(
-    client: &GitHubClient,
-    configuration: &ConnectionConfiguration,
-    token: &ProviderToken,
-    repository: &Repository,
-    after: Option<&str>,
-) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
-    const QUERY: &str = r#"
+impl GitHubClient {
+    pub(super) async fn issues(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+    ) -> Result<Option<Vec<Issue>>, ConnectionValidationFailure> {
+        const QUERY: &str = r#"
       query OpenIssues($owner: String!, $name: String!, $first: Int!, $after: String) {
         repository(owner: $owner, name: $name) {
           issues(first: $first, after: $after, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
@@ -35,32 +33,82 @@ fn request(
         }
       }
     "#;
-    Ok(client
-        .client
-        .post(GitHubClient::graphql_url(configuration)?)
-        .bearer_auth(token.expose())
-        .header(ACCEPT, ACCEPT_VALUE)
-        .header(USER_AGENT_HEADER, USER_AGENT)
-        .header("X-GitHub-Api-Version", API_VERSION)
-        .json(&serde_json::json!({
-            "query": QUERY,
-            "variables": {
-                "owner": repository.owner,
-                "name": repository.name,
-                "first": ISSUES_PER_PAGE,
-                "after": after,
+        let mut issues = Vec::new();
+        let mut after = None;
+        for _ in 0..MAX_ISSUE_PAGES {
+            let response = self
+                .graphql_request(
+                    configuration,
+                    token,
+                    serde_json::json!({
+                        "query": QUERY,
+                        "variables": {
+                            "owner": repository.owner,
+                            "name": repository.name,
+                            "first": ISSUES_PER_PAGE,
+                            "after": after,
+                        }
+                    }),
+                )?
+                .send()
+                .await
+                .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
+            if matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ) {
+                return Err(ConnectionValidationFailure::PermissionDenied);
             }
-        })))
-}
+            if response.status() != StatusCode::OK {
+                return Err(response_failure(&response));
+            }
+            let response = response
+                .json::<GitHubGraphQlResponse<GitHubIssueData>>()
+                .await
+                .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
+            if !response.errors.is_empty() {
+                report_graphql_errors(&response.errors);
+                return Err(graphql_failure(&response.errors));
+            }
+            let repository = response
+                .data
+                .and_then(|data| data.repository)
+                .ok_or_else(|| graphql_failure(&response.errors))?;
+            issues.extend(
+                repository
+                    .issues
+                    .nodes
+                    .into_iter()
+                    .flatten()
+                    .map(|issue| issue.summary()),
+            );
+            if !repository.issues.page_info.has_next_page {
+                let ids = issues
+                    .iter()
+                    .map(|item| item.id.clone())
+                    .collect::<Vec<_>>();
+                let relevance = super::relationships::items(self, configuration, token, &ids).await;
+                for item in &mut issues {
+                    item.relationships = relevance.get(&item.id).cloned().unwrap_or_default();
+                }
+                return Ok(Some(issues));
+            }
+            after = repository.issues.page_info.end_cursor;
+            if after.is_none() {
+                return Err(ConnectionValidationFailure::UnexpectedResponse);
+            }
+        }
+        Err(ConnectionValidationFailure::UnexpectedResponse)
+    }
 
-fn details_request(
-    client: &GitHubClient,
-    configuration: &ConnectionConfiguration,
-    token: &ProviderToken,
-    repository: &Repository,
-    number: u64,
-) -> Result<reqwest::RequestBuilder, ConnectionValidationFailure> {
-    const QUERY: &str = r#"
+    pub(super) async fn issue(
+        &self,
+        configuration: &ConnectionConfiguration,
+        token: &ProviderToken,
+        repository: &Repository,
+        number: u64,
+    ) -> Result<Option<IssueDetails>, ConnectionValidationFailure> {
+        const QUERY: &str = r#"
       query IssueDetails($owner: String!, $name: String!, $number: Int!) {
         repository(owner: $owner, name: $name) {
           issue(number: $number) {
@@ -77,33 +125,19 @@ fn details_request(
         }
       }
     "#;
-    Ok(client
-        .client
-        .post(GitHubClient::graphql_url(configuration)?)
-        .bearer_auth(token.expose())
-        .header(ACCEPT, ACCEPT_VALUE)
-        .header(USER_AGENT_HEADER, USER_AGENT)
-        .header("X-GitHub-Api-Version", API_VERSION)
-        .json(&serde_json::json!({
-            "query": QUERY,
-            "variables": {
-                "owner": repository.owner,
-                "name": repository.name,
-                "number": number,
-            }
-        })))
-}
-
-pub(super) async fn list(
-    client: &GitHubClient,
-    configuration: &ConnectionConfiguration,
-    token: &ProviderToken,
-    repository: &Repository,
-) -> Result<Option<Vec<Issue>>, ConnectionValidationFailure> {
-    let mut issues = Vec::new();
-    let mut after = None;
-    for _ in 0..MAX_ISSUE_PAGES {
-        let response = request(client, configuration, token, repository, after.as_deref())?
+        let response = self
+            .graphql_request(
+                configuration,
+                token,
+                serde_json::json!({
+                    "query": QUERY,
+                    "variables": {
+                        "owner": repository.owner,
+                        "name": repository.name,
+                        "number": number,
+                    }
+                }),
+            )?
             .send()
             .await
             .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
@@ -117,7 +151,7 @@ pub(super) async fn list(
             return Err(response_failure(&response));
         }
         let response = response
-            .json::<GitHubGraphQlResponse<GitHubIssueData>>()
+            .json::<GitHubGraphQlResponse<GitHubIssueDetailsData>>()
             .await
             .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
         if !response.errors.is_empty() {
@@ -128,66 +162,19 @@ pub(super) async fn list(
             .data
             .and_then(|data| data.repository)
             .ok_or_else(|| graphql_failure(&response.errors))?;
-        issues.extend(
-            repository
-                .issues
-                .nodes
-                .into_iter()
-                .flatten()
-                .map(|issue| issue.summary()),
-        );
-        if !repository.issues.page_info.has_next_page {
-            let ids = issues
-                .iter()
-                .map(|item| item.id.clone())
-                .collect::<Vec<_>>();
-            let relevance = super::relevance::items(client, configuration, token, &ids).await;
-            for item in &mut issues {
-                item.relevance = relevance.get(&item.id).cloned().unwrap_or_default();
-            }
-            return Ok(Some(issues));
-        }
-        after = repository.issues.page_info.end_cursor;
-        if after.is_none() {
-            return Err(ConnectionValidationFailure::UnexpectedResponse);
-        }
+        let Some(mut details) = repository.issue.map(GitHubIssue::into_details) else {
+            return Ok(None);
+        };
+        let facts = super::relationships::items(
+            self,
+            configuration,
+            token,
+            std::slice::from_ref(&details.issue.id),
+        )
+        .await;
+        details.issue.relationships = facts.get(&details.issue.id).cloned().unwrap_or_default();
+        Ok(Some(details))
     }
-    Err(ConnectionValidationFailure::UnexpectedResponse)
-}
-
-pub(super) async fn details(
-    client: &GitHubClient,
-    configuration: &ConnectionConfiguration,
-    token: &ProviderToken,
-    repository: &Repository,
-    number: u64,
-) -> Result<Option<IssueDetails>, ConnectionValidationFailure> {
-    let response = details_request(client, configuration, token, repository, number)?
-        .send()
-        .await
-        .map_err(|_| ConnectionValidationFailure::ProviderUnavailable)?;
-    if matches!(
-        response.status(),
-        StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
-    ) {
-        return Err(ConnectionValidationFailure::PermissionDenied);
-    }
-    if response.status() != StatusCode::OK {
-        return Err(response_failure(&response));
-    }
-    let response = response
-        .json::<GitHubGraphQlResponse<GitHubIssueDetailsData>>()
-        .await
-        .map_err(|_| ConnectionValidationFailure::UnexpectedResponse)?;
-    if !response.errors.is_empty() {
-        report_graphql_errors(&response.errors);
-        return Err(graphql_failure(&response.errors));
-    }
-    let repository = response
-        .data
-        .and_then(|data| data.repository)
-        .ok_or_else(|| graphql_failure(&response.errors))?;
-    Ok(repository.issue.map(GitHubIssue::into_details))
 }
 
 #[derive(Deserialize)]
@@ -268,7 +255,7 @@ struct GitHubIssue {
 impl GitHubIssue {
     fn summary(&self) -> Issue {
         Issue {
-            relevance: Default::default(),
+            relationships: Default::default(),
             id: self.id.clone(),
             number: self.number,
             title: self.title.clone(),

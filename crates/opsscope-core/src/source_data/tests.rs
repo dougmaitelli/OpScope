@@ -142,7 +142,7 @@ impl SourceModule for CountingSourceModule {
 
 fn test_issue() -> Issue {
     Issue {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: "issue-7".to_owned(),
         number: 7,
         title: "Diagnostics".to_owned(),
@@ -288,7 +288,7 @@ async fn issue_cache_survives_provider_failure_and_is_scoped_to_account()
 
 fn test_run() -> WorkflowRun {
     WorkflowRun {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: "run-1".to_owned(),
         workflow_id: "workflow-1".to_owned(),
         run_number: 12,

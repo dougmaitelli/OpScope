@@ -1,10 +1,13 @@
 use super::*;
 use crate::application::MonitoringSettings;
-use crate::domain::Relevance;
+use crate::domain::Relationships;
 
-fn eligible(relevance: &Relevance, settings: &MonitoringSettings, account_id: &str) -> bool {
-    !settings.only_my_work
-        || relevance.account_id.as_deref() == Some(account_id) && relevance.matches()
+fn eligible(
+    relationships: &Relationships,
+    settings: &MonitoringSettings,
+    account_id: &str,
+) -> bool {
+    !settings.only_my_work || relationships.evaluate(account_id).matches()
 }
 
 pub(super) fn pull_requests(
@@ -23,7 +26,7 @@ pub(super) fn pull_requests(
     let mut events = Vec::new();
     let prefs = settings.notifications;
     for item in current {
-        if !eligible(&item.relevance, settings, account_id) {
+        if !eligible(&item.relationships, settings, account_id) {
             continue;
         }
         let old = prior.get(item.id.as_str()).copied();
@@ -43,9 +46,9 @@ pub(super) fn pull_requests(
         add(
             prefs.pull_request_review_requested,
             item.state == ChangeRequestState::Open
-                && item.relevance.account_id.as_deref() == Some(account_id)
-                && review_requested(item) == Some(true)
-                && (old.is_none() || old.is_some_and(|old| review_requested(old) == Some(false))),
+                && review_requested(item, account_id) == Some(true)
+                && (old.is_none()
+                    || old.is_some_and(|old| review_requested(old, account_id) == Some(false))),
             "requests your review",
         );
         if let Some(old) = old {
@@ -95,7 +98,7 @@ pub(super) fn issues(
         })
     };
     for item in current {
-        if !eligible(&item.relevance, settings, account_id) {
+        if !eligible(&item.relationships, settings, account_id) {
             continue;
         }
         let old = prior.get(item.id.as_str()).copied();

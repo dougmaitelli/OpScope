@@ -10,7 +10,9 @@ export type ConnectionSummary = { id: string, label: string, configuration: { [k
 
 export type CredentialFieldSummary = { label: string, placeholder: string, help: string, };
 
-export type ConnectionFieldSummary = { key: string, label: string, placeholder: string, help: string, defaultValue: string, };
+export type ConnectionFieldSummary = { inputType: ConnectionFieldType, key: string, label: string, placeholder: string, help: string, defaultValue: string, };
+
+export type ConnectionFieldType = "url" | "text" | "email";
 
 export type SourceCapability = "workflows" | "changeRequests" | "issues";
 

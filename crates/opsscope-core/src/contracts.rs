@@ -318,6 +318,7 @@ pub fn render_typescript_contract() -> String {
         ConnectionSummary::decl(&config),
         CredentialFieldSummary::decl(&config),
         ConnectionFieldSummary::decl(&config),
+        ConnectionFieldType::decl(&config),
         SourceCapability::decl(&config),
         SourceSummary::decl(&config),
         ListSourcesResponse::decl(&config),
@@ -390,6 +391,7 @@ mod tests {
     fn maps_domain_values_without_exposing_infrastructure() {
         let response = WorkflowSummary::from(DiscoveredWorkflow {
             source: ConnectedSource {
+                account_id: "42".into(),
                 id: "source".to_owned(),
                 label: "Source instance".to_owned(),
                 descriptor: SourceDescriptor {

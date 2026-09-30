@@ -115,7 +115,14 @@ impl ListIssues {
                 }));
             }
         }
-        issues.retain(|item| !only_my_work || item.issue.relevance.matches());
+        issues.retain(|item| {
+            !only_my_work
+                || item
+                    .issue
+                    .relationships
+                    .evaluate(&item.source.account_id)
+                    .matches()
+        });
         issues.sort_by(|left, right| right.issue.updated_at.cmp(&left.issue.updated_at));
         Ok(IssueInventory {
             selected_repository_count,
@@ -174,7 +181,9 @@ pub struct GetIssueDetails {
 impl GetIssueDetails {
     #[must_use]
     pub fn new(source_data: Arc<dyn SourceData>) -> Self {
-        Self { source_data }
+        Self {
+            source_data,
+        }
     }
 
     pub async fn execute(

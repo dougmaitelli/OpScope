@@ -65,7 +65,9 @@ pub struct TrackChangeRequestActivity {
 impl TrackChangeRequestActivity {
     #[must_use]
     pub fn new(events: Arc<dyn ActivityEventRepository>) -> Self {
-        Self { events }
+        Self {
+            events,
+        }
     }
 
     pub fn observe(
@@ -310,7 +312,7 @@ impl ListActivity {
                         event.repository_id.clone(),
                         event.change_request.id.clone(),
                     ),
-                    event.change_request.relevance.clone(),
+                    event.change_request.relationships.clone(),
                 );
             }
             for selection in &selected {
@@ -325,7 +327,7 @@ impl ListActivity {
                                 selection.repository_id.clone(),
                                 item.id,
                             ),
-                            item.relevance,
+                            item.relationships,
                         );
                     }
                 }
@@ -342,10 +344,9 @@ impl ListActivity {
                             event.change_request.id.clone(),
                         ))
                         .is_some_and(|relevance| {
-                            relevance.matches()
-                                && relevance.account_id.as_ref().is_some_and(|account| {
-                                    accounts.get(&event.source_id) == Some(account)
-                                })
+                            accounts
+                                .get(&event.source_id)
+                                .is_some_and(|account| relevance.evaluate(account).matches())
                         })
             })
             .filter(|event| {

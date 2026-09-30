@@ -20,14 +20,14 @@ const reviewLabels: Record<ChangeRequestReviewStatus, string> = {
   approved: "Approved",
   changesRequested: "Changes requested",
   reviewRequired: "Review required",
-  unknown: "No decision",
+  unknown: "Review unknown",
 };
 
 const checkLabels: Record<ChangeRequestCheckStatus, string> = {
   passed: "Checks passed",
   failing: "Checks failing",
   running: "Checks running",
-  unknown: "No checks",
+  unknown: "Checks unknown",
 };
 
 const mergeLabels: Record<ChangeRequestMergeStatus, string> = {

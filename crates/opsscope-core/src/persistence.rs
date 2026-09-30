@@ -1,5 +1,6 @@
 //! SQLite persistence for metadata, source snapshots, and encrypted server-side credentials.
 
+mod relationships;
 mod source_cache;
 mod work_item_notifications;
 
@@ -281,8 +282,16 @@ impl SqliteDatabase {
                 "only_my_work",
                 "INTEGER NOT NULL DEFAULT 0",
             ),
-            ("workflow_runs", "relevance", "TEXT NOT NULL DEFAULT '{}'"),
-            ("change_requests", "relevance", "TEXT NOT NULL DEFAULT '{}'"),
+            (
+                "workflow_runs",
+                "relationships",
+                "TEXT NOT NULL DEFAULT '{}'",
+            ),
+            (
+                "change_requests",
+                "relationships",
+                "TEXT NOT NULL DEFAULT '{}'",
+            ),
         ] {
             let exists = connection
                 .prepare(&format!("PRAGMA table_info({table})"))
@@ -301,6 +310,7 @@ impl SqliteDatabase {
                     .map_err(|_| PersistenceFailure)?;
             }
         }
+        relationships::migrate(&connection)?;
         ensure_connection_column(&connection, "configuration", "TEXT NOT NULL DEFAULT '{}'")?;
         ensure_connection_column(&connection, "connection_key", "TEXT NOT NULL DEFAULT ''")?;
         ensure_connection_column(&connection, "connection_label", "TEXT NOT NULL DEFAULT ''")?;

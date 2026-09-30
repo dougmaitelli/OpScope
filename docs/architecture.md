@@ -101,9 +101,24 @@ it is not a complete provider audit log.
 ## Personal scope
 
 “Me” is the token owner for each connection, not a desktop OS identity or OIDC
-login. Provider adapters collect relevance metadata and map it to common domain
-reasons. The core applies the persisted personal-scope setting to views,
-counts, history, activity, and notification eligibility.
+login. Provider adapters collect relationship evidence: authors, reviewers,
+review assignments and decisions, discussion participants, commit authors, and
+linked PRs/MRs. These facts are cached with the resource, not reduced to a
+persisted relevance decision. The core evaluates them locally against an account
+ID for views, counts, history, activity, and notification eligibility; evaluation
+does not make provider calls.
+
+Viewer-only observations (such as subscriptions and GitHub viewer flags) retain
+the observing account ID. Each actor set records whether it is complete, so an
+absent actor in a partial response is not a confirmed non-match. GitLab commit
+email matching uses cached provider-confirmed account email aliases.
+
+Evidence gathering does not stop when the current viewer matches. This retains
+facts usable for other accounts and future local queries. Caches remain scoped
+to the connection and account: reusable data is not authorization to share a
+private repository with another user. An upgrade discards legacy relevance
+decisions and expires the affected snapshots without deleting resource data,
+connections, or notification history.
 
 Filtering does not discard unrelated cached source data. Unknown relevance is
 excluded while the setting is enabled. A workflow view can show the latest

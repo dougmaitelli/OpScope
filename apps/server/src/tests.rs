@@ -218,8 +218,8 @@ async fn personal_scope_filters_cached_routes_and_is_reversible()
             "repository-1",
         )?
         .unwrap();
-    let original_relevance = observed[0].relevance.clone();
-    observed[0].relevance.reasons.clear();
+    let original_relevance = observed[0].relationships.clone();
+    observed[0].relationships.authors.ids.clear();
     opsscope_core::application::ActivityEventRepository::save_change_request_observation(
         &database,
         &connection.id,
@@ -234,7 +234,7 @@ async fn personal_scope_filters_cached_routes_and_is_reversible()
     let activity: ListActivityResponse =
         serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
     assert!(activity.change_request_events.is_empty());
-    observed[0].relevance = original_relevance;
+    observed[0].relationships = original_relevance;
     opsscope_core::application::ActivityEventRepository::save_change_request_observation(
         &database,
         &connection.id,
@@ -350,14 +350,16 @@ impl SourceModule for TestSourceModule {
         assert_eq!(repository.id, "repository-1");
         Ok((1..=12)
             .map(|number| WorkflowRun {
-                relevance: opsscope_core::domain::Relevance {
-                    account_id: Some("42".to_owned()),
-                    reasons: if number % 2 == 0 {
-                        vec![opsscope_core::domain::RelevanceReason::CommitAuthored]
-                    } else {
-                        vec![]
-                    },
-                    complete: true,
+                relationships: opsscope_core::domain::Relationships {
+                    commit_authors: opsscope_core::domain::AccountSet::new(
+                        if number % 2 == 0 {
+                            vec!["42".into()]
+                        } else {
+                            vec![]
+                        },
+                        true,
+                    ),
+                    ..Default::default()
                 },
                 id: format!("run-{number}"),
                 workflow_id: "workflow-1".to_owned(),
@@ -393,7 +395,7 @@ impl SourceModule for TestSourceModule {
             return Ok(None);
         }
         Ok(Some(WorkflowRun {
-            relevance: Default::default(),
+            relationships: Default::default(),
             id: run_id.to_owned(),
             workflow_id: "workflow-1".to_owned(),
             run_number: 1,
@@ -428,10 +430,9 @@ impl SourceModule for TestSourceModule {
         assert_eq!(token.expose(), "test_credential");
         assert_eq!(repository.id, "repository-1");
         Ok(Some(vec![ChangeRequest {
-            relevance: opsscope_core::domain::Relevance {
-                account_id: Some("42".to_owned()),
-                reasons: vec![opsscope_core::domain::RelevanceReason::Authored],
-                complete: true,
+            relationships: opsscope_core::domain::Relationships {
+                authors: opsscope_core::domain::AccountSet::new(["42".into()], true),
+                ..Default::default()
             },
             id: "pr-1".to_owned(),
             number: 1,
@@ -500,7 +501,7 @@ impl SourceModule for TestSourceModule {
 
 fn test_issue() -> Issue {
     Issue {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: "issue-7".to_owned(),
         number: 7,
         title: "Improve diagnostics".to_owned(),

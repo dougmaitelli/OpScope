@@ -5,7 +5,7 @@ use crate::application::{
 };
 use crate::domain::{
     ChangeRequestCheckStatus, ChangeRequestDetails, ChangeRequestMergeStatus, IssueDetails,
-    Relevance, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs,
+    Relationships, RepositoryVisibility, Workflow, WorkflowRun, WorkflowRunLogs,
 };
 use crate::persistence::SqliteDatabase;
 use crate::source_data::{SourceDataFailure, WorkflowRunCollection};
@@ -17,10 +17,10 @@ fn pull(number: u64) -> ChangeRequest {
         id: format!("pr-{number}"),
         number,
         title: format!("Change {number}"),
-        relevance: Relevance {
-            account_id: Some("42".into()),
-            complete: true,
-            reasons: vec![RelevanceReason::Authored],
+        relationships: Relationships {
+            authors: crate::domain::AccountSet::new(["42".into()], true),
+            requested_reviewers: crate::domain::AccountSet::new([], true),
+            ..Default::default()
         },
         author: Some("me".into()),
         source_branch: "feature".into(),
@@ -41,7 +41,7 @@ fn issue(number: u64) -> Issue {
         id: format!("issue-{number}"),
         number,
         title: format!("Problem {number}"),
-        relevance: pull(number).relevance,
+        relationships: pull(number).relationships,
         author: Some("me".into()),
         state: IssueState::Open,
         labels: vec![],
@@ -281,7 +281,7 @@ fn detects_each_pull_request_transition_and_not_unchanged_observations() {
     for (expected, current) in [
         ("requests your review", {
             let mut p = base.clone();
-            p.relevance.reasons.push(RelevanceReason::ReviewRequested);
+            p.relationships.requested_reviewers.ids.push("42".into());
             p
         }),
         ("has changes requested", {
@@ -425,9 +425,10 @@ fn every_work_item_switch_and_personal_scope_controls_delivery() {
     let mut changed_pr = before_pr.clone();
     changed_pr.review_status = ChangeRequestReviewStatus::ChangesRequested;
     changed_pr
-        .relevance
-        .reasons
-        .push(RelevanceReason::ReviewRequested);
+        .relationships
+        .requested_reviewers
+        .ids
+        .push("42".into());
     let before_issue = issue(1);
     let mut assigned_issue = before_issue.clone();
     assigned_issue.assignees.push("me".into());
@@ -515,7 +516,7 @@ fn every_work_item_switch_and_personal_scope_controls_delivery() {
         .is_empty()
     );
     let mut unrelated = pull(2);
-    unrelated.relevance = Relevance::default();
+    unrelated.relationships = Relationships::default();
     assert!(transitions::pull_requests(Some(&[]), &[unrelated], &personal, "42").is_empty());
     assert_eq!(
         transitions::pull_requests(Some(&[]), &[pull(2)], &personal, "42").len(),
@@ -639,7 +640,7 @@ async fn disabled_and_irrelevant_events_are_not_replayed_and_accounts_have_separ
     settings.notifications.pull_request_opened = false;
     db.save_settings(settings).unwrap();
     let mut unrelated = issue(1);
-    unrelated.relevance = Relevance::default();
+    unrelated.relationships = Relationships::default();
     service
         .observe(
             "source",
@@ -733,9 +734,10 @@ async fn missing_optional_metadata_does_not_repeat_review_notifications() {
     let mut reviewed = pull(1);
     reviewed.review_status = ChangeRequestReviewStatus::ChangesRequested;
     reviewed
-        .relevance
-        .reasons
-        .push(RelevanceReason::ReviewRequested);
+        .relationships
+        .requested_reviewers
+        .ids
+        .push("42".into());
     service
         .observe(
             "source",
@@ -748,7 +750,7 @@ async fn missing_optional_metadata_does_not_repeat_review_notifications() {
         .unwrap();
     let mut unknown = reviewed.clone();
     unknown.review_status = ChangeRequestReviewStatus::Unknown;
-    unknown.relevance = Relevance::default();
+    unknown.relationships = Relationships::default();
     service
         .observe(
             "source",
@@ -784,11 +786,12 @@ async fn a_confirmed_review_request_is_recorded_even_with_other_metadata_missing
         .await
         .unwrap();
     let mut requested = pull(1);
-    requested.relevance.complete = false;
+    requested.relationships.requested_reviewers.complete = false;
     requested
-        .relevance
-        .reasons
-        .push(RelevanceReason::ReviewRequested);
+        .relationships
+        .requested_reviewers
+        .ids
+        .push("42".into());
     for _ in 0..2 {
         service
             .observe(

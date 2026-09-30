@@ -45,6 +45,7 @@ impl ActivityEventRepository for MemoryEvents {
 
 fn source() -> ConnectedSource {
     ConnectedSource {
+        account_id: "42".into(),
         id: "source".to_owned(),
         label: "Source".to_owned(),
         descriptor: SourceDescriptor {
@@ -76,7 +77,7 @@ fn repository() -> Repository {
 
 fn change_request() -> ChangeRequest {
     ChangeRequest {
-        relevance: Default::default(),
+        relationships: Default::default(),
         id: "pr-1".to_owned(),
         number: 1,
         title: "Improve activity".to_owned(),

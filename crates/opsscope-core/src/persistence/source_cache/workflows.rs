@@ -209,10 +209,10 @@ impl SqliteDatabase {
             .prepare(
                 "SELECT run_id, workflow_id, run_number, attempt, title, lifecycle, outcome,
                         branch, commit_sha, actor, trigger, created_at, started_at, updated_at,
-                        web_url, provider_status, provider_conclusion, relevance
+                        web_url, provider_status, provider_conclusion, relationships
                  FROM workflow_runs
                  WHERE source_id = ?1 AND account_id = ?2 AND repository_id = ?3
-                 ORDER BY created_at DESC, run_number DESC, attempt DESC",
+                 ORDER BY run_number DESC, attempt DESC, created_at DESC",
             )
             .map_err(|_| PersistenceFailure)?;
         let rows = statement
@@ -239,7 +239,7 @@ impl SqliteDatabase {
                     web_url: row.get(14)?,
                     provider_status: row.get(15)?,
                     provider_conclusion: row.get(16)?,
-                    relevance: serde_json::from_str(&row.get::<_, String>(17)?)
+                    relationships: serde_json::from_str(&row.get::<_, String>(17)?)
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
                 })
             })
@@ -295,7 +295,7 @@ impl SqliteDatabase {
                        source_id, account_id, repository_id, run_id, workflow_id, run_number,
                        attempt, title, lifecycle, outcome, branch, commit_sha, actor, trigger,
                        created_at, started_at, updated_at, web_url, provider_status,
-                       provider_conclusion, relevance
+                       provider_conclusion, relationships
                      ) VALUES (
                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
                        ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
@@ -321,7 +321,8 @@ impl SqliteDatabase {
                         run.web_url,
                         run.provider_status,
                         run.provider_conclusion,
-                        serde_json::to_string(&run.relevance).map_err(|_| PersistenceFailure)?,
+                        serde_json::to_string(&run.relationships)
+                            .map_err(|_| PersistenceFailure)?,
                     ],
                 )
                 .map_err(|_| PersistenceFailure)?;

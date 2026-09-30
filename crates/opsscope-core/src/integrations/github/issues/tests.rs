@@ -1,41 +1,53 @@
 use super::*;
-use reqwest::header::AUTHORIZATION;
+use crate::application::SourceModule;
+use crate::integrations::test_support::{Exchange, MockApi, relevance_repository};
+use serde_json::json;
 
-#[test]
-fn request_targets_selected_repository() -> Result<(), Box<dyn std::error::Error>> {
-    let client = GitHubClient::new()?;
-    let token = ProviderToken::new("github_pat_test".to_owned());
-    let repository = Repository {
-        id: "1".to_owned(),
-        owner: "octocat".to_owned(),
-        name: "Hello-World".to_owned(),
-        description: None,
-        visibility: crate::domain::RepositoryVisibility::Public,
-        web_url: "https://github.com/octocat/Hello-World".to_owned(),
-    };
-    let request = request(
-        &client,
-        &[(
-            super::super::SERVER_URL_KEY.to_owned(),
-            super::super::DEFAULT_SERVER_URL.to_owned(),
-        )]
+#[tokio::test]
+async fn issue_operations_send_the_feature_queries_through_shared_transport() {
+    let repo = relevance_repository();
+    let auth = "authorization: Bearer test-token";
+    let api = MockApi::start(vec![
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","first":100,"after":null}),
+            &[
+                "query OpenIssues",
+                "states: OPEN",
+                "comments { totalCount }",
+            ],
+            json!({"data":{"repository":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}),
+        ),
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","number":7}),
+            &[
+                "query IssueDetails",
+                "comments(last: 100)",
+                "milestone { title }",
+            ],
+            json!({"data":{"repository":{"issue":null}}}),
+        ),
+    ]);
+    let client = GitHubClient::new().unwrap();
+    let config = [("serverUrl".into(), api.url.clone())]
         .into_iter()
-        .collect(),
-        &token,
-        &repository,
-        Some("cursor"),
-    )?
-    .build()?;
-    let body: serde_json::Value = serde_json::from_slice(
-        request
-            .body()
-            .and_then(reqwest::Body::as_bytes)
-            .expect("JSON body"),
-    )?;
-    assert_eq!(body["variables"]["owner"], "octocat");
-    assert_eq!(body["variables"]["after"], "cursor");
-    assert_eq!(request.headers()[AUTHORIZATION], "Bearer github_pat_test");
-    Ok(())
+        .collect();
+    let token = ProviderToken::new("test-token".into());
+    assert_eq!(
+        client.list_issues(&config, &token, &repo).await.unwrap(),
+        Some(vec![])
+    );
+    assert_eq!(
+        client
+            .issue_details(&config, &token, &repo, 7)
+            .await
+            .unwrap(),
+        None
+    );
+    api.finish();
 }
 
 #[test]

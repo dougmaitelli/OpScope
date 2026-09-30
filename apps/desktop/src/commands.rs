@@ -214,7 +214,9 @@ pub(crate) fn save_repository_selection(
     state
         .save_repository_selection
         .execute(&request.into_domain())
-        .map(|selected_count| SaveRepositorySelectionResponse { selected_count })
+        .map(|selected_count| SaveRepositorySelectionResponse {
+            selected_count,
+        })
         .map_err(RepositorySelectionErrorResponse::from)
 }
 
@@ -226,7 +228,9 @@ pub(crate) fn disconnect_source(
     state
         .disconnect_source
         .execute(&request.connection_id)
-        .map(|disconnected| DisconnectSourceResponse { disconnected })
+        .map(|disconnected| DisconnectSourceResponse {
+            disconnected,
+        })
         .map_err(|_| "connection storage unavailable".to_owned())
 }
 

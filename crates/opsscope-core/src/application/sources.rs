@@ -50,11 +50,19 @@ pub struct CredentialField {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConnectionField {
+    pub input_type: ConnectionFieldType,
     pub key: String,
     pub label: String,
     pub placeholder: String,
     pub help: String,
     pub default_value: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectionFieldType {
+    Url,
+    Text,
+    Email,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -253,7 +261,9 @@ pub struct SourceRegistry {
 impl SourceRegistry {
     #[must_use]
     pub fn new(modules: Vec<Arc<dyn SourceModule>>) -> Self {
-        Self { modules }
+        Self {
+            modules,
+        }
     }
 
     pub(crate) fn get(&self, source_id: &str) -> Option<Arc<dyn SourceModule>> {

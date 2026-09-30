@@ -50,7 +50,9 @@ pub struct GetChangeRequestDetails {
 impl GetChangeRequestDetails {
     #[must_use]
     pub fn new(source_data: Arc<dyn SourceData>) -> Self {
-        Self { source_data }
+        Self {
+            source_data,
+        }
     }
 
     pub async fn execute(

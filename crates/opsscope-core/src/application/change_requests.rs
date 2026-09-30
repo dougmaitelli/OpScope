@@ -123,7 +123,14 @@ impl ListChangeRequests {
                 ));
             }
         }
-        change_requests.retain(|item| !only_my_work || item.change_request.relevance.matches());
+        change_requests.retain(|item| {
+            !only_my_work
+                || item
+                    .change_request
+                    .relationships
+                    .evaluate(&item.source.account_id)
+                    .matches()
+        });
         change_requests.sort_by(|left, right| {
             right
                 .change_request
