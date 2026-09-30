@@ -223,6 +223,10 @@ network; the host's loopback mapping is not that container's loopback.
 
 Use a version tag such as `:v0.3.1` instead of `:latest` for controlled upgrades.
 
+For unreleased changes, use `ghcr.io/dougmaitelli/opsscope:dev`. This rolling
+development image is published after checks pass on pushes to `main`; it may be
+less stable than a release.
+
 ### Server configuration
 
 Set these environment variables on the server process or in the Compose
