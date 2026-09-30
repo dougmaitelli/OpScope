@@ -4,13 +4,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { IssueSummary, IssueDetailsResponse } from "../../generated/contracts.ts";
 import { IssuesPage } from "./IssuesPage.tsx";
 
-const client = vi.hoisted(() => ({ listIssues: vi.fn(), issueDetails: vi.fn() }));
+const client = vi.hoisted(() => ({
+  listIssues: vi.fn(),
+  issueDetails: vi.fn(),
+  synchronizeSources: vi.fn(),
+}));
 vi.mock("../../api/application-client.tsx", () => ({ useApplicationClient: () => client }));
 
 describe("multi-provider issues", () => {
   it.each(["GitLab", "Gitea"])(
     "opens grouped %s issues and displays current details",
     async (sourceName) => {
+      vi.clearAllMocks();
+      client.synchronizeSources.mockResolvedValue({
+        failedRepositoryCount: 0,
+        alreadyRunning: false,
+      });
       const user = userEvent.setup();
       const issue: IssueSummary = {
         id: "101",
@@ -53,6 +62,9 @@ describe("multi-provider issues", () => {
       client.listIssues.mockResolvedValue({ selectedRepositoryCount: 1, issues: [issue] });
       client.issueDetails.mockResolvedValue(details);
       render(<IssuesPage />);
+      await screen.findByRole("button", { name: /Fix build/ });
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(client.synchronizeSources).toHaveBeenCalledExactlyOnceWith({ scope: "issues" });
       await user.click(await screen.findByRole("button", { name: /Fix build/ }));
       const dialog = screen.getByRole("dialog", { name: "Fix build" });
       expect(

@@ -8,6 +8,8 @@ const client = vi.hoisted(() => ({
   listChangeRequests: vi.fn(),
   changeRequestDetails: vi.fn(),
   listWorkflows: vi.fn(),
+  executeAction: vi.fn(),
+  synchronizeSources: vi.fn(),
   actionOptions: vi.fn().mockResolvedValue({ actions: [], revision: null }),
 }));
 vi.mock("../../api/application-client.tsx", () => ({
@@ -18,6 +20,18 @@ describe("multi-provider pull requests", () => {
   it.each(["GitLab", "Gitea", "Bitbucket Cloud"])(
     "opens grouped %s requests through the shared details dialog",
     async (sourceName) => {
+      vi.clearAllMocks();
+      client.actionOptions.mockResolvedValue({
+        actions: [
+          {
+            action: "mergeChangeRequest",
+            label: "Merge PR",
+            confirmation: "Merge?",
+            disabledReason: null,
+          },
+        ],
+        revision: "head",
+      });
       const user = userEvent.setup();
       const request: ChangeRequestSummary = {
         id: "42",
@@ -43,7 +57,7 @@ describe("multi-provider pull requests", () => {
       };
       client.listChangeRequests.mockResolvedValue({
         selectedRepositoryCount: 1,
-        changeRequests: [request],
+        changeRequests: [request, { ...request, id: "43", number: 8, title: "Unrelated PR" }],
       });
       client.listWorkflows.mockResolvedValue({ workflows: [] });
       client.changeRequestDetails.mockResolvedValue({
@@ -86,8 +100,36 @@ describe("multi-provider pull requests", () => {
         "href",
         "https://ci.example/build/1",
       );
+      client.executeAction.mockResolvedValue({
+        accepted: true,
+        run: null,
+        changeRequest: { ...request, state: "merged" },
+        details: {
+          body: "Fresh merged description",
+          labels: [],
+          reviews: [],
+          checks: [],
+          latestCommit: null,
+        },
+      });
+      await user.click(await within(dialog).findByRole("button", { name: "Merge PR" }));
+      await user.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+      expect(await within(dialog).findByText("Fresh merged description")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Improve build checks/ }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Unrelated PR/ })).toBeInTheDocument();
+      expect(client.listChangeRequests).toHaveBeenCalledTimes(1);
+      expect(client.changeRequestDetails).toHaveBeenCalledTimes(1);
+      expect(client.listWorkflows).toHaveBeenCalledTimes(1);
       await user.click(within(dialog).getByRole("button", { name: "Close pull request details" }));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      client.synchronizeSources.mockResolvedValue({
+        failedRepositoryCount: 0,
+        alreadyRunning: false,
+      });
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(client.synchronizeSources).toHaveBeenCalledExactlyOnceWith({ scope: "pullRequests" });
     },
   );
 });

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useSynchronizedData } from "../../api/use-synchronized-data.ts";
+import { updateWorkflowRun } from "../../shared/action-refresh.ts";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
@@ -87,36 +89,24 @@ export function ActivityPage() {
   const { settings } = useMonitoringSettings();
   const client = useApplicationClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
-  const [persistedActivity, setPersistedActivity] = useState<ListActivityResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const { data, setData, loading, error } = useSynchronizedData<{
+    inventory: ListWorkflowsResponse;
+    activity: ListActivityResponse;
+  }>(async () => {
+    const [inventory, activity] = await Promise.all([
+      client.listWorkflows(),
+      client.listActivity(),
+    ]);
+    return { inventory, activity };
+  });
+  const inventory = data?.inventory ?? null;
+  const persistedActivity = data?.activity ?? null;
   const [selected, setSelected] = useState<{
     workflow: WorkflowSummary;
     run: WorkflowRunSummary;
   } | null>(null);
   const [selectedChangeRequest, setSelectedChangeRequest] =
     useState<ChangeRequestActivitySummary | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([client.listWorkflows(), client.listActivity()])
-      .then(([workflowResponse, activityResponse]) => {
-        if (active) {
-          setInventory(workflowResponse);
-          setPersistedActivity(activityResponse);
-        }
-      })
-      .catch(() => {
-        if (active) setError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
 
   const activities = useMemo(() => {
     const workflows: WorkflowActivity[] = (inventory?.workflows ?? []).flatMap((workflow) =>
@@ -321,6 +311,22 @@ export function ActivityPage() {
         <WorkflowRunLogsDialog
           workflow={selected.workflow}
           run={selected.run}
+          onUpdated={(run) =>
+            setData(
+              (current) =>
+                current && {
+                  ...current,
+                  inventory: {
+                    ...current.inventory,
+                    workflows: updateWorkflowRun(
+                      current.inventory.workflows,
+                      selected.workflow,
+                      run,
+                    ),
+                  },
+                },
+            )
+          }
           onClose={() => setSelected(null)}
         />
       ) : null}

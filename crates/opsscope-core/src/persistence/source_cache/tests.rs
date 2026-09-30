@@ -228,11 +228,55 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
     );
     assert_eq!(
         database.change_requests("example", "42", "repository-1")?,
-        Some(change_requests)
+        Some(change_requests.clone())
     );
     assert_eq!(
         database.change_request_details("example", "42", "repository-1", 42)?,
-        Some(change_request_details)
+        Some(change_request_details.clone())
+    );
+    let other = ChangeRequest {
+        id: "other".into(),
+        number: 43,
+        ..change_requests.change_requests[0].clone()
+    };
+    let snapshot = ChangeRequestSnapshot {
+        refreshed_at: 126,
+        change_requests: vec![change_requests.change_requests[0].clone(), other.clone()],
+    };
+    database.replace_change_requests("example", "42", "repository-1", &snapshot)?;
+    database.replace_change_requests("example", "99", "repository-1", &snapshot)?;
+    let mut updated = change_request_details;
+    updated.refreshed_at = 200;
+    updated.details.change_request.title = "Updated individually".into();
+    database.replace_change_request_details("example", "42", "repository-1", 42, &updated)?;
+    let cached = database
+        .change_requests("example", "42", "repository-1")?
+        .unwrap();
+    assert_eq!(cached.refreshed_at, 126);
+    assert!(
+        cached
+            .change_requests
+            .contains(&updated.details.change_request)
+    );
+    assert!(cached.change_requests.contains(&other));
+    updated.details.change_request.state = ChangeRequestState::Merged;
+    database.replace_change_request_details("example", "42", "repository-1", 42, &updated)?;
+    let cached = database
+        .change_requests("example", "42", "repository-1")?
+        .unwrap();
+    assert_eq!(cached.refreshed_at, 126);
+    assert_eq!(cached.change_requests, vec![other]);
+    assert_eq!(
+        database.change_request_details("example", "42", "repository-1", 42)?,
+        Some(updated)
+    );
+    assert_eq!(
+        database
+            .change_requests("example", "99", "repository-1")?
+            .unwrap()
+            .change_requests
+            .len(),
+        2
     );
     database.delete("example")?;
     assert!(database.repositories("example", "42")?.is_none());

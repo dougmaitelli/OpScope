@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useFeatureRefresh } from "../../api/use-feature-refresh.ts";
+import { RefreshButton } from "../../components/RefreshButton.tsx";
+import { useSynchronizedData } from "../../api/use-synchronized-data.ts";
+import { useMemo, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
@@ -7,7 +10,6 @@ import type {
   ChangeRequestSummary,
   ListChangeRequestsResponse,
 } from "../../generated/contracts.ts";
-import { requestErrorMessage } from "../../shared/errors.ts";
 import { ChangeRequestFilters, type ChangeRequestFilter } from "./ChangeRequestFilters.tsx";
 import { ChangeRequestDetailsDialog } from "./ChangeRequestDetailsDialog.tsx";
 import { ChangeRequestProjectGroup } from "./ChangeRequestProjectGroup.tsx";
@@ -17,30 +19,21 @@ import "./ChangeRequestsPage.css";
 
 export function ChangeRequestsPage() {
   const client = useApplicationClient();
-  const [inventory, setInventory] = useState<ListChangeRequestsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: inventory,
+    setData: setInventory,
+    loading,
+    error,
+    setError,
+  } = useSynchronizedData<ListChangeRequestsResponse>(() => client.listChangeRequests());
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ChangeRequestFilter>("all");
   const [selected, setSelected] = useState<ChangeRequestSummary | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void client
-      .listChangeRequests()
-      .then((response) => {
-        if (active) setInventory(response);
-      })
-      .catch((failure: unknown) => {
-        if (active) setError(requestErrorMessage(failure));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client]);
+  const { refresh, refreshing, notice } = useFeatureRefresh("pullRequests", async () => {
+    setInventory(await client.listChangeRequests());
+    setError(null);
+  });
 
   const changeRequests = useMemo(() => inventory?.changeRequests ?? [], [inventory]);
   const filtered = useMemo(() => {
@@ -81,7 +74,9 @@ export function ChangeRequestsPage() {
         eyebrow="Code changes"
         title="Pull requests"
         description="Review readiness, checks, and merge state across monitored repositories."
+        actions={<RefreshButton busy={refreshing} disabled={loading} onRefresh={refresh} />}
       />
+      {notice ? <p role="status">{notice}</p> : null}
       <section className="panel change-requests-panel" aria-labelledby="change-request-list-title">
         <PanelHeader
           label="Open work"
@@ -121,7 +116,28 @@ export function ChangeRequestsPage() {
         </ProjectGroupList>
       </section>
       {selected ? (
-        <ChangeRequestDetailsDialog changeRequest={selected} onClose={() => setSelected(null)} />
+        <ChangeRequestDetailsDialog
+          changeRequest={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={(updated) => {
+            setSelected(updated);
+            setInventory(
+              (current) =>
+                current && {
+                  ...current,
+                  changeRequests: current.changeRequests.flatMap((item) =>
+                    item.sourceId === updated.sourceId &&
+                    item.repositoryId === updated.repositoryId &&
+                    item.number === updated.number
+                      ? updated.state === "open"
+                        ? [updated]
+                        : []
+                      : [item],
+                  ),
+                },
+            );
+          }}
+        />
       ) : null}
     </section>
   );

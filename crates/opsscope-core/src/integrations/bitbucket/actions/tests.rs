@@ -149,7 +149,11 @@ async fn creates_pipeline_at_original_commit_without_copying_variables() {
     let auth = "authorization: Basic dXNlckBleGFtcGxlLmNvbTpzZWNyZXQ=";
     let target = json!({"type":"pipeline_ref_target","ref_name":"main","ref_type":"branch","commit":{"hash":"abc"}});
     let pipeline = json!({"state":{"name":"COMPLETED"},"target":target,"completed_on":"today"});
-    let mut mutation = Exchange::json("/2.0/repositories/team/app/pipelines", auth, json!({}));
+    let mut mutation = Exchange::json(
+        "/2.0/repositories/team/app/pipelines",
+        auth,
+        json!({"uuid":"new-run-uuid"}),
+    );
     mutation.method = "POST".into();
     mutation.request_body = Some(
         json!({"target":{"type":"pipeline_ref_target","ref_name":"main","ref_type":"branch","commit":{"type":"commit","hash":"abc"}}}),
@@ -185,7 +189,7 @@ async fn creates_pipeline_at_original_commit_without_copying_variables() {
         .await
         .unwrap();
     assert!(options.actions[0].disabled_reason.is_none());
-    client
+    let refreshed_target = client
         .perform_action(
             &config,
             &token,
@@ -196,6 +200,12 @@ async fn creates_pipeline_at_original_commit_without_copying_variables() {
         )
         .await
         .unwrap();
+    assert_eq!(
+        refreshed_target,
+        Some(ActionTarget::WorkflowRun {
+            run_id: "new-run-uuid".into()
+        })
+    );
     assert_eq!(
         client
             .perform_action(

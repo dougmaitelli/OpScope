@@ -22,6 +22,20 @@ struct CountingSourceModule {
 
 #[async_trait]
 impl SourceModule for CountingSourceModule {
+    async fn workflow_run(
+        &self,
+        _configuration: &ConnectionConfiguration,
+        _token: &ProviderToken,
+        _repository: &Repository,
+        run_id: &str,
+    ) -> Result<Option<WorkflowRun>, ConnectionValidationFailure> {
+        Ok(Some(WorkflowRun {
+            id: run_id.into(),
+            attempt: 3,
+            lifecycle: RunLifecycle::Queued,
+            ..test_run()
+        }))
+    }
     fn descriptor(&self) -> SourceDescriptor {
         SourceDescriptor {
             id: "example".to_owned(),
@@ -376,6 +390,54 @@ fn dependencies() -> Result<TestDependencies, PersistenceFailure> {
         workflow_run_requests,
         fail_workflow_runs,
     })
+}
+
+#[tokio::test]
+async fn single_run_read_updates_only_that_cached_item_without_refreshing_the_collection()
+-> Result<(), Box<dyn std::error::Error>> {
+    let deps = dependencies()?;
+    let database = Arc::new(deps.database);
+    let original = test_run();
+    let other = WorkflowRun {
+        id: "other".into(),
+        run_number: original.run_number - 1,
+        ..original.clone()
+    };
+    let snapshot = WorkflowRunSnapshot {
+        last_attempted_at: 100,
+        last_successful_at: Some(90),
+        last_error: Some(ConnectionValidationFailure::RateLimited),
+        runs: vec![original.clone(), other.clone()],
+    };
+    database.replace_workflow_runs("example", "42", "repository-1", &snapshot)?;
+    database.replace_workflow_runs("example", "99", "repository-1", &snapshot)?;
+    let data = ReadThroughSourceData::cached(
+        deps.registry,
+        database.clone(),
+        Arc::new(deps.secrets),
+        database.clone(),
+        SourceDataCachePolicy::default(),
+    );
+    let updated = data
+        .workflow_run("example", &test_repository(), &original.id)
+        .await?
+        .unwrap();
+    assert_eq!(updated.attempt, 3);
+    assert_eq!(deps.workflow_run_requests.load(Ordering::SeqCst), 0);
+    let cached = database
+        .workflow_runs("example", "42", "repository-1")?
+        .unwrap();
+    assert!(cached.runs.contains(&updated));
+    assert!(cached.runs.contains(&other));
+    assert_eq!(cached.runs.len(), 2);
+    assert_eq!(cached.last_attempted_at, 100);
+    assert_eq!(cached.last_successful_at, Some(90));
+    assert_eq!(cached.last_error, snapshot.last_error);
+    assert_eq!(
+        database.workflow_runs("example", "99", "repository-1")?,
+        Some(snapshot)
+    );
+    Ok(())
 }
 
 #[tokio::test]

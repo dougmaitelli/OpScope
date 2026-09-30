@@ -171,6 +171,15 @@ pub trait SourceDataCache: Send + Sync {
         snapshot: &WorkflowRunSnapshot,
     ) -> Result<(), PersistenceFailure>;
 
+    /// Update one item without changing the collection's freshness or other items.
+    fn update_workflow_run(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        run: &WorkflowRun,
+    ) -> Result<(), PersistenceFailure>;
+
     fn change_requests(
         &self,
         source_id: &str,
@@ -194,6 +203,8 @@ pub trait SourceDataCache: Send + Sync {
         number: u64,
     ) -> Result<Option<ChangeRequestDetailsSnapshot>, PersistenceFailure>;
 
+    /// Store details and reconcile this item's open-list summary atomically,
+    /// preserving collection freshness and all other items.
     fn replace_change_request_details(
         &self,
         source_id: &str,
@@ -731,10 +742,19 @@ impl SourceData for ReadThroughSourceData {
             .secrets
             .retrieve(&connection.secret_reference)
             .map_err(|_| SourceDataFailure::StorageUnavailable)?;
-        module
+        let run = module
             .workflow_run(&connection.configuration, &token, repository, run_id)
             .await
-            .map_err(SourceDataFailure::Source)
+            .map_err(SourceDataFailure::Source)?;
+        if let (Some(cache), Some(run)) = (&self.cache, &run) {
+            _ = cache.update_workflow_run(
+                source_id,
+                &connection.account.external_id,
+                &repository.id,
+                run,
+            );
+        }
+        Ok(run)
     }
 
     async fn workflow_run_logs(

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useApplicationClient } from "../api/application-client.tsx";
-import type { ActionOptions, ActionTarget, AvailableAction } from "../generated/contracts.ts";
+import type {
+  ActionOptions,
+  ActionTarget,
+  AvailableAction,
+  ExecuteActionResponse,
+} from "../generated/contracts.ts";
 import { requestErrorMessage } from "../shared/errors.ts";
 import "./SourceActions.css";
 
@@ -13,7 +18,7 @@ export function SourceActions({
   sourceId: string;
   repositoryId: string;
   target: ActionTarget;
-  onAccepted?: () => void;
+  onAccepted?: (response: ExecuteActionResponse) => void;
 }) {
   const client = useApplicationClient();
   const [options, setOptions] = useState<ActionOptions | null>(null);
@@ -55,7 +60,7 @@ export function SourceActions({
     setBusy(true);
     setError(null);
     try {
-      await client.executeAction({
+      const response = await client.executeAction({
         sourceId,
         repositoryId,
         target,
@@ -63,7 +68,7 @@ export function SourceActions({
         revision: options.revision,
       });
       setAccepted(true);
-      onAccepted?.();
+      onAccepted?.(response);
     } catch (failure) {
       setError(requestErrorMessage(failure));
       // Require a fresh availability check before another manual attempt.

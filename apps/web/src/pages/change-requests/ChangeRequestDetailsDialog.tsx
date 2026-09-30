@@ -17,24 +17,27 @@ import type {
 } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { updateWorkflowRun } from "../../shared/action-refresh.ts";
 import "./ChangeRequestDetailsDialog.css";
 
 const statusLabel = (value: string) =>
   value.replace(/([A-Z])/g, " $1").replace(/^./, (character) => character.toUpperCase());
 
 export function ChangeRequestDetailsDialog({
-  changeRequest,
+  changeRequest: initialChangeRequest,
   onClose,
+  onUpdated,
 }: {
   changeRequest: ChangeRequestSummary;
   onClose: () => void;
+  onUpdated?: (changeRequest: ChangeRequestSummary) => void;
 }) {
   const client = useApplicationClient();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [changeRequest, setChangeRequest] = useState(initialChangeRequest);
   const [details, setDetails] = useState<ChangeRequestDetailsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionRevision, setActionRevision] = useState(0);
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [selectedRun, setSelectedRun] = useState<{
     workflow: WorkflowSummary;
@@ -67,13 +70,7 @@ export function ChangeRequestDetailsDialog({
     return () => {
       active = false;
     };
-  }, [
-    changeRequest.number,
-    changeRequest.repositoryId,
-    changeRequest.sourceId,
-    client,
-    actionRevision,
-  ]);
+  }, [changeRequest.number, changeRequest.repositoryId, changeRequest.sourceId, client]);
 
   useEffect(() => {
     let active = true;
@@ -156,7 +153,16 @@ export function ChangeRequestDetailsDialog({
           sourceId={changeRequest.sourceId}
           repositoryId={changeRequest.repositoryId}
           target={{ type: "changeRequest", number: changeRequest.number }}
-          onAccepted={() => setActionRevision((value) => value + 1)}
+          onAccepted={(response) => {
+            if (response.details) {
+              setDetails(response.details);
+              setError(null);
+            }
+            if (response.changeRequest) {
+              setChangeRequest(response.changeRequest);
+              onUpdated?.(response.changeRequest);
+            }
+          }}
         />
         <div className="change-request-dialog-statuses">
           <StatusPill tone={changeRequestStatusTone[changeRequest.reviewStatus]}>
@@ -303,6 +309,9 @@ export function ChangeRequestDetailsDialog({
         <WorkflowRunLogsDialog
           workflow={selectedRun.workflow}
           run={selectedRun.run}
+          onUpdated={(run) =>
+            setWorkflows((current) => updateWorkflowRun(current, selectedRun.workflow, run))
+          }
           onClose={() => setSelectedRun(null)}
         />
       ) : selectedRunReference ? (

@@ -94,7 +94,7 @@ export type ActionOptionsRequest = { sourceId: string, repositoryId: string, tar
 
 export type ExecuteActionRequest = { sourceId: string, repositoryId: string, target: ActionTarget, action: SourceAction, revision: string | null, };
 
-export type ExecuteActionResponse = { accepted: boolean, };
+export type ExecuteActionResponse = { accepted: boolean, run: WorkflowRunSummary | null, changeRequest: ChangeRequestSummary | null, details: ChangeRequestDetailsResponse | null, };
 
 export type ActionErrorResponse = { code: string, message: string, };
 
@@ -117,6 +117,10 @@ export type WorkflowSummary = { id: string, name: string, path: string, state: W
 export type ListWorkflowsResponse = { selectedRepositoryCount: number, workflows: Array<WorkflowSummary>, lastAttemptedAt: number | null, lastSuccessfulAt: number | null, stale: boolean, syncError: string | null, };
 
 export type SynchronizationResponse = { selectedRepositoryCount: number, synchronizedRepositoryCount: number, failedRepositoryCount: number, skippedRepositoryCount: number, alreadyRunning: boolean, };
+
+export type SynchronizationScope = "all" | "workflows" | "pullRequests" | "issues";
+
+export type SynchronizationRequest = { scope: SynchronizationScope, };
 
 export type SynchronizationStatusResponse = { running: boolean, activeSourceCount: number, lastCompletedAt: number | null, lastFailedRepositoryCount: number, };
 
@@ -198,7 +202,7 @@ export interface ApplicationClient {
   listIssues(): Promise<ListIssuesResponse>;
   issueDetails(request: IssueDetailsRequest): Promise<IssueDetailsResponse>;
   workflowRunLogs(request: WorkflowRunLogsRequest): Promise<WorkflowRunLogsResponse>;
-  synchronizeSources(): Promise<SynchronizationResponse>;
+  synchronizeSources(request: SynchronizationRequest): Promise<SynchronizationResponse>;
   synchronizationStatus(): Promise<SynchronizationStatusResponse>;
   getSettings(): Promise<MonitoringSettingsResponse>;
   updateSettings(request: UpdateMonitoringSettingsRequest): Promise<MonitoringSettingsResponse>;

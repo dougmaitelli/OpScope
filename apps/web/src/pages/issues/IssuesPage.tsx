@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useFeatureRefresh } from "../../api/use-feature-refresh.ts";
+import { RefreshButton } from "../../components/RefreshButton.tsx";
+import { useSynchronizedData } from "../../api/use-synchronized-data.ts";
+import { useMemo, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import type { IssueSummary, ListIssuesResponse } from "../../generated/contracts.ts";
-import { requestErrorMessage } from "../../shared/errors.ts";
 import { IssueDetailsDialog } from "./IssueDetailsDialog.tsx";
 import { IssueFilters } from "./IssueFilters.tsx";
 import { IssueProjectGroup } from "./IssueProjectGroup.tsx";
@@ -12,65 +14,24 @@ import { ProjectGroupList } from "../../components/ProjectGroup.tsx";
 import { groupByProject } from "../../shared/project-groups.ts";
 import "./IssuesPage.css";
 
-const ISSUE_REFRESH_INTERVAL_MS = 10_000;
-
 export function IssuesPage() {
   const client = useApplicationClient();
-  const [inventory, setInventory] = useState<ListIssuesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: inventory,
+    setData: setInventory,
+    loading,
+    error,
+    setError,
+  } = useSynchronizedData<ListIssuesResponse>(() => client.listIssues());
   const [query, setQuery] = useState("");
   const [repository, setRepository] = useState("all");
   const [assignment, setAssignment] = useState("all");
-  const [refreshing, setRefreshing] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<IssueSummary | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      client
-        .listIssues()
-        .then((response) => {
-          if (active) {
-            setInventory(response);
-            setError(null);
-          }
-        })
-        .catch((failure: unknown) => {
-          if (active) setError(requestErrorMessage(failure));
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    void load();
-    const interval = window.setInterval(() => void load(), ISSUE_REFRESH_INTERVAL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [client]);
-
-  async function refresh() {
-    setRefreshing(true);
-    setNotice(null);
-    try {
-      const result = await client.synchronizeSources();
-      setInventory(await client.listIssues());
-      setError(null);
-      if (result.failedRepositoryCount > 0) {
-        setNotice(
-          "Some repositories could not be refreshed. Previously loaded issues remain available.",
-        );
-      } else if (result.alreadyRunning) {
-        setNotice("Synchronization is already running. Refresh again once it finishes.");
-      }
-    } catch (failure) {
-      setNotice(requestErrorMessage(failure));
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  const { refresh, refreshing, notice } = useFeatureRefresh("issues", async () => {
+    setInventory(await client.listIssues());
+    setError(null);
+  });
 
   const issues = useMemo(() => inventory?.issues ?? [], [inventory]);
   const repositories = useMemo(() => {
@@ -116,17 +77,7 @@ export function IssuesPage() {
         eyebrow="Tracked work"
         title="Issues"
         description="Open issues across monitored repositories, with ownership and recent discussion."
-        actions={
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={refreshing}
-            aria-busy={refreshing}
-            onClick={() => void refresh()}
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        }
+        actions={<RefreshButton busy={refreshing} disabled={loading} onRefresh={refresh} />}
       />
       {notice ? (
         <p className="issue-refresh-notice" role="status">

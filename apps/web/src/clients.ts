@@ -27,6 +27,7 @@ import {
   type SaveRepositorySelectionRequest,
   type SaveRepositorySelectionResponse,
   type SynchronizationResponse,
+  type SynchronizationRequest,
   type SynchronizationStatusResponse,
   type UpdateMonitoringSettingsRequest,
   type UpdateStatusResponse,
@@ -80,8 +81,8 @@ export class DesktopClient implements ApplicationClient {
     return invoke<WorkflowRunLogsResponse>(desktopCommands.workflowRunLogs, { request });
   }
 
-  synchronizeSources(): Promise<SynchronizationResponse> {
-    return invoke<SynchronizationResponse>(desktopCommands.synchronizeSources);
+  synchronizeSources(request: SynchronizationRequest): Promise<SynchronizationResponse> {
+    return invoke<SynchronizationResponse>(desktopCommands.synchronizeSources, { request });
   }
 
   synchronizationStatus(): Promise<SynchronizationStatusResponse> {
@@ -178,8 +179,8 @@ export class HttpClient implements ApplicationClient {
     return this.post<WorkflowRunLogsResponse>(httpRoutes.workflowRunLogs, request);
   }
 
-  synchronizeSources(): Promise<SynchronizationResponse> {
-    return this.post<SynchronizationResponse>(httpRoutes.synchronization, {});
+  synchronizeSources(request: SynchronizationRequest): Promise<SynchronizationResponse> {
+    return this.post<SynchronizationResponse>(httpRoutes.synchronization, request);
   }
 
   synchronizationStatus(): Promise<SynchronizationStatusResponse> {

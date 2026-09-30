@@ -25,13 +25,14 @@ export interface WorkflowRunReference {
 type WorkflowRunLogsDialogProps = (
   | { workflow: WorkflowSummary; run: WorkflowRunSummary; reference?: never }
   | { workflow?: never; run?: never; reference: WorkflowRunReference }
-) & { onClose: () => void };
+) & { onClose: () => void; onUpdated?: (run: WorkflowRunSummary) => void };
 
 export function WorkflowRunLogsDialog({
   workflow,
   run,
   reference,
   onClose,
+  onUpdated,
 }: WorkflowRunLogsDialogProps) {
   const client = useApplicationClient();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -41,6 +42,7 @@ export function WorkflowRunLogsDialog({
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshedRun, setRefreshedRun] = useState<WorkflowRunSummary | null>(null);
 
   useEffect(() => {
     if (dialog.current && !dialog.current.open) {
@@ -52,13 +54,13 @@ export function WorkflowRunLogsDialog({
     let active = true;
     const sourceId = workflow?.sourceId ?? reference?.sourceId;
     const repositoryId = workflow?.repositoryId ?? reference?.repositoryId;
-    const runId = run?.id ?? reference?.runId;
+    const runId = refreshedRun?.id ?? run?.id ?? reference?.runId;
     if (!sourceId || !repositoryId || !runId) {
       setError("The workflow run reference is incomplete.");
       setLoading(false);
       return;
     }
-    setResolvedRun(run ?? null);
+    setResolvedRun(refreshedRun ?? run ?? null);
     setLoading(true);
     setError(null);
     client
@@ -66,7 +68,7 @@ export function WorkflowRunLogsDialog({
         sourceId,
         repositoryId,
         runId,
-        attempt: run?.attempt ?? null,
+        attempt: refreshedRun?.attempt ?? run?.attempt ?? null,
       })
       .then((response) => {
         if (!active) return;
@@ -84,7 +86,16 @@ export function WorkflowRunLogsDialog({
     return () => {
       active = false;
     };
-  }, [client, reference?.repositoryId, reference?.runId, reference?.sourceId, run, workflow]);
+  }, [
+    client,
+    reference?.repositoryId,
+    reference?.runId,
+    reference?.sourceId,
+    run,
+    workflow?.sourceId,
+    workflow?.repositoryId,
+    refreshedRun,
+  ]);
 
   const activeFile = files[selectedFile] ?? null;
   const sourceName = workflow?.sourceName ?? reference?.sourceName ?? "source";
@@ -149,7 +160,17 @@ export function WorkflowRunLogsDialog({
         <SourceActions
           sourceId={workflow?.sourceId ?? reference?.sourceId ?? ""}
           repositoryId={workflow?.repositoryId ?? reference?.repositoryId ?? ""}
-          target={{ type: "workflowRun", runId: run?.id ?? reference?.runId ?? "" }}
+          target={{
+            type: "workflowRun",
+            runId: refreshedRun?.id ?? run?.id ?? reference?.runId ?? "",
+          }}
+          onAccepted={(response) => {
+            if (response.run) {
+              setRefreshedRun(response.run);
+              setResolvedRun(response.run);
+              onUpdated?.(response.run);
+            }
+          }}
         />
         {truncated ? (
           <p className="run-logs-notice">

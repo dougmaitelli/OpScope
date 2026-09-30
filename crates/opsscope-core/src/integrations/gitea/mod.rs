@@ -146,9 +146,10 @@ impl SourceModule for GiteaClient {
         target: &crate::application::ActionTarget,
         action: crate::application::SourceAction,
         revision: Option<&str>,
-    ) -> Result<(), crate::application::ActionFailure> {
+    ) -> Result<Option<crate::application::ActionTarget>, crate::application::ActionFailure> {
         self.perform_action(config, token, repo, target, action, revision)
             .await
+            .map(|()| None)
     }
 
     fn descriptor(&self) -> SourceDescriptor {

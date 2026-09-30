@@ -11,6 +11,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub const DEFAULT_SYNCHRONIZATION_INTERVAL: Duration =
     Duration::from_secs(super::DEFAULT_SYNCHRONIZATION_INTERVAL_SECONDS);
 
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize, ts_rs::TS,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SynchronizationScope {
+    #[default]
+    All,
+    Workflows,
+    PullRequests,
+    Issues,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SynchronizationFailure {
     StorageUnavailable,
@@ -105,11 +117,28 @@ impl SynchronizeSources {
     }
 
     pub async fn execute(&self) -> Result<SynchronizationSummary, SynchronizationFailure> {
-        let pull_requests_enabled = self
+        self.execute_scoped(SynchronizationScope::All).await
+    }
+
+    pub async fn execute_scoped(
+        &self,
+        scope: SynchronizationScope,
+    ) -> Result<SynchronizationSummary, SynchronizationFailure> {
+        let workflows_enabled = matches!(
+            scope,
+            SynchronizationScope::All | SynchronizationScope::Workflows
+        );
+        let pull_requests_enabled = matches!(
+            scope,
+            SynchronizationScope::All | SynchronizationScope::PullRequests
+        ) && self
             .source_data
             .feature_enabled(super::SourceCapability::ChangeRequests)
             .map_err(|_| SynchronizationFailure::StorageUnavailable)?;
-        let issues_enabled = self
+        let issues_enabled = matches!(
+            scope,
+            SynchronizationScope::All | SynchronizationScope::Issues
+        ) && self
             .source_data
             .feature_enabled(super::SourceCapability::Issues)
             .map_err(|_| SynchronizationFailure::StorageUnavailable)?;
@@ -127,6 +156,18 @@ impl SynchronizeSources {
             .sources()
             .map_err(|_| SynchronizationFailure::StorageUnavailable)?
         {
+            if !(workflows_enabled
+                && source
+                    .descriptor
+                    .supports(super::SourceCapability::Workflows)
+                || pull_requests_enabled
+                    && source
+                        .descriptor
+                        .supports(super::SourceCapability::ChangeRequests)
+                || issues_enabled && source.descriptor.supports(super::SourceCapability::Issues))
+            {
+                continue;
+            }
             let selected_ids = selections
                 .iter()
                 .filter(|selection| selection.source_id == source.id)
@@ -146,7 +187,14 @@ impl SynchronizeSources {
 
             let repositories = match self
                 .source_data
-                .repositories(&source.id, RefreshMode::Force)
+                .repositories(
+                    &source.id,
+                    if scope == SynchronizationScope::All {
+                        RefreshMode::Force
+                    } else {
+                        RefreshMode::CacheFirst
+                    },
+                )
                 .await
             {
                 Ok(Some(repositories)) => repositories,
@@ -256,40 +304,46 @@ impl SynchronizeSources {
                     );
                     item_sync_failed = true;
                 }
-                let workflows = self
-                    .source_data
-                    .workflows(&source.id, &repository, RefreshMode::Force)
-                    .await;
-                let runs = self
-                    .source_data
-                    .workflow_runs(&source.id, &repository, RefreshMode::Force)
-                    .await;
-                match (workflows, runs) {
-                    (Ok(workflows), Ok(runs)) if !runs.stale => {
-                        if let Err(failure) = self
-                            .failure_notifications
-                            .observe(
-                                &source.account_id,
-                                &source.id,
-                                &repository,
-                                &workflows,
-                                &runs.runs,
-                            )
-                            .await
-                        {
-                            eprintln!(
-                                "failed to process workflow notifications for {}/{}: {failure}",
-                                repository.owner, repository.name
-                            );
-                            item_sync_failed = true;
+                if workflows_enabled
+                    && source
+                        .descriptor
+                        .supports(super::SourceCapability::Workflows)
+                {
+                    let workflows = self
+                        .source_data
+                        .workflows(&source.id, &repository, RefreshMode::Force)
+                        .await;
+                    let runs = self
+                        .source_data
+                        .workflow_runs(&source.id, &repository, RefreshMode::Force)
+                        .await;
+                    match (workflows, runs) {
+                        (Ok(workflows), Ok(runs)) if !runs.stale => {
+                            if let Err(failure) = self
+                                .failure_notifications
+                                .observe(
+                                    &source.account_id,
+                                    &source.id,
+                                    &repository,
+                                    &workflows,
+                                    &runs.runs,
+                                )
+                                .await
+                            {
+                                eprintln!(
+                                    "failed to process workflow notifications for {}/{}: {failure}",
+                                    repository.owner, repository.name
+                                );
+                                item_sync_failed = true;
+                            }
                         }
-                        if item_sync_failed {
-                            summary.failed_repository_count += 1;
-                        } else {
-                            summary.synchronized_repository_count += 1;
-                        }
+                        _ => item_sync_failed = true,
                     }
-                    _ => summary.failed_repository_count += 1,
+                }
+                if item_sync_failed {
+                    summary.failed_repository_count += 1;
+                } else {
+                    summary.synchronized_repository_count += 1;
                 }
             }
         }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -97,6 +97,71 @@ beforeEach(() => {
 });
 
 describe("WorkflowsPage", () => {
+  it("requests a workflows-only refresh", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const fallback = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input) === "/api/sync" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toEqual({ scope: "workflows" });
+        return Response.json({ failedRepositoryCount: 0, alreadyRunning: false });
+      }
+      return fallback(input, init);
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("heading", { name: "team/broken" });
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(
+      fetchMock.mock.calls.filter(([url, init]) => url === "/api/sync" && init?.method === "POST"),
+    ).toHaveLength(1);
+  });
+  it("updates the rerun dialog and only its workflow row without reloading the inventory", async () => {
+    const original = inventory.workflows[0]!.runs[0]!;
+    const updated = { ...original, attempt: 2, lifecycle: "queued", outcome: "unknown" };
+    let accepted = false;
+    const fetchMock = vi.mocked(fetch);
+    const fallback = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/action-options")
+        return Response.json({
+          actions: [
+            {
+              action: "rerunWorkflow",
+              label: "Re-run workflow",
+              confirmation: "Rerun?",
+              disabledReason: null,
+            },
+          ],
+          revision: "1",
+        });
+      if (url === "/api/actions") {
+        accepted = true;
+        return Response.json({ accepted: true, run: updated, changeRequest: null, details: null });
+      }
+      if (url.startsWith("/api/workflow-run-logs"))
+        return Response.json({
+          run: accepted ? updated : original,
+          files: [],
+          truncated: false,
+        });
+      return fallback(input, init);
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "#1 · broken changes" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(await within(dialog).findByRole("button", { name: "Re-run workflow" }));
+    await user.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+    expect(await within(dialog).findByText(/attempt 2/)).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getByText("Queued")).toBeInTheDocument());
+    await user.click(within(dialog).getByRole("button", { name: "Close logs" }));
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.getByText("healthy build")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/workflows")).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/actions")).toHaveLength(1);
+  });
+
   it("groups repositories and initially expands only failures", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "team/broken" })).toBeInTheDocument();

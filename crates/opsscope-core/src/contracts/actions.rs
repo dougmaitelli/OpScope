@@ -25,8 +25,23 @@ pub struct ExecuteActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecuteActionResponse {
     pub accepted: bool,
+    pub run: Option<WorkflowRunSummary>,
+    pub change_request: Option<ChangeRequestSummary>,
+    pub details: Option<ChangeRequestDetailsResponse>,
+}
+
+impl From<crate::application::ActionRefresh> for ExecuteActionResponse {
+    fn from(refresh: crate::application::ActionRefresh) -> Self {
+        Self {
+            accepted: true,
+            run: refresh.run.map(Into::into),
+            change_request: refresh.change_request.map(Into::into),
+            details: refresh.details.map(Into::into),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]

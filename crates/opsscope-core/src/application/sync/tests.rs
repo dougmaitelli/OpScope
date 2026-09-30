@@ -57,6 +57,9 @@ impl RepositorySelectionRepository for TestSelections {
 
 struct RecordingSourceData {
     refresh_modes: Mutex<Vec<RefreshMode>>,
+    calls: Mutex<Vec<&'static str>>,
+    capabilities: Vec<SourceCapability>,
+    disabled: Option<SourceCapability>,
 }
 
 #[derive(Default)]
@@ -90,7 +93,8 @@ impl NotificationStateRepository for TestNotificationStates {
 }
 
 impl RecordingSourceData {
-    fn record(&self, refresh: RefreshMode) {
+    fn record(&self, kind: &'static str, refresh: RefreshMode) {
+        self.calls.lock().unwrap().push(kind);
         self.refresh_modes
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -100,6 +104,9 @@ impl RecordingSourceData {
 
 #[async_trait]
 impl SourceData for RecordingSourceData {
+    fn feature_enabled(&self, capability: SourceCapability) -> Result<bool, SourceDataFailure> {
+        Ok(self.disabled.as_ref() != Some(&capability))
+    }
     fn sources(&self) -> Result<Vec<ConnectedSource>, SourceDataFailure> {
         Ok(vec![ConnectedSource {
             account_id: "42".into(),
@@ -110,7 +117,7 @@ impl SourceData for RecordingSourceData {
                 name: "Source".to_owned(),
                 description: "Test source".to_owned(),
                 abbreviation: "SO".to_owned(),
-                capabilities: vec![SourceCapability::Workflows],
+                capabilities: self.capabilities.clone(),
                 credential: CredentialField {
                     label: "Token".to_owned(),
                     placeholder: "token".to_owned(),
@@ -126,7 +133,7 @@ impl SourceData for RecordingSourceData {
         _source_id: &str,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<Repository>>, SourceDataFailure> {
-        self.record(refresh);
+        self.record("repositories", refresh);
         Ok(Some(vec![test_repository("one"), test_repository("two")]))
     }
 
@@ -136,7 +143,7 @@ impl SourceData for RecordingSourceData {
         repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Vec<Workflow>, SourceDataFailure> {
-        self.record(refresh);
+        self.record("workflows", refresh);
         if repository.id == "two" {
             Err(SourceDataFailure::Source(
                 ConnectionValidationFailure::ProviderUnavailable,
@@ -152,7 +159,7 @@ impl SourceData for RecordingSourceData {
         _repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<WorkflowRunCollection, SourceDataFailure> {
-        self.record(refresh);
+        self.record("runs", refresh);
         Ok(WorkflowRunCollection {
             runs: Vec::<WorkflowRun>::new(),
             last_attempted_at: 1,
@@ -168,8 +175,8 @@ impl SourceData for RecordingSourceData {
         _repository: &Repository,
         refresh: RefreshMode,
     ) -> Result<Option<Vec<ChangeRequest>>, SourceDataFailure> {
-        self.record(refresh);
-        Ok(None)
+        self.record("pullRequests", refresh);
+        Ok(Some(Vec::new()))
     }
 
     async fn change_request_details(
@@ -179,7 +186,7 @@ impl SourceData for RecordingSourceData {
         _number: u64,
         refresh: RefreshMode,
     ) -> Result<Option<ChangeRequestDetails>, SourceDataFailure> {
-        self.record(refresh);
+        self.record("details", refresh);
         Ok(None)
     }
 
@@ -190,6 +197,16 @@ impl SourceData for RecordingSourceData {
         _run_id: &str,
     ) -> Result<Option<WorkflowRun>, SourceDataFailure> {
         unreachable!("synchronization does not load individual runs")
+    }
+
+    async fn issues(
+        &self,
+        _source_id: &str,
+        _repository: &Repository,
+        refresh: RefreshMode,
+    ) -> Result<Option<Vec<crate::domain::Issue>>, SourceDataFailure> {
+        self.record("issues", refresh);
+        Ok(Some(Vec::new()))
     }
 
     async fn workflow_run_logs(
@@ -236,9 +253,116 @@ fn synchronization_permits_are_exclusive_per_source() {
 }
 
 #[tokio::test]
+async fn feature_scopes_refresh_only_the_requested_data() {
+    for (scope, expected) in [
+        (
+            SynchronizationScope::Workflows,
+            vec!["repositories", "workflows", "runs"],
+        ),
+        (
+            SynchronizationScope::PullRequests,
+            vec!["repositories", "pullRequests"],
+        ),
+        (SynchronizationScope::Issues, vec!["repositories", "issues"]),
+        (
+            SynchronizationScope::All,
+            vec![
+                "repositories",
+                "pullRequests",
+                "issues",
+                "workflows",
+                "runs",
+            ],
+        ),
+    ] {
+        let data = Arc::new(RecordingSourceData {
+            refresh_modes: Mutex::default(),
+            calls: Mutex::default(),
+            capabilities: vec![
+                SourceCapability::Workflows,
+                SourceCapability::ChangeRequests,
+                SourceCapability::Issues,
+            ],
+            disabled: None,
+        });
+        let sync = scoped_coordinator(data.clone());
+        let result = sync.execute_scoped(scope).await.unwrap();
+        assert_eq!(*data.calls.lock().unwrap(), expected);
+        assert_eq!(result.synchronized_repository_count, 1);
+        assert_eq!(result.failed_repository_count, 0);
+        let modes = data.refresh_modes.lock().unwrap();
+        assert_eq!(
+            modes[0],
+            if scope == SynchronizationScope::All {
+                RefreshMode::Force
+            } else {
+                RefreshMode::CacheFirst
+            }
+        );
+        assert!(modes[1..].iter().all(|mode| *mode == RefreshMode::Force));
+        assert!(sync.status().last_completed_at.is_some());
+    }
+}
+
+#[tokio::test]
+async fn scoped_refresh_skips_disabled_or_unsupported_features_and_respects_existing_locks() {
+    for disabled in [None, Some(SourceCapability::Issues)] {
+        let data = Arc::new(RecordingSourceData {
+            refresh_modes: Mutex::default(),
+            calls: Mutex::default(),
+            capabilities: if disabled.is_some() {
+                vec![SourceCapability::Issues]
+            } else {
+                vec![SourceCapability::Workflows]
+            },
+            disabled,
+        });
+        let result = scoped_coordinator(data.clone())
+            .execute_scoped(SynchronizationScope::Issues)
+            .await
+            .unwrap();
+        assert_eq!(result.synchronized_repository_count, 0);
+        assert!(data.calls.lock().unwrap().is_empty());
+    }
+    let data = Arc::new(RecordingSourceData {
+        refresh_modes: Mutex::default(),
+        calls: Mutex::default(),
+        capabilities: vec![SourceCapability::Workflows],
+        disabled: None,
+    });
+    let sync = scoped_coordinator(data.clone());
+    let _permit =
+        SourceSynchronizationPermit::acquire(sync.active_sources.clone(), "source".into()).unwrap();
+    let result = sync
+        .execute_scoped(SynchronizationScope::Workflows)
+        .await
+        .unwrap();
+    assert_eq!(result.skipped_repository_count, 1);
+    assert!(data.calls.lock().unwrap().is_empty());
+}
+
+fn scoped_coordinator(data: Arc<RecordingSourceData>) -> SynchronizeSources {
+    SynchronizeSources::new(
+        data,
+        Arc::new(TestSelections(vec![RepositorySelection {
+            source_id: "source".into(),
+            repository_id: "one".into(),
+        }])),
+        NotifyRepositoryFailures::new(
+            Arc::new(TestNotificationStates::default()),
+            Arc::new(NoopNotificationSink),
+        ),
+        TrackChangeRequestActivity::new(Arc::new(TestActivityEvents)),
+    )
+}
+
+#[tokio::test]
 async fn synchronization_forces_each_selected_repository_and_continues_after_failure() {
     let source_data = Arc::new(RecordingSourceData {
         refresh_modes: Mutex::new(Vec::new()),
+        calls: Mutex::new(Vec::new()),
+        capabilities: vec![SourceCapability::Workflows],
+        disabled: None,
     });
     let selections = Arc::new(TestSelections(vec![
         RepositorySelection {

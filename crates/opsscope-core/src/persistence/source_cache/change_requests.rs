@@ -154,39 +154,13 @@ impl SqliteDatabase {
             )
             .map_err(|_| PersistenceFailure)?;
         for change_request in &snapshot.change_requests {
-            transaction
-                .execute(
-                    "INSERT INTO change_requests (
-                       source_id, account_id, repository_id, change_request_id, number, title,
-                       author, source_branch, target_branch, state, draft, review_status,
-                       check_status, merge_status, created_at, updated_at, web_url, relationships
-                     ) VALUES (
-                       ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                       ?15, ?16, ?17, ?18
-                     )",
-                    params![
-                        source_id,
-                        account_id,
-                        repository_id,
-                        change_request.id,
-                        i64::try_from(change_request.number).map_err(|_| PersistenceFailure)?,
-                        change_request.title,
-                        change_request.author,
-                        change_request.source_branch,
-                        change_request.target_branch,
-                        change_request_state_name(change_request.state),
-                        change_request.draft,
-                        review_status_name(change_request.review_status),
-                        check_status_name(change_request.check_status),
-                        merge_status_name(change_request.merge_status),
-                        change_request.created_at,
-                        change_request.updated_at,
-                        change_request.web_url,
-                        serde_json::to_string(&change_request.relationships)
-                            .map_err(|_| PersistenceFailure)?,
-                    ],
-                )
-                .map_err(|_| PersistenceFailure)?;
+            store_change_request(
+                &transaction,
+                source_id,
+                account_id,
+                repository_id,
+                change_request,
+            )?;
         }
         transaction
             .execute(
@@ -239,8 +213,28 @@ impl SqliteDatabase {
         let number = i64::try_from(number).map_err(|_| PersistenceFailure)?;
         let refreshed_at = i64::try_from(snapshot.refreshed_at).map_err(|_| PersistenceFailure)?;
         let payload = serde_json::to_string(&snapshot.details).map_err(|_| PersistenceFailure)?;
-        let database = self.lock()?;
-        database
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        // Keep the open-list summary consistent with this individual read, without
+        // extending the TTL of the rest of the repository's collection.
+        if snapshot.details.change_request.state == ChangeRequestState::Open {
+            store_change_request(
+                &transaction,
+                source_id,
+                account_id,
+                repository_id,
+                &snapshot.details.change_request,
+            )?;
+        } else {
+            transaction
+                .execute(
+                    "DELETE FROM change_requests WHERE source_id = ?1 AND account_id = ?2
+                     AND repository_id = ?3 AND number = ?4",
+                    params![source_id, account_id, repository_id, number],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
+        transaction
             .execute(
                 "INSERT INTO change_request_details (
                    source_id, account_id, repository_id, number, refreshed_at, payload
@@ -257,7 +251,50 @@ impl SqliteDatabase {
                     payload,
                 ],
             )
-            .map(|_| ())
-            .map_err(|_| PersistenceFailure)
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
     }
+}
+
+fn store_change_request(
+    transaction: &rusqlite::Connection,
+    source_id: &str,
+    account_id: &str,
+    repository_id: &str,
+    change_request: &ChangeRequest,
+) -> Result<(), PersistenceFailure> {
+    transaction
+        .execute(
+            "INSERT OR REPLACE INTO change_requests (
+               source_id, account_id, repository_id, change_request_id, number, title,
+               author, source_branch, target_branch, state, draft, review_status,
+               check_status, merge_status, created_at, updated_at, web_url, relationships
+             ) VALUES (
+               ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+               ?15, ?16, ?17, ?18
+             )",
+            params![
+                source_id,
+                account_id,
+                repository_id,
+                change_request.id,
+                i64::try_from(change_request.number).map_err(|_| PersistenceFailure)?,
+                change_request.title,
+                change_request.author,
+                change_request.source_branch,
+                change_request.target_branch,
+                change_request_state_name(change_request.state),
+                change_request.draft,
+                review_status_name(change_request.review_status),
+                check_status_name(change_request.check_status),
+                merge_status_name(change_request.merge_status),
+                change_request.created_at,
+                change_request.updated_at,
+                change_request.web_url,
+                serde_json::to_string(&change_request.relationships)
+                    .map_err(|_| PersistenceFailure)?,
+            ],
+        )
+        .map_err(|_| PersistenceFailure)?;
+    Ok(())
 }

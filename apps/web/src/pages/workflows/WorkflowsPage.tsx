@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFeatureRefresh } from "../../api/use-feature-refresh.ts";
+import { RefreshButton } from "../../components/RefreshButton.tsx";
+import { useSynchronizedData } from "../../api/use-synchronized-data.ts";
+import { updateWorkflowRun } from "../../shared/action-refresh.ts";
 import { useSearchParams } from "react-router-dom";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
@@ -12,7 +15,6 @@ import type { ListWorkflowsResponse, WorkflowSummary } from "../../generated/con
 import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
 import "./WorkflowsPage.css";
 
-const SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS = 10_000;
 const WORKFLOW_STATUS_FILTERS = new Set<WorkflowStatusFilter>([
   "all",
   "failing",
@@ -37,99 +39,23 @@ function workflowMatchesStatus(workflow: WorkflowSummary, status: WorkflowStatus
 export function WorkflowsPage() {
   const client = useApplicationClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [inventory, setInventory] = useState<ListWorkflowsResponse | null>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
-  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
-  const lastObservedSynchronization = useRef<number | null | undefined>(undefined);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      setInventory(await client.listWorkflows());
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setRefreshing(true);
-    setError(false);
-    setRefreshNotice(null);
-    try {
-      const summary = await client.synchronizeSources();
-      setInventory(await client.listWorkflows());
-      if (summary.failedRepositoryCount > 0) {
-        setRefreshNotice(
-          `${summary.failedRepositoryCount} repositor${summary.failedRepositoryCount === 1 ? "y" : "ies"} could not be refreshed. Cached data remains available where possible.`,
-        );
-      } else if (summary.alreadyRunning) {
-        setRefreshNotice("A synchronization is already running for the selected source.");
-      }
-    } catch {
-      try {
-        setInventory(await client.listWorkflows());
-        setRefreshNotice("Synchronization failed. The last available data is still displayed.");
-      } catch {
-        setError(true);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    let stopped = false;
-    let polling = false;
-    const poll = async () => {
-      if (polling) return;
-      polling = true;
-      try {
-        const status = await client.synchronizationStatus();
-        if (stopped) return;
-        setBackgroundSyncing(status.running);
-        const previous = lastObservedSynchronization.current;
-        lastObservedSynchronization.current = status.lastCompletedAt;
-        if (
-          previous !== undefined &&
-          status.lastCompletedAt !== null &&
-          status.lastCompletedAt !== previous
-        ) {
-          const updatedInventory = await client.listWorkflows();
-          if (!stopped) {
-            setInventory(updatedInventory);
-            setError(false);
-            setRefreshNotice(
-              status.lastFailedRepositoryCount > 0
-                ? `${status.lastFailedRepositoryCount} repositor${status.lastFailedRepositoryCount === 1 ? "y" : "ies"} could not be refreshed. Cached data remains available where possible.`
-                : null,
-            );
-          }
-        }
-      } catch {
-        // Background polling must not replace already useful dashboard data.
-      } finally {
-        polling = false;
-      }
-    };
-    void poll();
-    const interval = window.setInterval(() => void poll(), SYNCHRONIZATION_STATUS_POLL_INTERVAL_MS);
-    return () => {
-      stopped = true;
-      window.clearInterval(interval);
-    };
-  }, [client]);
+  const {
+    data: inventory,
+    setData: setInventory,
+    error,
+    setError,
+    loading,
+    status: syncStatus,
+  } = useSynchronizedData<ListWorkflowsResponse>(() => client.listWorkflows());
+  const backgroundSyncing = syncStatus?.running ?? false;
+  const {
+    refresh,
+    refreshing,
+    notice: refreshNotice,
+  } = useFeatureRefresh("workflows", async () => {
+    setInventory(await client.listWorkflows());
+    setError(null);
+  });
 
   const workflows = inventory?.workflows ?? [];
   const query = searchParams.get("q") ?? "";
@@ -203,15 +129,11 @@ export function WorkflowsPage() {
         title="Workflows"
         description="Workflows discovered across your selected repositories."
         actions={
-          <button
-            className={`secondary-button${loading || backgroundSyncing ? " button-busy" : ""}`}
-            type="button"
-            disabled={loading || backgroundSyncing}
-            onClick={() => void refresh()}
-          >
-            <span aria-hidden="true">↻</span>
-            {refreshing || backgroundSyncing ? "Synchronizing…" : "Refresh"}
-          </button>
+          <RefreshButton
+            busy={refreshing || backgroundSyncing}
+            disabled={loading}
+            onRefresh={refresh}
+          />
         }
       />
 
@@ -336,7 +258,21 @@ export function WorkflowsPage() {
             ) : filteredWorkflows.length === 0 ? (
               <EmptyState message="No workflows match the current filters." />
             ) : (
-              projects.map((project) => <WorkflowProjectGroup key={project.id} project={project} />)
+              projects.map((project) => (
+                <WorkflowProjectGroup
+                  key={project.id}
+                  project={project}
+                  onRunUpdated={(workflow, run) =>
+                    setInventory(
+                      (current) =>
+                        current && {
+                          ...current,
+                          workflows: updateWorkflowRun(current.workflows, workflow, run),
+                        },
+                    )
+                  }
+                />
+              ))
             )}
           </ProjectGroupList>
         </section>

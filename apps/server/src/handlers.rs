@@ -21,9 +21,9 @@ use opsscope_core::contracts::{
     ListChangeRequestsResponse, ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse,
     ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
     RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
-    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
-    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    SaveRepositorySelectionResponse, SynchronizationRequest, SynchronizationResponse,
+    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
+    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -178,11 +178,7 @@ pub(crate) async fn execute_action(
             request.revision.as_deref(),
         )
         .await
-        .map(|()| {
-            Json(ExecuteActionResponse {
-                accepted: true,
-            })
-        })
+        .map(|refresh| Json(ExecuteActionResponse::from(refresh)))
         .map_err(http_action_error)
 }
 
@@ -437,10 +433,15 @@ pub(crate) async fn synchronization_status(
 
 pub(crate) async fn synchronize_sources(
     State(state): State<AppState>,
+    request: Option<Json<SynchronizationRequest>>,
 ) -> Result<Json<SynchronizationResponse>, (StatusCode, Json<ConnectionValidationErrorResponse>)> {
     state
         .synchronize_sources
-        .execute()
+        .execute_scoped(
+            request
+                .map(|Json(request)| request.scope)
+                .unwrap_or_default(),
+        )
         .await
         .map(SynchronizationResponse::from)
         .map(Json)

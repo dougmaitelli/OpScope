@@ -173,6 +173,8 @@ pub trait SourceModule: Send + Sync {
         Ok(super::ActionOptions::default())
     }
 
+    /// Returns a different target when the provider creates a new resource (for
+    /// example, a new pipeline on rerun). None means the original target.
     async fn execute_action(
         &self,
         _configuration: &ConnectionConfiguration,
@@ -181,7 +183,7 @@ pub trait SourceModule: Send + Sync {
         _target: &super::ActionTarget,
         _action: super::SourceAction,
         _revision: Option<&str>,
-    ) -> Result<(), super::ActionFailure> {
+    ) -> Result<Option<super::ActionTarget>, super::ActionFailure> {
         Err(super::ActionFailure::Unsupported)
     }
 

@@ -8,9 +8,9 @@ use opsscope_core::contracts::{
     ListChangeRequestsResponse, ListIssuesResponse, ListRepositoriesResponse, ListSourcesResponse,
     ListWorkflowsResponse, MonitoringSettingsErrorResponse, MonitoringSettingsResponse,
     RepositorySelectionErrorResponse, SaveRepositorySelectionRequest,
-    SaveRepositorySelectionResponse, SynchronizationResponse, SynchronizationStatusResponse,
-    UpdateMonitoringSettingsRequest, UpdateStatusResponse, WorkflowRunLogsErrorResponse,
-    WorkflowRunLogsRequest, WorkflowRunLogsResponse,
+    SaveRepositorySelectionResponse, SynchronizationRequest, SynchronizationResponse,
+    SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
+    WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
 use tauri::State;
 
@@ -41,9 +41,7 @@ pub(crate) async fn execute_action(
             request.revision.as_deref(),
         )
         .await
-        .map(|()| ExecuteActionResponse {
-            accepted: true,
-        })
+        .map(ExecuteActionResponse::from)
         .map_err(Into::into)
 }
 
@@ -162,10 +160,11 @@ pub(crate) async fn workflow_run_logs(
 #[tauri::command]
 pub(crate) async fn synchronize_sources(
     state: State<'_, DesktopState>,
+    request: Option<SynchronizationRequest>,
 ) -> Result<SynchronizationResponse, ConnectionValidationErrorResponse> {
     state
         .synchronize_sources
-        .execute()
+        .execute_scoped(request.map(|request| request.scope).unwrap_or_default())
         .await
         .map(SynchronizationResponse::from)
         .map_err(ConnectionValidationErrorResponse::from)

@@ -16,6 +16,16 @@ use crate::source_data::{
 use rusqlite::{OptionalExtension, params};
 
 impl SourceDataCache for SqliteDatabase {
+    fn update_workflow_run(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        run: &WorkflowRun,
+    ) -> Result<(), PersistenceFailure> {
+        self.cached_update_workflow_run(source_id, account_id, repository_id, run)
+    }
+
     fn repositories(
         &self,
         source_id: &str,

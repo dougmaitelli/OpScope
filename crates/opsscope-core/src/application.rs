@@ -37,8 +37,8 @@ pub use settings::{
 };
 
 pub use sync::{
-    DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationStatus,
-    SynchronizationSummary, SynchronizeSources,
+    DEFAULT_SYNCHRONIZATION_INTERVAL, SynchronizationFailure, SynchronizationScope,
+    SynchronizationStatus, SynchronizationSummary, SynchronizeSources,
 };
 pub use updates::{CheckForUpdates, ReleaseUpdate, UpdateCheckFailure};
 

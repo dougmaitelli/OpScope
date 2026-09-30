@@ -342,6 +342,65 @@ async fn write_failures_are_classified_without_retrying() {
 }
 
 #[tokio::test]
+async fn accepted_pr_action_refreshes_only_its_details_and_returns_the_updated_item() {
+    let auth = "authorization: Bearer secret";
+    let mut mutation = Exchange::json(
+        "/api/v3/repos/team/app/pulls/7/update-branch",
+        auth,
+        json!({}),
+    );
+    mutation.method = "PUT".into();
+    mutation.request_body = Some(json!({"expected_head_sha":"abc"}));
+    let api = MockApi::start(vec![
+        Exchange::json(
+            "/api/v3/repos/team/app/pulls/7",
+            auth,
+            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"user":{"login":"alice","type":"User"}}),
+        ),
+        mutation,
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"owner":"team","name":"app","number":7}),
+            &["query ChangeRequestDetails", "pullRequest(number: $number)"],
+            json!({"data":{"repository":{"pullRequest":{
+                "id":"PR7","number":7,"title":"Updated PR","headRefName":"feature","baseRefName":"main",
+                "state":"OPEN","isDraft":false,"mergeStateStatus":"CLEAN","commits":{"nodes":[]},
+                "createdAt":"yesterday","updatedAt":"today","url":"https://example.com/pull/7","body":"Fresh details"
+            }}}}),
+        ),
+        Exchange::graphql(
+            "/api/graphql",
+            auth,
+            json!({"ids":["PR7"]}),
+            &["query Relationships"],
+            json!({"data":{"viewer":{"databaseId":42},"nodes":[]}}),
+        ),
+    ]);
+    let refreshed = action_service(&api)
+        .execute(
+            "connection",
+            "3",
+            &ActionTarget::ChangeRequest {
+                number: 7,
+            },
+            SourceAction::UpdateBranch,
+            Some("abc"),
+        )
+        .await
+        .unwrap();
+    assert!(refreshed.run.is_none());
+    let request = refreshed.change_request.unwrap();
+    assert_eq!(request.change_request.number, 7);
+    assert_eq!(request.change_request.title, "Updated PR");
+    assert_eq!(
+        refreshed.details.unwrap().body.as_deref(),
+        Some("Fresh details")
+    );
+    api.finish();
+}
+
+#[tokio::test]
 async fn accepted_action_remains_successful_when_cache_refresh_fails() {
     let auth = "authorization: Bearer secret";
     let mut mutation = Exchange::json(
@@ -358,10 +417,7 @@ async fn accepted_action_remains_successful_when_cache_refresh_fails() {
             json!({"status":"completed","run_attempt":1}),
         ),
         mutation,
-        Exchange::denied(
-            "/api/v3/repos/team/app/actions/runs?per_page=100&page=1",
-            auth,
-        ),
+        Exchange::denied("/api/v3/repos/team/app/actions/runs/7", auth),
     ]);
     assert_eq!(
         action_service(&api)
@@ -375,7 +431,7 @@ async fn accepted_action_remains_successful_when_cache_refresh_fails() {
                 Some("1")
             )
             .await,
-        Ok(())
+        Ok(crate::application::ActionRefresh::default())
     );
     api.finish();
 }

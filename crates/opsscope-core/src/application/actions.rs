@@ -64,6 +64,13 @@ pub struct ActionOptions {
     pub revision: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ActionRefresh {
+    pub run: Option<crate::domain::WorkflowRun>,
+    pub change_request: Option<super::DiscoveredChangeRequest>,
+    pub details: Option<crate::domain::ChangeRequestDetails>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ActionFailure {
     NotFound,
@@ -216,7 +223,7 @@ impl SourceActions {
         target: &ActionTarget,
         action: SourceAction,
         revision: Option<&str>,
-    ) -> Result<(), ActionFailure> {
+    ) -> Result<ActionRefresh, ActionFailure> {
         let key = (
             source_id.to_owned(),
             repository_id.to_owned(),
@@ -236,7 +243,7 @@ impl SourceActions {
         if available.disabled_reason.is_some() || options.revision.as_deref() != revision {
             return Err(ActionFailure::Conflict);
         }
-        module
+        let refresh_target = module
             .execute_action(
                 &connection.configuration,
                 &token,
@@ -247,32 +254,44 @@ impl SourceActions {
             )
             .await?;
         // A refresh failure must never turn an accepted write into a retryable failure.
-        let refresh = match target {
+        let refresh = match refresh_target.as_ref().unwrap_or(target) {
             ActionTarget::WorkflowRun {
-                ..
+                run_id,
             } => self
                 .data
-                .workflow_runs(source_id, &repository, RefreshMode::Force)
+                .workflow_run(source_id, &repository, run_id)
                 .await
-                .map(|_| ()),
+                .map(|run| ActionRefresh {
+                    run,
+                    ..ActionRefresh::default()
+                }),
             ActionTarget::ChangeRequest {
                 number,
-            } => {
-                let list = self
-                    .data
-                    .change_requests(source_id, &repository, RefreshMode::Force)
-                    .await;
-                let details = self
-                    .data
-                    .change_request_details(source_id, &repository, *number, RefreshMode::Force)
-                    .await;
-                list.and(details).map(|_| ())
-            }
+            } => self
+                .data
+                .change_request_details(source_id, &repository, *number, RefreshMode::Force)
+                .await
+                .map(|details| ActionRefresh {
+                    change_request: details.as_ref().map(|details| {
+                        super::DiscoveredChangeRequest {
+                            source: super::ConnectedSource {
+                                id: connection.id,
+                                account_id: connection.account.external_id,
+                                descriptor: module.descriptor(),
+                                label: connection.label,
+                            },
+                            repository,
+                            change_request: details.change_request.clone(),
+                        }
+                    }),
+                    details,
+                    ..ActionRefresh::default()
+                }),
         };
         if refresh.is_err() {
             eprintln!("action accepted; source data refresh will be retried by synchronization");
         }
-        Ok(())
+        Ok(refresh.unwrap_or_default())
     }
 }
 

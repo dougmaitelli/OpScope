@@ -287,45 +287,7 @@ impl SqliteDatabase {
             )
             .map_err(|_| PersistenceFailure)?;
         for run in &snapshot.runs {
-            let run_number = i64::try_from(run.run_number).map_err(|_| PersistenceFailure)?;
-            let attempt = i64::try_from(run.attempt).map_err(|_| PersistenceFailure)?;
-            transaction
-                .execute(
-                    "INSERT INTO workflow_runs (
-                       source_id, account_id, repository_id, run_id, workflow_id, run_number,
-                       attempt, title, lifecycle, outcome, branch, commit_sha, actor, trigger,
-                       created_at, started_at, updated_at, web_url, provider_status,
-                       provider_conclusion, relationships
-                     ) VALUES (
-                       ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                       ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
-                     )",
-                    params![
-                        source_id,
-                        account_id,
-                        repository_id,
-                        run.id,
-                        run.workflow_id,
-                        run_number,
-                        attempt,
-                        run.title,
-                        lifecycle_name(run.lifecycle),
-                        outcome_name(run.outcome),
-                        run.branch,
-                        run.commit_sha,
-                        run.actor,
-                        run.trigger,
-                        run.created_at,
-                        run.started_at,
-                        run.updated_at,
-                        run.web_url,
-                        run.provider_status,
-                        run.provider_conclusion,
-                        serde_json::to_string(&run.relationships)
-                            .map_err(|_| PersistenceFailure)?,
-                    ],
-                )
-                .map_err(|_| PersistenceFailure)?;
+            store_run(&transaction, source_id, account_id, repository_id, run)?;
         }
         transaction
             .execute(
@@ -349,4 +311,63 @@ impl SqliteDatabase {
             .map_err(|_| PersistenceFailure)?;
         transaction.commit().map_err(|_| PersistenceFailure)
     }
+
+    pub(super) fn cached_update_workflow_run(
+        &self,
+        source_id: &str,
+        account_id: &str,
+        repository_id: &str,
+        run: &WorkflowRun,
+    ) -> Result<(), PersistenceFailure> {
+        let database = self.lock()?;
+        store_run(&database, source_id, account_id, repository_id, run)
+    }
+}
+
+fn store_run(
+    transaction: &rusqlite::Connection,
+    source_id: &str,
+    account_id: &str,
+    repository_id: &str,
+    run: &WorkflowRun,
+) -> Result<(), PersistenceFailure> {
+    let run_number = i64::try_from(run.run_number).map_err(|_| PersistenceFailure)?;
+    let attempt = i64::try_from(run.attempt).map_err(|_| PersistenceFailure)?;
+    transaction
+        .execute(
+            "INSERT OR REPLACE INTO workflow_runs (
+               source_id, account_id, repository_id, run_id, workflow_id, run_number,
+               attempt, title, lifecycle, outcome, branch, commit_sha, actor, trigger,
+               created_at, started_at, updated_at, web_url, provider_status,
+               provider_conclusion, relationships
+             ) VALUES (
+               ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+               ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+             )",
+            params![
+                source_id,
+                account_id,
+                repository_id,
+                run.id,
+                run.workflow_id,
+                run_number,
+                attempt,
+                run.title,
+                lifecycle_name(run.lifecycle),
+                outcome_name(run.outcome),
+                run.branch,
+                run.commit_sha,
+                run.actor,
+                run.trigger,
+                run.created_at,
+                run.started_at,
+                run.updated_at,
+                run.web_url,
+                run.provider_status,
+                run.provider_conclusion,
+                serde_json::to_string(&run.relationships).map_err(|_| PersistenceFailure)?,
+            ],
+        )
+        .map_err(|_| PersistenceFailure)?;
+    Ok(())
 }

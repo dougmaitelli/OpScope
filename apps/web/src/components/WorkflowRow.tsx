@@ -5,7 +5,13 @@ import "./WorkflowRow.css";
 import { WorkflowRunLogsDialog } from "./WorkflowRunLogsDialog.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
 
-export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
+export function WorkflowRow({
+  workflow,
+  onRunUpdated,
+}: {
+  workflow: WorkflowSummary;
+  onRunUpdated?: (workflow: WorkflowSummary, run: WorkflowRunSummary) => void;
+}) {
   const [selectedRun, setSelectedRun] = useState<WorkflowRunSummary | null>(null);
   const latestRun = workflow.runs[0] ?? null;
   const earlierRuns = workflow.runs.slice(1);
@@ -90,6 +96,7 @@ export function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
           workflow={workflow}
           run={selectedRun}
           onClose={() => setSelectedRun(null)}
+          onUpdated={(run) => onRunUpdated?.(workflow, run)}
         />
       ) : null}
     </DataRowGroup>

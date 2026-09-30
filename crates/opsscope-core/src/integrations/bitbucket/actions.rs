@@ -5,7 +5,7 @@ mod tests;
 use crate::application::{
     ActionFailure, ActionOptions, ActionTarget, AvailableAction, SourceAction,
 };
-use crate::integrations::http::actions::{read, write};
+use crate::integrations::http::actions::{read, write_response};
 use reqwest::Method;
 use serde_json::{Value, json};
 
@@ -112,7 +112,7 @@ impl BitbucketClient {
         target: &ActionTarget,
         action: SourceAction,
         revision: Option<&str>,
-    ) -> Result<(), ActionFailure> {
+    ) -> Result<Option<ActionTarget>, ActionFailure> {
         if let (
             ActionTarget::ChangeRequest {
                 number,
@@ -122,7 +122,8 @@ impl BitbucketClient {
         {
             return self
                 .merge_pull(config, token, repo, *number, revision)
-                .await;
+                .await
+                .map(|()| None);
         }
         let (
             ActionTarget::WorkflowRun {
@@ -143,7 +144,7 @@ impl BitbucketClient {
             return Err(ActionFailure::Conflict);
         }
         let target = repeat_target(&pipeline.target).ok_or(ActionFailure::Unsupported)?;
-        write(
+        let response = write_response(
             self.request(
                 config,
                 token,
@@ -152,6 +153,17 @@ impl BitbucketClient {
             Method::POST,
             Some(json!({"target": target})),
         )
-        .await
+        .await?;
+        // A rerun creates a new pipeline. Refresh that pipeline, not the original.
+        // An unreadable successful response must not make the mutation retryable.
+        let payload = response.json::<Value>().await.ok();
+        Ok(payload.and_then(|payload| {
+            payload
+                .get("uuid")
+                .and_then(Value::as_str)
+                .map(|run_id| ActionTarget::WorkflowRun {
+                    run_id: run_id.to_owned(),
+                })
+        }))
     }
 }
