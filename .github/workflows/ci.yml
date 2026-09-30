@@ -48,7 +48,7 @@ jobs:
   container-dev:
     name: Publish development container
     needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     permissions:
