@@ -1,7 +1,7 @@
 # OpsScope
 
 <p align="center">
-  <img src="assets/opsscope-logo.png" alt="OpsScope logo" width="128" height="128">
+  <img src="assets/opsscope-logo.png" alt="OpsScope logo" width="256" height="256">
 </p>
 
 An operational dashboard for your repositories: see failing workflows, pull
