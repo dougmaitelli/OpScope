@@ -1,51 +1,89 @@
 use super::*;
 #[tokio::test]
-async fn merge_uses_revision_guard_and_does_not_request_bypass_or_deletion() {
-    let auth = "authorization: token secret";
-    let mut mutation = Exchange::json("/api/v1/repos/team/app/pulls/7/merge", auth, json!({}));
-    mutation.method = "POST".into();
-    mutation.request_body = Some(
-        json!({"do":"merge","head_commit_id":"abc","force_merge":false,"merge_when_checks_succeed":false,"delete_branch_after_merge":false}),
-    );
-    let api = MockApi::start(vec![
-        Exchange::json(
-            "/api/v1/repos/team/app/pulls/7",
-            auth,
-            json!({"state":"open","merged":false,"mergeable":true,"draft":false,"head":{"sha":"abc"}}),
-        ),
-        mutation,
-    ]);
+async fn failed_settings_lookup_does_not_fall_back_to_squash() {
+    let api = MockApi::start(vec![Exchange::denied(
+        "/api/v1/repos/team/app",
+        "authorization: token secret",
+    )]);
     let client = GiteaClient::new().unwrap();
     let config = [(SERVER_URL_KEY.into(), api.url.clone())]
         .into_iter()
         .collect();
-    let token = ProviderToken::new("secret".into());
-    let repo = relevance_repository();
-    let target = ActionTarget::ChangeRequest {
-        number: 7,
-    };
-    let options = client
-        .actions(&config, &token, &repo, &target)
-        .await
-        .unwrap();
-    assert!(
-        options
-            .actions
-            .iter()
-            .any(|a| a.action == SourceAction::MergeChangeRequest && a.disabled_reason.is_none())
+    assert_eq!(
+        client
+            .perform_action(
+                &config,
+                &ProviderToken::new("secret".into()),
+                &relevance_repository(),
+                &ActionTarget::ChangeRequest {
+                    number: 7
+                },
+                SourceAction::MergeChangeRequest,
+                Some("abc")
+            )
+            .await,
+        Err(ActionFailure::Source(Failure::PermissionDenied))
     );
-    client
-        .perform_action(
-            &config,
-            &token,
-            &repo,
-            &target,
-            SourceAction::MergeChangeRequest,
-            options.revision.as_deref(),
-        )
-        .await
-        .unwrap();
     api.finish();
+}
+
+#[tokio::test]
+async fn merge_uses_revision_guard_and_does_not_request_bypass_or_deletion() {
+    for (configured, expected) in [
+        (None, "squash"),
+        (Some("merge"), "merge"),
+        (Some("rebase"), "rebase"),
+    ] {
+        let auth = "authorization: token secret";
+        let mut mutation = Exchange::json("/api/v1/repos/team/app/pulls/7/merge", auth, json!({}));
+        mutation.method = "POST".into();
+        mutation.request_body = Some(
+            json!({"do":expected,"head_commit_id":"abc","force_merge":false,"merge_when_checks_succeed":false,"delete_branch_after_merge":false}),
+        );
+        let api = MockApi::start(vec![
+            Exchange::json(
+                "/api/v1/repos/team/app/pulls/7",
+                auth,
+                json!({"state":"open","merged":false,"mergeable":true,"draft":false,"head":{"sha":"abc"}}),
+            ),
+            Exchange::json(
+                "/api/v1/repos/team/app",
+                auth,
+                json!({"default_merge_style": configured}),
+            ),
+            mutation,
+        ]);
+        let client = GiteaClient::new().unwrap();
+        let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+            .into_iter()
+            .collect();
+        let token = ProviderToken::new("secret".into());
+        let repo = relevance_repository();
+        let target = ActionTarget::ChangeRequest {
+            number: 7,
+        };
+        let options = client
+            .actions(&config, &token, &repo, &target)
+            .await
+            .unwrap();
+        assert!(
+            options.actions.iter().any(
+                |a| a.action == SourceAction::MergeChangeRequest && a.disabled_reason.is_none()
+            )
+        );
+        client
+            .perform_action(
+                &config,
+                &token,
+                &repo,
+                &target,
+                SourceAction::MergeChangeRequest,
+                options.revision.as_deref(),
+            )
+            .await
+            .unwrap();
+        api.finish();
+    }
 }
 
 #[tokio::test]

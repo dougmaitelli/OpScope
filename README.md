@@ -189,9 +189,13 @@ branch-protection requirements when handling the merge request. Unknown state
 disables merging rather than assuming it is safe.
 
 Merging requires a separate confirmation and rechecks the current revision.
-GitHub and Gitea use a merge commit; GitLab uses project merge settings;
-Bitbucket uses a merge commit. If the repository disallows that strategy, use the
-provider UI. OpsScope does not request force-merge, auto-merge, or source-branch
+GitLab uses its project/MR merge settings without overriding squashing. Gitea uses
+the repository's default merge style, and Bitbucket uses the target branch's
+default merge strategy. When those defaults are unset, OpsScope requests squash.
+GitHub has no repository-default merge method exposed by this API, so OpsScope
+requests squash. If the selected strategy is disallowed, use the provider UI;
+OpsScope does not retry with a different strategy. A failed settings lookup does
+not trigger a squash fallback. OpsScope does not request force-merge, auto-merge, or source-branch
 deletion; provider-side automatic cleanup settings can still apply.
 
 GitHub, GitLab, and Gitea enforce the expected head commit in the merge request.

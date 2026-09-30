@@ -103,7 +103,7 @@ impl GitHubClient {
                         None
                     }
                 });
-                actions.push(AvailableAction::new(SourceAction::MergeChangeRequest, "Merge PR", "Merge this PR into its target branch using a merge commit? This changes the target branch and may trigger deployments. Repository policies apply; no auto-merge or bypass will be requested.", merge_reason));
+                actions.push(AvailableAction::new(SourceAction::MergeChangeRequest, "Merge PR", "Merge this PR into its target branch using squash? This changes the target branch and may trigger deployments. Repository policies apply; no auto-merge or bypass will be requested.", merge_reason));
                 if pull.user.kind == "Bot"
                     && matches!(pull.user.login.as_str(), "dependabot[bot]" | "dependabot")
                 {
@@ -134,7 +134,7 @@ impl GitHubClient {
                 },
                 SourceAction::MergeChangeRequest,
             ) => {
-                let response = write_response(self.request(config, token, &["repos", &repo.owner, &repo.name, "pulls", &number.to_string(), "merge"] )?, Method::PUT, Some(json!({"sha": revision.ok_or(ActionFailure::Conflict)?, "merge_method": "merge"}))).await?;
+                let response = write_response(self.request(config, token, &["repos", &repo.owner, &repo.name, "pulls", &number.to_string(), "merge"] )?, Method::PUT, Some(json!({"sha": revision.ok_or(ActionFailure::Conflict)?, "merge_method": "squash"}))).await?;
                 #[derive(Deserialize)]
                 struct ResultBody {
                     merged: bool,

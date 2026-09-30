@@ -13,6 +13,11 @@ struct Pull {
 #[derive(Deserialize)]
 struct Branch {
     commit: Commit,
+    branch: Option<BranchName>,
+}
+#[derive(Deserialize)]
+struct BranchName {
+    name: String,
 }
 #[derive(Deserialize)]
 struct Commit {
@@ -103,7 +108,7 @@ impl BitbucketClient {
             actions: vec![AvailableAction::new(
                 SourceAction::MergeChangeRequest,
                 "Merge PR",
-                "Merge this PR into its target branch using a merge commit? This may trigger deployments. Bitbucket cannot atomically lock the checked commit: a concurrent push may be included. The source branch will be kept.",
+                "Merge this PR into its target branch using its configured default strategy (squash if unset)? This may trigger deployments. Bitbucket cannot atomically lock the checked commit: a concurrent push may be included. The source branch will be kept.",
                 reason,
             )],
         })
@@ -120,7 +125,65 @@ impl BitbucketClient {
         if revision.is_none() {
             return Err(ActionFailure::Conflict);
         }
-        let response = write_response(self.request(config, token, &["repositories", &repo.owner, &repo.name, "pullrequests", &number.to_string(), "merge"] )?, Method::POST, Some(json!({"type":"pullrequest", "merge_strategy":"merge_commit", "close_source_branch":false}))).await?;
+        let pull: Pull = read(self.request(
+            config,
+            token,
+            &[
+                "repositories",
+                &repo.owner,
+                &repo.name,
+                "pullrequests",
+                &number.to_string(),
+            ],
+        )?)
+        .await?;
+        if pull.state != "OPEN"
+            || pull.draft != Some(false)
+            || pull.queued
+            || Some(format!(
+                "{}:{}",
+                pull.source.commit.hash, pull.destination.commit.hash
+            ))
+            .as_deref()
+                != revision
+        {
+            return Err(ActionFailure::Conflict);
+        }
+        let branch = pull.destination.branch.ok_or(ActionFailure::Conflict)?;
+        #[derive(Deserialize)]
+        struct Settings {
+            default_merge_strategy: Option<String>,
+        }
+        let settings: Settings = read(self.request(
+            config,
+            token,
+            &[
+                "repositories",
+                &repo.owner,
+                &repo.name,
+                "refs",
+                "branches",
+                &branch.name,
+            ],
+        )?)
+        .await?;
+        let strategy = settings
+            .default_merge_strategy
+            .as_deref()
+            .filter(|strategy| !strategy.is_empty())
+            .unwrap_or("squash");
+        if !matches!(
+            strategy,
+            "merge_commit"
+                | "squash"
+                | "fast_forward"
+                | "squash_fast_forward"
+                | "rebase_fast_forward"
+                | "rebase_merge"
+        ) {
+            return Err(ActionFailure::Unsupported);
+        }
+        let response = write_response(self.request(config, token, &["repositories", &repo.owner, &repo.name, "pullrequests", &number.to_string(), "merge"] )?, Method::POST, Some(json!({"type":"pullrequest", "merge_strategy":strategy, "close_source_branch":false}))).await?;
         if response.status() == reqwest::StatusCode::ACCEPTED {
             return Ok(());
         }

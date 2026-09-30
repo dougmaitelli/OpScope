@@ -94,7 +94,7 @@ impl GiteaClient {
                         AvailableAction::new(
                             SourceAction::MergeChangeRequest,
                             "Merge PR",
-                            "Merge this PR into its target branch using a merge commit? This may trigger deployments. No force-merge, auto-merge, or source-branch deletion will be requested.",
+                            "Merge this PR into its target branch using the repository's default merge style (squash if unset)? This may trigger deployments. No force-merge, auto-merge, or source-branch deletion will be requested.",
                             reason.or((pull.draft != Some(false))
                                 .then_some("Draft status must be confirmed as ready for review.")),
                         ),
@@ -114,7 +114,31 @@ impl GiteaClient {
         revision: Option<&str>,
     ) -> Result<(), ActionFailure> {
         match (target, action) {
-            (ActionTarget::ChangeRequest { number }, SourceAction::MergeChangeRequest) => write(self.request(config, token, &["repos", &repo.owner, &repo.name, "pulls", &number.to_string(), "merge"] )?, Method::POST, Some(json!({"do": "merge", "head_commit_id": revision.ok_or(ActionFailure::Conflict)?, "force_merge": false, "merge_when_checks_succeed": false, "delete_branch_after_merge": false}))).await,
+            (
+                ActionTarget::ChangeRequest {
+                    number,
+                },
+                SourceAction::MergeChangeRequest,
+            ) => {
+                #[derive(Deserialize)]
+                struct Settings {
+                    default_merge_style: Option<String>,
+                }
+                let settings: Settings =
+                    read(self.request(config, token, &["repos", &repo.owner, &repo.name])?).await?;
+                let style = settings
+                    .default_merge_style
+                    .as_deref()
+                    .filter(|style| !style.is_empty())
+                    .unwrap_or("squash");
+                if !matches!(
+                    style,
+                    "merge" | "squash" | "rebase" | "rebase-merge" | "fast-forward-only"
+                ) {
+                    return Err(ActionFailure::Unsupported);
+                }
+                write(self.request(config, token, &["repos", &repo.owner, &repo.name, "pulls", &number.to_string(), "merge"] )?, Method::POST, Some(json!({"do": style, "head_commit_id": revision.ok_or(ActionFailure::Conflict)?, "force_merge": false, "merge_when_checks_succeed": false, "delete_branch_after_merge": false}))).await
+            }
             (
                 ActionTarget::WorkflowRun {
                     run_id,

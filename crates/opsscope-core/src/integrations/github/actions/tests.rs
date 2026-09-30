@@ -42,7 +42,7 @@ async fn a_success_status_with_merged_false_is_not_reported_as_a_merge() {
         json!({"merged":false}),
     );
     exchange.method = "PUT".into();
-    exchange.request_body = Some(json!({"sha":"abc","merge_method":"merge"}));
+    exchange.request_body = Some(json!({"sha":"abc","merge_method":"squash"}));
     let api = MockApi::start(vec![exchange]);
     let client = GitHubClient::new().unwrap();
     let config = [(SERVER_URL_KEY.into(), api.url.clone())]
@@ -74,7 +74,7 @@ async fn merge_uses_revision_guard_and_does_not_request_bypass_or_deletion() {
         json!({"merged":true}),
     );
     mutation.method = "PUT".into();
-    mutation.request_body = Some(json!({"sha":"abc","merge_method":"merge"}));
+    mutation.request_body = Some(json!({"sha":"abc","merge_method":"squash"}));
     let api = MockApi::start(vec![
         Exchange::json(
             "/api/v3/repos/team/app/pulls/7",

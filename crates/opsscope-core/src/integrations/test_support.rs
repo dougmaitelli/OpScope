@@ -126,6 +126,9 @@ impl MockApi {
                         Err(error) => panic!("accept fixture request: {error}"),
                     }
                 };
+                // Accepted sockets can inherit nonblocking mode on some platforms.
+                // The scripted exchange below uses blocking reads with a timeout.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
