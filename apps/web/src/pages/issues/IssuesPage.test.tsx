@@ -38,13 +38,13 @@ describe("multi-provider issues", () => {
         assignees: ["bob"],
         commentCount: 1,
         updatedAt: "2026-09-28T00:02:00Z",
-        body: "Issue description",
+        body: "## Issue description",
         milestone: "Next",
         comments: [
           {
             id: "10",
             author: "bob",
-            body: "Fixed in the latest build",
+            body: "**Fixed in the latest build**",
             createdAt: "2026-09-28T00:02:00Z",
             updatedAt: "2026-09-28T00:02:00Z",
           },
@@ -55,9 +55,11 @@ describe("multi-provider issues", () => {
       render(<IssuesPage />);
       await user.click(await screen.findByRole("button", { name: /Fix build/ }));
       const dialog = screen.getByRole("dialog", { name: "Fix build" });
-      expect(await within(dialog).findByText("Issue description")).toBeInTheDocument();
+      expect(
+        await within(dialog).findByRole("heading", { name: "Issue description", level: 2 }),
+      ).toBeInTheDocument();
       expect(within(dialog).getByText("Closed")).toBeInTheDocument();
-      expect(within(dialog).getByText("Fixed in the latest build")).toBeInTheDocument();
+      expect(within(dialog).getByText("Fixed in the latest build").tagName).toBe("STRONG");
       expect(within(dialog).getByRole("link", { name: `Open in ${sourceName}` })).toHaveAttribute(
         "href",
         issue.webUrl,

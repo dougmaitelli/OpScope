@@ -3,6 +3,7 @@ import { useApplicationClient } from "../../api/application-client.tsx";
 import { StatusPill } from "../../components/StatusPill.tsx";
 import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
+import { MarkdownContent } from "../../components/MarkdownContent.tsx";
 import {
   WorkflowRunLogsDialog,
   type WorkflowRunReference,
@@ -171,7 +172,7 @@ export function ChangeRequestDetailsDialog({
                 <section>
                   <h3>Description</h3>
                   {details.body ? (
-                    <p className="change-request-body">{details.body}</p>
+                    <MarkdownContent content={details.body} baseUrl={changeRequest.webUrl} />
                   ) : (
                     <p className="change-request-empty">No description provided.</p>
                   )}

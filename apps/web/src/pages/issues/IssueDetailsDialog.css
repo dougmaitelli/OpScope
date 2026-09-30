@@ -95,6 +95,7 @@
 }
 .issue-dialog-main,
 .issue-dialog-sidebar {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 14px;
@@ -107,25 +108,18 @@
 .issue-dialog-sidebar section + section {
   margin-top: 20px;
 }
-.issue-dialog h3 {
+.issue-dialog-main > section > h3,
+.issue-dialog-sidebar > section > h3 {
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.issue-dialog h3 span {
+.issue-dialog-main > section > h3 span,
+.issue-dialog-sidebar > section > h3 span {
   color: var(--subtle);
   font-weight: 500;
-}
-.issue-body,
-.issue-comment-list p {
-  margin: 0;
-  color: #cbd3df;
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .issue-empty,
 .issue-sidebar-value {
@@ -171,7 +165,7 @@
 .issue-comment-list article > header span {
   color: var(--subtle);
 }
-.issue-comment-list p {
+.issue-comment-body {
   padding: 9px;
 }
 @media (max-width: 700px) {

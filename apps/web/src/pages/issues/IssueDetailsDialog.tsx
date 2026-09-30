@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { StatusPill } from "../../components/StatusPill.tsx";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
+import { MarkdownContent } from "../../components/MarkdownContent.tsx";
 import type { IssueDetailsResponse, IssueSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { formatRelativeDate } from "../../shared/workflow-runs.ts";
@@ -112,7 +113,7 @@ export function IssueDetailsDialog({
               <section>
                 <h3>Description</h3>
                 {details.body ? (
-                  <p className="issue-body">{details.body}</p>
+                  <MarkdownContent content={details.body} baseUrl={issue.webUrl} />
                 ) : (
                   <p className="issue-empty">No description provided.</p>
                 )}
@@ -134,7 +135,9 @@ export function IssueDetailsDialog({
                           <strong>{comment.author ?? "Unknown author"}</strong>
                           <span>{formatRelativeDate(comment.createdAt)}</span>
                         </header>
-                        <p>{comment.body}</p>
+                        <div className="issue-comment-body">
+                          <MarkdownContent content={comment.body} baseUrl={issue.webUrl} />
+                        </div>
                       </article>
                     ))}
                   </div>

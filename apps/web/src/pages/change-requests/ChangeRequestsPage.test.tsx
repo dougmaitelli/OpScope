@@ -46,7 +46,7 @@ describe("multi-provider pull requests", () => {
       });
       client.listWorkflows.mockResolvedValue({ workflows: [] });
       client.changeRequestDetails.mockResolvedValue({
-        body: "Provider pull request description",
+        body: "## Provider pull request description\n\n<details><summary>Release notes</summary><p>A formatted update.</p></details>",
         labels: [],
         reviews: [],
         checks: [
@@ -66,8 +66,12 @@ describe("multi-provider pull requests", () => {
       await user.click(row);
       const dialog = screen.getByRole("dialog", { name: request.title });
       expect(
-        await within(dialog).findByText("Provider pull request description"),
+        await within(dialog).findByRole("heading", {
+          name: "Provider pull request description",
+          level: 2,
+        }),
       ).toBeInTheDocument();
+      expect(within(dialog).getByText("Release notes").tagName).toBe("SUMMARY");
       expect(client.changeRequestDetails).toHaveBeenCalledWith({
         sourceId: "connection-1",
         repositoryId: "repo-1",

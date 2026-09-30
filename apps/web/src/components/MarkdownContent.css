@@ -1,0 +1,130 @@
+.markdown-content {
+  min-width: 0;
+  color: #cbd3df;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol,
+.markdown-content blockquote,
+.markdown-content pre,
+.markdown-content details,
+.markdown-content .markdown-table {
+  margin: 0 0 12px;
+}
+.markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 18px 0 8px;
+  color: var(--text);
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.markdown-content h1 {
+  font-size: 17px;
+}
+.markdown-content h2 {
+  font-size: 15px;
+}
+.markdown-content h3 {
+  font-size: 13px;
+}
+.markdown-content :is(h4, h5, h6) {
+  font-size: 11px;
+}
+.markdown-content a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+.markdown-content a:hover {
+  text-decoration-thickness: 2px;
+}
+.markdown-content :is(a, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.markdown-content :is(ul, ol) {
+  padding-left: 22px;
+}
+.markdown-content li + li {
+  margin-top: 3px;
+}
+.markdown-content li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+.markdown-content .task-list-item {
+  list-style: none;
+}
+.markdown-content input[type="checkbox"] {
+  margin: 0 6px 0 -18px;
+  accent-color: var(--accent);
+}
+.markdown-content blockquote {
+  padding: 5px 10px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+.markdown-content blockquote > :last-child {
+  margin-bottom: 0;
+}
+.markdown-content code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-raised);
+  font-size: 0.95em;
+}
+.markdown-content pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.markdown-content pre code {
+  padding: 0;
+  background: none;
+}
+.markdown-content .markdown-table {
+  max-width: 100%;
+  overflow: auto;
+}
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: inherit;
+}
+.markdown-content :is(th, td) {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.markdown-content th {
+  background: var(--surface-raised);
+  font-weight: 650;
+}
+.markdown-content hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.markdown-content summary {
+  cursor: pointer;
+  color: var(--text);
+}
+.markdown-content details[open] > summary {
+  margin-bottom: 8px;
+}
+.markdown-content .markdown-image-reference {
+  color: var(--muted);
+}
