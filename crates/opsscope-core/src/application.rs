@@ -43,8 +43,9 @@ pub use sync::{
 pub use updates::{CheckForUpdates, ReleaseUpdate, UpdateCheckFailure};
 
 pub use activity::{
-    ActivityEventRepository, ChangeRequestActivityEvent, ChangeRequestActivityKind, ListActivity,
-    TrackChangeRequestActivity,
+    ActivityEventRepository, ActivityInventory, ChangeRequestActivityEvent,
+    ChangeRequestActivityKind, IssueActivityEvent, IssueActivityKind, ListActivity,
+    TrackIssueActivity, TrackWorkItemActivity,
 };
 pub use change_request_details::{GetChangeRequestDetails, GetChangeRequestDetailsFailure};
 pub use change_requests::{

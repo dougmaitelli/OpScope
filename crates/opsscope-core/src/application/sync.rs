@@ -1,4 +1,4 @@
-use super::{NotifyRepositoryFailures, RepositorySelectionRepository, TrackChangeRequestActivity};
+use super::{NotifyRepositoryFailures, RepositorySelectionRepository, TrackWorkItemActivity};
 use crate::domain::ChangeRequestState;
 use crate::source_data::{RefreshMode, SourceData};
 use std::collections::HashSet;
@@ -71,7 +71,7 @@ pub struct SynchronizeSources {
     source_data: Arc<dyn SourceData>,
     selections: Arc<dyn RepositorySelectionRepository>,
     failure_notifications: NotifyRepositoryFailures,
-    change_request_activity: TrackChangeRequestActivity,
+    work_item_activity: TrackWorkItemActivity,
     active_sources: Arc<Mutex<HashSet<String>>>,
     last_completed_at: Arc<AtomicU64>,
     last_failed_repository_count: Arc<AtomicUsize>,
@@ -83,14 +83,14 @@ impl SynchronizeSources {
         source_data: Arc<dyn SourceData>,
         selections: Arc<dyn RepositorySelectionRepository>,
         failure_notifications: NotifyRepositoryFailures,
-        change_request_activity: TrackChangeRequestActivity,
+        work_item_activity: TrackWorkItemActivity,
     ) -> Self {
         Self {
             work_item_notifications: None,
             source_data,
             selections,
             failure_notifications,
-            change_request_activity,
+            work_item_activity,
             active_sources: Arc::new(Mutex::new(HashSet::new())),
             last_completed_at: Arc::new(AtomicU64::new(0)),
             last_failed_repository_count: Arc::new(AtomicUsize::new(0)),
@@ -225,7 +225,7 @@ impl SynchronizeSources {
                         .supports(super::SourceCapability::ChangeRequests)
                 {
                     let previous = self
-                        .change_request_activity
+                        .work_item_activity
                         .previous(&source.id, &repository.id)
                         .ok()
                         .flatten();
@@ -258,7 +258,7 @@ impl SynchronizeSources {
                                 }
                             }
                         }
-                        _ = self.change_request_activity.observe(
+                        _ = self.work_item_activity.observe(
                             &source,
                             &repository,
                             &current,
@@ -277,7 +277,40 @@ impl SynchronizeSources {
                         .issues(&source.id, &repository, RefreshMode::Force)
                         .await
                     {
-                        Ok(items) => current_issues = items,
+                        Ok(Some(items)) => {
+                            let tracker = self.work_item_activity.issues();
+                            let previous = tracker
+                                .previous(&source.id, &repository.id)
+                                .ok()
+                                .flatten()
+                                .unwrap_or_default();
+                            let current_ids = items
+                                .iter()
+                                .map(|issue| issue.id.as_str())
+                                .collect::<HashSet<_>>();
+                            let mut departed = Vec::new();
+                            for issue in previous.iter().filter(|issue| {
+                                issue.state == crate::domain::IssueState::Open
+                                    && !current_ids.contains(issue.id.as_str())
+                            }) {
+                                if let Ok(Some(details)) = self
+                                    .source_data
+                                    .issue_details(
+                                        &source.id,
+                                        &repository,
+                                        issue.number,
+                                        RefreshMode::Force,
+                                    )
+                                    .await
+                                    && details.issue.state == crate::domain::IssueState::Closed
+                                {
+                                    departed.push(details.issue);
+                                }
+                            }
+                            _ = tracker.observe(&source, &repository, &items, &departed);
+                            current_issues = Some(items);
+                        }
+                        Ok(None) => {}
                         Err(failure) => {
                             eprintln!(
                                 "failed to synchronize issues for {}/{}: {failure}",

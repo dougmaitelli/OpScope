@@ -9,8 +9,8 @@ use opsscope_core::application::{
     ListIssuesFailure, ListRepositories, ListRepositoriesFailure, ListSources, ListWorkflows,
     ListWorkflowsFailure, NotifyRepositoryFailures, RepositorySelectionRepository,
     SaveRepositorySelection, SaveRepositorySelectionFailure, SecretStore, SettingsFailure,
-    SettingsRepository, SourceActions, SourceRegistry, SynchronizeSources,
-    TrackChangeRequestActivity, UpdateMonitoringSettings, WorkflowRunLogsFailure,
+    SettingsRepository, SourceActions, SourceRegistry, SynchronizeSources, TrackWorkItemActivity,
+    UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
 use opsscope_core::contracts::{
     ActionErrorResponse, ActionOptions, ActionOptionsRequest, ChangeRequestDetailsErrorResponse,
@@ -130,7 +130,7 @@ impl AppState {
                 source_data,
                 repository_selections.clone(),
                 failure_notifications,
-                TrackChangeRequestActivity::new(activity_events),
+                TrackWorkItemActivity::new(activity_events),
             )
             .with_work_item_notifications(work_item_notifications),
             save_repository_selection: SaveRepositorySelection::new(

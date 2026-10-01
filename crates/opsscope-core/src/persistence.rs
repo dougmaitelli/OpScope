@@ -220,6 +220,24 @@ impl SqliteDatabase {
                  );
                  CREATE INDEX IF NOT EXISTS change_request_activity_occurred_at
                    ON change_request_activity_events(occurred_at DESC);
+                 CREATE TABLE IF NOT EXISTS issue_activity_states (
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   payload TEXT NOT NULL,
+                   observed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                   PRIMARY KEY (source_id, repository_id),
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE TABLE IF NOT EXISTS issue_activity_events (
+                   id TEXT PRIMARY KEY,
+                   source_id TEXT NOT NULL,
+                   repository_id TEXT NOT NULL,
+                   occurred_at TEXT NOT NULL,
+                   payload TEXT NOT NULL,
+                   FOREIGN KEY (source_id) REFERENCES connections(id) ON DELETE CASCADE
+                 );
+                 CREATE INDEX IF NOT EXISTS issue_activity_occurred_at
+                   ON issue_activity_events(occurred_at DESC);
                  CREATE TABLE IF NOT EXISTS audit_events (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    event_type TEXT NOT NULL,
@@ -726,6 +744,107 @@ impl SettingsRepository for SqliteDatabase {
 }
 
 impl ActivityEventRepository for SqliteDatabase {
+    fn load_issue_state(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<Vec<crate::domain::Issue>>, PersistenceFailure> {
+        self.lock()?
+            .query_row(
+                "SELECT payload FROM issue_activity_states
+                 WHERE source_id = ?1 AND repository_id = ?2",
+                params![source_id, repository_id],
+                |row| {
+                    let payload: String = row.get(0)?;
+                    serde_json::from_str(&payload).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })
+                },
+            )
+            .optional()
+            .map_err(|_| PersistenceFailure)
+    }
+
+    fn save_issue_observation(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+        observed: &[crate::domain::Issue],
+        events: &[crate::application::IssueActivityEvent],
+    ) -> Result<(), PersistenceFailure> {
+        let mut database = self.lock()?;
+        let transaction = database.transaction().map_err(|_| PersistenceFailure)?;
+        let observed = serde_json::to_string(observed).map_err(|_| PersistenceFailure)?;
+        transaction
+            .execute(
+                "INSERT INTO issue_activity_states (
+                   source_id, repository_id, payload, observed_at
+                 ) VALUES (?1, ?2, ?3, unixepoch())
+                 ON CONFLICT(source_id, repository_id) DO UPDATE SET
+                   payload = excluded.payload,
+                   observed_at = unixepoch()",
+                params![source_id, repository_id, observed],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        for event in events {
+            let payload = serde_json::to_string(event).map_err(|_| PersistenceFailure)?;
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO issue_activity_events (
+                       id, source_id, repository_id, occurred_at, payload
+                     ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        event.id,
+                        source_id,
+                        repository_id,
+                        event.occurred_at,
+                        payload
+                    ],
+                )
+                .map_err(|_| PersistenceFailure)?;
+        }
+        transaction
+            .execute(
+                "DELETE FROM issue_activity_events
+                 WHERE id NOT IN (
+                   SELECT id FROM issue_activity_events
+                   ORDER BY occurred_at DESC, id DESC LIMIT 5000
+                 )",
+                [],
+            )
+            .map_err(|_| PersistenceFailure)?;
+        transaction.commit().map_err(|_| PersistenceFailure)
+    }
+
+    fn list_issue_events(
+        &self,
+    ) -> Result<Vec<crate::application::IssueActivityEvent>, PersistenceFailure> {
+        let database = self.lock()?;
+        let mut statement = database
+            .prepare(
+                "SELECT payload FROM issue_activity_events
+                 ORDER BY occurred_at DESC, id DESC LIMIT 5000",
+            )
+            .map_err(|_| PersistenceFailure)?;
+        let rows = statement
+            .query_map([], |row| {
+                let payload: String = row.get(0)?;
+                serde_json::from_str(&payload).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })
+            })
+            .map_err(|_| PersistenceFailure)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| PersistenceFailure)
+    }
     fn load_change_request_state(
         &self,
         source_id: &str,

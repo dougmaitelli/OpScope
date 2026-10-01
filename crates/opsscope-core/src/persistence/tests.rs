@@ -90,6 +90,90 @@ fn change_request_activity_is_deduplicated_persisted_and_removed_with_its_source
 }
 
 #[test]
+fn issue_activity_is_deduplicated_persisted_and_removed_with_its_source()
+-> Result<(), Box<dyn std::error::Error>> {
+    let database = SqliteDatabase::in_memory()?;
+    database.save(&test_connection())?;
+    let event = crate::application::IssueActivityEvent {
+        id: "example:repository-1:pr-1:Opened:2026-09-26T10:00:00Z".to_owned(),
+        kind: crate::application::IssueActivityKind::Opened,
+        occurred_at: "2026-09-26T10:00:00Z".to_owned(),
+        source_id: "example".to_owned(),
+        source_name: "Example".to_owned(),
+        source_abbreviation: "EX".to_owned(),
+        repository_id: "repository-1".to_owned(),
+        repository_owner: "owner".to_owned(),
+        repository_name: "project".to_owned(),
+        issue: crate::domain::Issue {
+            relationships: Default::default(),
+            id: "issue-1".into(),
+            number: 1,
+            title: "Add activity".into(),
+            author: Some("octocat".into()),
+            state: crate::domain::IssueState::Open,
+            labels: vec![],
+            assignees: vec![],
+            comment_count: 0,
+            created_at: "2026-09-26T10:00:00Z".into(),
+            updated_at: "2026-09-26T10:00:00Z".into(),
+            web_url: "https://example.com/issues/1".into(),
+        },
+    };
+
+    database.save_issue_observation(
+        "example",
+        "repository-1",
+        std::slice::from_ref(&event.issue),
+        std::slice::from_ref(&event),
+    )?;
+    database.save_issue_observation(
+        "example",
+        "repository-1",
+        std::slice::from_ref(&event.issue),
+        std::slice::from_ref(&event),
+    )?;
+    assert_eq!(
+        database.load_issue_state("example", "repository-1")?,
+        Some(vec![event.issue.clone()])
+    );
+    assert_eq!(database.list_issue_events()?, vec![event.clone()]);
+
+    let shared = Arc::new(database.clone());
+    let activity = crate::application::ListActivity::new(
+        shared.clone(),
+        shared.clone(),
+        shared.clone(),
+        shared,
+    );
+    assert!(activity.execute()?.issue_events.is_empty());
+    database.replace_for_sources(&[SourceRepositorySelection {
+        source_id: "example".into(),
+        repository_ids: vec!["repository-1".into()],
+    }])?;
+    let mut settings = MonitoringSettings {
+        pull_requests_enabled: false,
+        ..Default::default()
+    };
+    database.save_settings(settings)?;
+    assert_eq!(activity.execute()?.issue_events, vec![event.clone()]);
+    settings.only_my_work = true;
+    database.save_settings(settings)?;
+    assert!(activity.execute()?.issue_events.is_empty());
+    // Current relationship evidence controls historical visibility.
+    let mut current = event.issue.clone();
+    current.relationships.authors = crate::domain::AccountSet::new(["42".into()], true);
+    database.save_issue_observation("example", "repository-1", &[current], &[])?;
+    assert_eq!(activity.execute()?.issue_events, vec![event]);
+    settings.issues_enabled = false;
+    database.save_settings(settings)?;
+    assert!(activity.execute()?.issue_events.is_empty());
+
+    database.delete("example")?;
+    assert!(database.list_issue_events()?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn connection_keys_are_unique_within_a_source_module() -> Result<(), Box<dyn std::error::Error>> {
     let database = SqliteDatabase::in_memory()?;
     let first = test_connection();

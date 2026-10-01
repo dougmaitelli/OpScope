@@ -87,7 +87,7 @@ export function ActivityListHeader() {
       <span>Status</span>
       <span>Activity</span>
       <span>Project / context</span>
-      <span className="activity-ref-heading">Ref</span>
+      <span className="activity-ref-heading">Details</span>
       <span className="activity-actor-heading">Actor / trigger</span>
       <span />
     </DataRowHeader>

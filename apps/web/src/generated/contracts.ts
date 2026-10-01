@@ -52,7 +52,11 @@ export type ChangeRequestActivityKind = "opened" | "readyForReview" | "reviewApp
 
 export type ChangeRequestActivitySummary = { id: string, kind: ChangeRequestActivityKind, occurredAt: string, changeRequest: ChangeRequestSummary, };
 
-export type ListActivityResponse = { changeRequestEvents: Array<ChangeRequestActivitySummary>, };
+export type IssueActivityKind = "opened" | "updated" | "closed" | "reopened";
+
+export type IssueActivitySummary = { id: string, kind: IssueActivityKind, occurredAt: string, issue: IssueSummary, };
+
+export type ListActivityResponse = { changeRequestEvents: Array<ChangeRequestActivitySummary>, issueEvents: Array<IssueActivitySummary>, };
 
 export type ChangeRequestDetailsRequest = { sourceId: string, repositoryId: string, number: number, };
 

@@ -4,7 +4,7 @@ use opsscope_core::application::{
     GetWorkflowRunLogs, ListActivity, ListChangeRequests, ListIssues, ListRepositories,
     ListSources, ListWorkflows, NotifyRepositoryFailures, RepositorySelectionRepository,
     SaveRepositorySelection, SecretStore, SettingsRepository, SourceActions, SourceRegistry,
-    SynchronizeSources, TrackChangeRequestActivity, UpdateMonitoringSettings,
+    SynchronizeSources, TrackWorkItemActivity, UpdateMonitoringSettings,
 };
 use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
@@ -110,7 +110,7 @@ impl DesktopState {
                 source_data,
                 repository_selections.clone(),
                 failure_notifications,
-                TrackChangeRequestActivity::new(activity_events),
+                TrackWorkItemActivity::new(activity_events),
             )
             .with_work_item_notifications(work_item_notifications),
             save_repository_selection: SaveRepositorySelection::new(

@@ -8,6 +8,8 @@ use crate::domain::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+mod issues;
+pub use issues::*;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestActivityKind {
@@ -38,6 +40,20 @@ pub struct ChangeRequestActivityEvent {
 }
 
 pub trait ActivityEventRepository: Send + Sync {
+    fn load_issue_state(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+    ) -> Result<Option<Vec<crate::domain::Issue>>, PersistenceFailure>;
+    fn save_issue_observation(
+        &self,
+        source_id: &str,
+        repository_id: &str,
+        observed: &[crate::domain::Issue],
+        events: &[IssueActivityEvent],
+    ) -> Result<(), PersistenceFailure>;
+    fn list_issue_events(&self) -> Result<Vec<IssueActivityEvent>, PersistenceFailure>;
+
     fn load_change_request_state(
         &self,
         source_id: &str,
@@ -58,11 +74,14 @@ pub trait ActivityEventRepository: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct TrackChangeRequestActivity {
+pub struct TrackWorkItemActivity {
     events: Arc<dyn ActivityEventRepository>,
 }
 
-impl TrackChangeRequestActivity {
+impl TrackWorkItemActivity {
+    pub fn issues(&self) -> TrackIssueActivity {
+        TrackIssueActivity::new(self.events.clone())
+    }
     #[must_use]
     pub fn new(events: Arc<dyn ActivityEventRepository>) -> Self {
         Self {
@@ -266,6 +285,83 @@ pub struct ListActivity {
 }
 
 impl ListActivity {
+    pub fn execute(&self) -> Result<ActivityInventory, PersistenceFailure> {
+        Ok(ActivityInventory {
+            change_request_events: self.change_request_events()?,
+            issue_events: self.issue_events()?,
+        })
+    }
+
+    fn issue_events(&self) -> Result<Vec<IssueActivityEvent>, PersistenceFailure> {
+        let settings = self.settings.load_settings()?;
+        if !settings.issues_enabled {
+            return Ok(Vec::new());
+        }
+        let selected = self
+            .selections
+            .list()?
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        let accounts = self
+            .connections
+            .list()?
+            .into_iter()
+            .map(|connection| (connection.id, connection.account.external_id))
+            .collect::<HashMap<_, _>>();
+        let events = self.events.list_issue_events()?;
+        let mut relevance = HashMap::new();
+        if settings.only_my_work {
+            let mut chronological = events.iter().collect::<Vec<_>>();
+            chronological.sort_by(|left, right| left.occurred_at.cmp(&right.occurred_at));
+            for event in chronological {
+                relevance.insert(
+                    (
+                        event.source_id.clone(),
+                        event.repository_id.clone(),
+                        event.issue.id.clone(),
+                    ),
+                    event.issue.relationships.clone(),
+                );
+            }
+            for selection in &selected {
+                if let Some(current) = self
+                    .events
+                    .load_issue_state(&selection.source_id, &selection.repository_id)?
+                {
+                    for item in current {
+                        relevance.insert(
+                            (
+                                selection.source_id.clone(),
+                                selection.repository_id.clone(),
+                                item.id,
+                            ),
+                            item.relationships,
+                        );
+                    }
+                }
+            }
+        }
+        Ok(events
+            .into_iter()
+            .filter(|event| {
+                selected.contains(&RepositorySelection {
+                    source_id: event.source_id.clone(),
+                    repository_id: event.repository_id.clone(),
+                }) && (!settings.only_my_work
+                    || relevance
+                        .get(&(
+                            event.source_id.clone(),
+                            event.repository_id.clone(),
+                            event.issue.id.clone(),
+                        ))
+                        .is_some_and(|relationships| {
+                            accounts
+                                .get(&event.source_id)
+                                .is_some_and(|account| relationships.evaluate(account).matches())
+                        }))
+            })
+            .collect())
+    }
     #[must_use]
     pub fn new(
         events: Arc<dyn ActivityEventRepository>,
@@ -281,7 +377,7 @@ impl ListActivity {
         }
     }
 
-    pub fn execute(&self) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
+    fn change_request_events(&self) -> Result<Vec<ChangeRequestActivityEvent>, PersistenceFailure> {
         let settings = self.settings.load_settings()?;
         if !settings.pull_requests_enabled {
             return Ok(Vec::new());

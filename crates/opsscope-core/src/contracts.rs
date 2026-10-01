@@ -348,6 +348,8 @@ pub fn render_typescript_contract() -> String {
         ListChangeRequestsResponse::decl(&config),
         ChangeRequestActivityKind::decl(&config),
         ChangeRequestActivitySummary::decl(&config),
+        IssueActivityKind::decl(&config),
+        IssueActivitySummary::decl(&config),
         ListActivityResponse::decl(&config),
         ChangeRequestDetailsRequest::decl(&config),
         ChangeRequestReviewSummary::decl(&config),

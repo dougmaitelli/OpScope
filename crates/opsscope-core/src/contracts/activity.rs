@@ -115,13 +115,75 @@ impl From<DomainChangeRequestActivityEvent> for ChangeRequestActivitySummary {
 #[serde(rename_all = "camelCase")]
 pub struct ListActivityResponse {
     pub change_request_events: Vec<ChangeRequestActivitySummary>,
+    pub issue_events: Vec<IssueActivitySummary>,
 }
 
 impl ListActivityResponse {
     #[must_use]
-    pub fn from_domain(events: Vec<DomainChangeRequestActivityEvent>) -> Self {
+    pub fn from_domain(events: crate::application::ActivityInventory) -> Self {
         Self {
-            change_request_events: events.into_iter().map(Into::into).collect(),
+            change_request_events: events
+                .change_request_events
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            issue_events: events.issue_events.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum IssueActivityKind {
+    Opened,
+    Updated,
+    Closed,
+    Reopened,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueActivitySummary {
+    pub id: String,
+    pub kind: IssueActivityKind,
+    pub occurred_at: String,
+    pub issue: IssueSummary,
+}
+
+impl From<crate::application::IssueActivityEvent> for IssueActivitySummary {
+    fn from(event: crate::application::IssueActivityEvent) -> Self {
+        let issue = event.issue;
+        Self {
+            id: event.id,
+            occurred_at: event.occurred_at,
+            kind: match event.kind {
+                crate::application::IssueActivityKind::Opened => IssueActivityKind::Opened,
+                crate::application::IssueActivityKind::Updated => IssueActivityKind::Updated,
+                crate::application::IssueActivityKind::Closed => IssueActivityKind::Closed,
+                crate::application::IssueActivityKind::Reopened => IssueActivityKind::Reopened,
+            },
+            issue: IssueSummary {
+                id: issue.id,
+                number: issue.number,
+                title: issue.title,
+                author: issue.author,
+                state: match issue.state {
+                    crate::domain::IssueState::Open => IssueState::Open,
+                    crate::domain::IssueState::Closed => IssueState::Closed,
+                },
+                labels: issue.labels,
+                assignees: issue.assignees,
+                comment_count: issue.comment_count,
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                web_url: issue.web_url,
+                source_id: event.source_id,
+                source_name: event.source_name,
+                source_abbreviation: event.source_abbreviation,
+                repository_id: event.repository_id,
+                repository_owner: event.repository_owner,
+                repository_name: event.repository_name,
+            },
         }
     }
 }

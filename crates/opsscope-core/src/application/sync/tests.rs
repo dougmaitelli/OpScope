@@ -3,7 +3,7 @@ use crate::application::{
     ActivityEventRepository, ChangeRequestActivityEvent, ConnectedSource,
     ConnectionValidationFailure, CredentialField, LatestRunNotificationState, NoopNotificationSink,
     NotificationStateRepository, PersistenceFailure, RepositorySelection, SourceCapability,
-    SourceDescriptor, SourceRepositorySelection, TrackChangeRequestActivity,
+    SourceDescriptor, SourceRepositorySelection, TrackWorkItemActivity,
 };
 use crate::domain::{
     ChangeRequest, ChangeRequestDetails, Repository, RepositoryVisibility, Workflow, WorkflowRun,
@@ -17,6 +17,27 @@ struct TestSelections(Vec<RepositorySelection>);
 struct TestActivityEvents;
 
 impl ActivityEventRepository for TestActivityEvents {
+    fn load_issue_state(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<Option<Vec<crate::domain::Issue>>, PersistenceFailure> {
+        Ok(None)
+    }
+    fn save_issue_observation(
+        &self,
+        _: &str,
+        _: &str,
+        _: &[crate::domain::Issue],
+        _: &[crate::application::IssueActivityEvent],
+    ) -> Result<(), PersistenceFailure> {
+        Ok(())
+    }
+    fn list_issue_events(
+        &self,
+    ) -> Result<Vec<crate::application::IssueActivityEvent>, PersistenceFailure> {
+        Ok(Vec::new())
+    }
     fn load_change_request_state(
         &self,
         _source_id: &str,
@@ -352,7 +373,7 @@ fn scoped_coordinator(data: Arc<RecordingSourceData>) -> SynchronizeSources {
             Arc::new(TestNotificationStates::default()),
             Arc::new(NoopNotificationSink),
         ),
-        TrackChangeRequestActivity::new(Arc::new(TestActivityEvents)),
+        TrackWorkItemActivity::new(Arc::new(TestActivityEvents)),
     )
 }
 
@@ -385,7 +406,7 @@ async fn synchronization_forces_each_selected_repository_and_continues_after_fai
             Arc::new(TestNotificationStates::default()),
             Arc::new(NoopNotificationSink),
         ),
-        TrackChangeRequestActivity::new(Arc::new(TestActivityEvents)),
+        TrackWorkItemActivity::new(Arc::new(TestActivityEvents)),
     );
     assert_eq!(synchronize.status().last_completed_at, None);
 

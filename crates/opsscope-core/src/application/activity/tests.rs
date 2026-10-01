@@ -8,11 +8,34 @@ use std::sync::Mutex;
 
 #[derive(Default)]
 struct MemoryEvents {
+    issue_state: Mutex<Option<Vec<crate::domain::Issue>>>,
+    issue_events: Mutex<Vec<IssueActivityEvent>>,
     state: Mutex<Option<Vec<ChangeRequest>>>,
     events: Mutex<Vec<ChangeRequestActivityEvent>>,
 }
 
 impl ActivityEventRepository for MemoryEvents {
+    fn load_issue_state(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<Option<Vec<crate::domain::Issue>>, PersistenceFailure> {
+        Ok(self.issue_state.lock().unwrap().clone())
+    }
+    fn save_issue_observation(
+        &self,
+        _: &str,
+        _: &str,
+        observed: &[crate::domain::Issue],
+        events: &[IssueActivityEvent],
+    ) -> Result<(), PersistenceFailure> {
+        *self.issue_state.lock().unwrap() = Some(observed.to_vec());
+        self.issue_events.lock().unwrap().extend_from_slice(events);
+        Ok(())
+    }
+    fn list_issue_events(&self) -> Result<Vec<IssueActivityEvent>, PersistenceFailure> {
+        Ok(self.issue_events.lock().unwrap().clone())
+    }
     fn load_change_request_state(
         &self,
         _source_id: &str,
@@ -98,7 +121,7 @@ fn change_request() -> ChangeRequest {
 #[test]
 fn establishes_a_baseline_then_records_only_meaningful_transitions() {
     let events = Arc::new(MemoryEvents::default());
-    let tracker = TrackChangeRequestActivity::new(events.clone());
+    let tracker = TrackWorkItemActivity::new(events.clone());
     let original = change_request();
     tracker
         .observe(
@@ -155,8 +178,9 @@ fn records_resolved_departures_as_merged_or_closed() {
     let events = Arc::new(MemoryEvents {
         state: Mutex::new(Some(vec![change_request()])),
         events: Mutex::new(Vec::new()),
+        ..Default::default()
     });
-    let tracker = TrackChangeRequestActivity::new(events.clone());
+    let tracker = TrackWorkItemActivity::new(events.clone());
     let original = change_request();
     let mut merged = original.clone();
     merged.state = ChangeRequestState::Merged;
@@ -178,8 +202,9 @@ fn retains_an_unresolved_departure_for_the_next_observation() {
     let events = Arc::new(MemoryEvents {
         state: Mutex::new(Some(vec![original.clone()])),
         events: Mutex::new(Vec::new()),
+        ..Default::default()
     });
-    let tracker = TrackChangeRequestActivity::new(events.clone());
+    let tracker = TrackWorkItemActivity::new(events.clone());
 
     tracker
         .observe(&source(), &repository(), &[], &[])
@@ -190,4 +215,68 @@ fn retains_an_unresolved_departure_for_the_next_observation() {
         Some(vec![original])
     );
     assert!(events.events.lock().expect("event lock").is_empty());
+}
+
+fn issue() -> crate::domain::Issue {
+    crate::domain::Issue {
+        relationships: Default::default(),
+        id: "issue-1".into(),
+        number: 1,
+        title: "Track issue activity".into(),
+        author: Some("octocat".into()),
+        state: crate::domain::IssueState::Open,
+        labels: vec![],
+        assignees: vec![],
+        comment_count: 0,
+        created_at: "2026-09-26T10:00:00Z".into(),
+        updated_at: "2026-09-26T10:00:00Z".into(),
+        web_url: "https://example.com/issues/1".into(),
+    }
+}
+
+#[test]
+fn issue_activity_tracks_updates_confirmed_closures_and_reopenings() {
+    let events = Arc::new(MemoryEvents::default());
+    let tracker = TrackIssueActivity::new(events.clone());
+    let mut current = issue();
+    tracker
+        .observe(&source(), &repository(), &[current.clone()], &[])
+        .unwrap();
+    tracker
+        .observe(&source(), &repository(), &[current.clone()], &[])
+        .unwrap();
+    current.comment_count = 1;
+    current.updated_at = "2026-09-27T10:00:00Z".into();
+    tracker
+        .observe(&source(), &repository(), &[current.clone()], &[])
+        .unwrap();
+    // Failed detail lookups or partial inventories do not imply closure.
+    tracker.observe(&source(), &repository(), &[], &[]).unwrap();
+    assert_eq!(
+        tracker.previous("source", "repository").unwrap(),
+        Some(vec![current.clone()])
+    );
+    current.state = crate::domain::IssueState::Closed;
+    current.updated_at = "2026-09-28T10:00:00Z".into();
+    tracker
+        .observe(&source(), &repository(), &[], &[current.clone()])
+        .unwrap();
+    tracker.observe(&source(), &repository(), &[], &[]).unwrap();
+    current.state = crate::domain::IssueState::Open;
+    current.updated_at = "2026-09-29T10:00:00Z".into();
+    tracker
+        .observe(&source(), &repository(), &[current], &[])
+        .unwrap();
+    let recorded = events.list_issue_events().unwrap();
+    assert_eq!(
+        recorded.iter().map(|event| event.kind).collect::<Vec<_>>(),
+        vec![
+            IssueActivityKind::Opened,
+            IssueActivityKind::Updated,
+            IssueActivityKind::Closed,
+            IssueActivityKind::Reopened
+        ]
+    );
+    assert_eq!(recorded[0].occurred_at, "2026-09-26T10:00:00Z");
+    assert_eq!(recorded[2].occurred_at, "2026-09-28T10:00:00Z");
 }

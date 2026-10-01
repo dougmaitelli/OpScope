@@ -3,7 +3,7 @@ import { useMonitoringSettings } from "../../api/monitoring-settings.ts";
 
 export type ActivityStatusFilter = "all" | "failing" | "running" | "successful" | "other";
 export type ActivityRangeFilter = "all" | "day" | "week" | "month";
-export type ActivityTypeFilter = "all" | "workflows" | "pullRequests";
+export type ActivityTypeFilter = "all" | "workflows" | "pullRequests" | "issues";
 
 export interface ActivityFilterValues {
   query: string;
@@ -45,7 +45,7 @@ export function ActivityFilters({
         <input
           type="search"
           value={values.query}
-          placeholder="Repository, workflow, pull request, actor"
+          placeholder="Repository, workflow, pull request, issue, actor"
           onChange={(event) => onChange({ ...values, query: event.target.value })}
         />
       </label>
@@ -57,7 +57,9 @@ export function ActivityFilters({
             onChange({
               ...values,
               type: event.target.value as ActivityTypeFilter,
-              trigger: event.target.value === "pullRequests" ? "" : values.trigger,
+              trigger: ["pullRequests", "issues"].includes(event.target.value)
+                ? ""
+                : values.trigger,
             })
           }
         >
@@ -66,6 +68,7 @@ export function ActivityFilters({
           {settings?.pullRequestsEnabled ? (
             <option value="pullRequests">Pull requests</option>
           ) : null}
+          {settings?.issuesEnabled ? <option value="issues">Issues</option> : null}
         </select>
       </label>
       <label className="activity-filter">
@@ -104,7 +107,7 @@ export function ActivityFilters({
         <span>Trigger</span>
         <select
           value={values.trigger}
-          disabled={values.type === "pullRequests"}
+          disabled={values.type === "pullRequests" || values.type === "issues"}
           onChange={(event) => onChange({ ...values, trigger: event.target.value })}
         >
           <option value="">All triggers</option>

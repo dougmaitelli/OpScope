@@ -8,8 +8,11 @@ import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { WorkflowRunLogsDialog } from "../../components/WorkflowRunLogsDialog.tsx";
 import { ChangeRequestDetailsDialog } from "../change-requests/ChangeRequestDetailsDialog.tsx";
+import { IssueDetailsDialog } from "../issues/IssueDetailsDialog.tsx";
+import { IssueActivityRow } from "./IssueActivityRow.tsx";
 import type {
   ChangeRequestActivitySummary,
+  IssueActivitySummary,
   ListActivityResponse,
   ListWorkflowsResponse,
   WorkflowRunSummary,
@@ -35,10 +38,18 @@ const STATUS_FILTERS = new Set<ActivityStatusFilter>([
   "other",
 ]);
 const RANGE_FILTERS = new Set<ActivityRangeFilter>(["all", "day", "week", "month"]);
-const TYPE_FILTERS = new Set<ActivityTypeFilter>(["all", "workflows", "pullRequests"]);
+const TYPE_FILTERS = new Set<ActivityTypeFilter>(["all", "workflows", "pullRequests", "issues"]);
 
 type TimelineActivity =
   | WorkflowActivity
+  | {
+      type: "issue";
+      id: string;
+      occurredAt: string;
+      repositoryId: string;
+      repositoryLabel: string;
+      event: IssueActivitySummary;
+    }
   | {
       type: "pullRequest";
       id: string;
@@ -107,6 +118,7 @@ export function ActivityPage() {
   } | null>(null);
   const [selectedChangeRequest, setSelectedChangeRequest] =
     useState<ChangeRequestActivitySummary | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<IssueActivitySummary | null>(null);
 
   const activities = useMemo(() => {
     const workflows: WorkflowActivity[] = (inventory?.workflows ?? []).flatMap((workflow) =>
@@ -130,10 +142,20 @@ export function ActivityPage() {
       repositoryLabel: `${event.changeRequest.repositoryOwner}/${event.changeRequest.repositoryName}`,
       event,
     }));
-    return ([...workflows, ...changeRequests] as TimelineActivity[]).sort(
+    const issues: TimelineActivity[] = (
+      settings?.issuesEnabled ? (persistedActivity?.issueEvents ?? []) : []
+    ).map((event) => ({
+      type: "issue",
+      id: event.id,
+      occurredAt: event.occurredAt,
+      repositoryId: `${event.issue.sourceId}:${event.issue.repositoryId}`,
+      repositoryLabel: `${event.issue.repositoryOwner}/${event.issue.repositoryName}`,
+      event,
+    }));
+    return ([...workflows, ...changeRequests, ...issues] as TimelineActivity[]).sort(
       (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt),
     );
-  }, [inventory, persistedActivity, settings?.pullRequestsEnabled]);
+  }, [inventory, persistedActivity, settings?.pullRequestsEnabled, settings?.issuesEnabled]);
 
   const requestedStatus = searchParams.get("status") ?? "all";
   const requestedRange = searchParams.get("range") ?? "all";
@@ -142,7 +164,8 @@ export function ActivityPage() {
     query: searchParams.get("q") ?? "",
     type:
       TYPE_FILTERS.has(requestedType as ActivityTypeFilter) &&
-      !(requestedType === "pullRequests" && !settings?.pullRequestsEnabled)
+      !(requestedType === "pullRequests" && !settings?.pullRequestsEnabled) &&
+      !(requestedType === "issues" && !settings?.issuesEnabled)
         ? (requestedType as ActivityTypeFilter)
         : "all",
     status: STATUS_FILTERS.has(requestedStatus as ActivityStatusFilter)
@@ -190,14 +213,24 @@ export function ActivityPage() {
             activity.run.actor,
             activity.run.trigger,
           ]
-        : [
-            activity.repositoryLabel,
-            activity.event.changeRequest.title,
-            activity.event.changeRequest.author,
-            activity.event.changeRequest.sourceBranch,
-            activity.event.changeRequest.targetBranch,
-            activity.event.kind,
-          ]
+        : activity.type === "issue"
+          ? [
+              activity.repositoryLabel,
+              activity.event.issue.number,
+              activity.event.issue.title,
+              activity.event.issue.author,
+              ...activity.event.issue.assignees,
+              ...activity.event.issue.labels,
+              activity.event.kind,
+            ]
+          : [
+              activity.repositoryLabel,
+              activity.event.changeRequest.title,
+              activity.event.changeRequest.author,
+              activity.event.changeRequest.sourceBranch,
+              activity.event.changeRequest.targetBranch,
+              activity.event.kind,
+            ]
     )
       .filter(Boolean)
       .join(" ")
@@ -206,10 +239,16 @@ export function ActivityPage() {
       searchable.includes(normalizedQuery) &&
       (filters.type === "all" ||
         (filters.type === "workflows" && activity.type === "workflow") ||
-        (filters.type === "pullRequests" && activity.type === "pullRequest")) &&
+        (filters.type === "pullRequests" && activity.type === "pullRequest") ||
+        (filters.type === "issues" && activity.type === "issue")) &&
       (activity.type === "workflow"
         ? matchesStatus(activity.run, filters.status)
-        : matchesChangeRequestStatus(activity.event, filters.status)) &&
+        : activity.type === "issue"
+          ? filters.status === "all" ||
+            (filters.status === "successful"
+              ? activity.event.kind === "closed"
+              : filters.status === "other" && activity.event.kind !== "closed")
+          : matchesChangeRequestStatus(activity.event, filters.status)) &&
       (filters.repository.length === 0 || activity.repositoryId === filters.repository) &&
       (filters.trigger.length === 0 ||
         (activity.type === "workflow" && activity.run.trigger === filters.trigger)) &&
@@ -240,7 +279,7 @@ export function ActivityPage() {
       <PageHeader
         eyebrow="Operations timeline"
         title="Activity"
-        description="Workflow runs and pull request transitions across monitored repositories."
+        description="Workflow runs, pull request transitions, and issue activity across monitored repositories."
       />
 
       <section className="panel activity-panel" aria-labelledby="activity-list-title">
@@ -295,6 +334,12 @@ export function ActivityPage() {
                   key={activity.id}
                   onOpen={() => setSelected({ workflow: activity.workflow, run: activity.run })}
                 />
+              ) : activity.type === "issue" ? (
+                <IssueActivityRow
+                  activity={activity.event}
+                  key={activity.id}
+                  onOpen={() => setSelectedIssue(activity.event)}
+                />
               ) : (
                 <ChangeRequestActivityRow
                   activity={activity.event}
@@ -335,6 +380,9 @@ export function ActivityPage() {
           changeRequest={selectedChangeRequest.changeRequest}
           onClose={() => setSelectedChangeRequest(null)}
         />
+      ) : null}
+      {selectedIssue ? (
+        <IssueDetailsDialog issue={selectedIssue.issue} onClose={() => setSelectedIssue(null)} />
       ) : null}
     </section>
   );
