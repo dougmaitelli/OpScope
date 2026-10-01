@@ -4,6 +4,7 @@ import type { WorkflowRunSummary, WorkflowSummary } from "../generated/contracts
 import "./WorkflowRow.css";
 import { WorkflowRunLogsDialog } from "./WorkflowRunLogsDialog.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
+import { CommitLink } from "./CommitLink.tsx";
 
 export function WorkflowRow({
   workflow,
@@ -52,7 +53,8 @@ export function WorkflowRow({
                   #{latestRun.runNumber} · {latestRun.title}
                 </button>
                 <span>
-                  {latestRun.branch ?? "detached"} · {latestRun.commitSha.slice(0, 7)}
+                  {latestRun.branch ?? "detached"} ·{" "}
+                  <CommitLink sha={latestRun.commitSha} resourceUrl={latestRun.webUrl} />
                   {latestRun.actor ? ` · ${latestRun.actor}` : ""}
                 </span>
               </>
@@ -82,7 +84,8 @@ export function WorkflowRow({
                     #{run.runNumber} · {run.title}
                   </button>
                   <span>
-                    {run.branch ?? "detached"} · {run.commitSha.slice(0, 7)}
+                    {run.branch ?? "detached"} ·{" "}
+                    <CommitLink sha={run.commitSha} resourceUrl={run.webUrl} />
                   </span>
                 </div>
                 <WorkflowRunState run={run} />

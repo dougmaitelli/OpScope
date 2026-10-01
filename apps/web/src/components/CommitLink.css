@@ -1,0 +1,12 @@
+.commit-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 0.15em;
+  white-space: nowrap;
+}
+
+.commit-link:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}

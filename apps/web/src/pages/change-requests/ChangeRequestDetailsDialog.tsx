@@ -17,6 +17,7 @@ import type {
 } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
 import { TimeDisplay } from "../../components/TimeDisplay.tsx";
+import { CommitLink } from "../../components/CommitLink.tsx";
 import { updateWorkflowRun } from "../../shared/action-refresh.ts";
 import "./ChangeRequestDetailsDialog.css";
 
@@ -301,7 +302,12 @@ export function ChangeRequestDetailsDialog({
                   <section>
                     <h3>Latest commit</h3>
                     <div className="change-request-commit">
-                      <code>{details.latestCommit.sha.slice(0, 7)}</code>
+                      <code>
+                        <CommitLink
+                          sha={details.latestCommit.sha}
+                          resourceUrl={changeRequest.webUrl}
+                        />
+                      </code>
                       <strong>{details.latestCommit.title}</strong>
                       <span>
                         {details.latestCommit.author ?? "Unknown author"} ·{" "}

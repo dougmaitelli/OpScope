@@ -9,6 +9,7 @@ import type { WorkflowRunSummary, WorkflowSummary } from "../../generated/contra
 import { formatRunDuration, runPresentation } from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
 import { StatusPill } from "../../components/StatusPill.tsx";
+import { CommitLink } from "../../components/CommitLink.tsx";
 import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 
 export interface WorkflowActivity {
@@ -33,8 +34,17 @@ export function ActivityRow({
   const duration = formatRunDuration(run);
   return (
     <DataRow
+      as="div"
+      role="button"
+      tabIndex={0}
       className="activity-row"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       aria-label={`Open logs for ${activity.repositoryLabel}, ${workflow.name}, run ${run.runNumber}`}
     >
       <span className="activity-state-cell">
@@ -69,7 +79,7 @@ export function ActivityRow({
       <DataRowIdentity
         className="activity-ref-cell"
         title={<>{run.branch ?? "detached"}</>}
-        metadata={<>{run.commitSha.slice(0, 7)}</>}
+        metadata={<CommitLink sha={run.commitSha} resourceUrl={run.webUrl} />}
       />
       <DataRowIdentity
         className="activity-actor-cell"

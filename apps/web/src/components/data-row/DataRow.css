@@ -37,7 +37,8 @@
   background: var(--row-hover);
 }
 
-button.data-row {
+button.data-row,
+.data-row[role="button"] {
   cursor: pointer;
 }
 

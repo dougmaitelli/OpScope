@@ -9,6 +9,7 @@ import { requestErrorMessage } from "../shared/errors.ts";
 import { DialogCloseButton } from "./DialogCloseButton.tsx";
 import { WorkflowRunState } from "./WorkflowRunState.tsx";
 import { SourceActions } from "./SourceActions.tsx";
+import { CommitLink } from "./CommitLink.tsx";
 import "./WorkflowRunLogsDialog.css";
 
 export interface WorkflowRunReference {
@@ -135,9 +136,15 @@ export function WorkflowRunLogsDialog({
             {resolvedRun ? `#${resolvedRun.runNumber} · ${resolvedRun.title}` : workflowName}
           </h2>
           <p className="run-logs-metadata">
-            {resolvedRun
-              ? `${resolvedRun.branch ?? "detached"} · ${resolvedRun.commitSha.slice(0, 7)} · attempt ${resolvedRun.attempt}`
-              : "Resolving workflow run…"}
+            {resolvedRun ? (
+              <>
+                {resolvedRun.branch ?? "detached"} ·{" "}
+                <CommitLink sha={resolvedRun.commitSha} resourceUrl={resolvedRun.webUrl} /> ·
+                attempt {resolvedRun.attempt}
+              </>
+            ) : (
+              "Resolving workflow run…"
+            )}
           </p>
         </div>
         <div className="run-logs-header-actions">
