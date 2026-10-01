@@ -7,11 +7,13 @@
   border-radius: 999px;
   color: var(--muted);
   background: #181f29;
-  font-size: 9px;
+  font-size: var(--font-size-caption);
   font-weight: 750;
   letter-spacing: 0.04em;
   line-height: 1.2;
   text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .status-pill-success {

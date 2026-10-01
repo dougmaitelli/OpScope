@@ -6,7 +6,7 @@ import {
   RowChevron,
 } from "../../components/data-row/DataRow.tsx";
 import type { IssueSummary } from "../../generated/contracts.ts";
-import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import "./IssueRow.css";
 
 export function IssueRow({ issue, onOpen }: { issue: IssueSummary; onOpen: () => void }) {
@@ -38,7 +38,9 @@ export function IssueRow({ issue, onOpen }: { issue: IssueSummary; onOpen: () =>
         )}
       </span>
       <DataRowMeta className="issue-comments">{issue.commentCount}</DataRowMeta>
-      <DataRowMeta className="issue-updated">{formatRelativeDate(issue.updatedAt)}</DataRowMeta>
+      <DataRowMeta className="issue-updated">
+        <TimeDisplay dateTime={issue.updatedAt} />
+      </DataRowMeta>
       <RowChevron className="issue-open" />
     </DataRow>
   );

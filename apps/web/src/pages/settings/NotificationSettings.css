@@ -5,12 +5,12 @@
 
 .notification-settings h3 {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-base);
 }
 
 .notification-settings > p {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
 }
 
@@ -30,7 +30,7 @@
 
 .notification-settings legend {
   padding: 0 4px;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 650;
 }
 
@@ -43,7 +43,7 @@
   align-items: center;
   gap: 8px;
   padding: 5px 0;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 
 .notification-settings input {

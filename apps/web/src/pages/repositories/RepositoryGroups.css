@@ -23,12 +23,12 @@
 .repository-owner-group h3 {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--font-size-base);
 }
 
 .repository-owner-group > header > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
   overflow-wrap: anywhere;
 }
 

@@ -16,7 +16,7 @@ import type {
   WorkflowSummary,
 } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
-import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import { updateWorkflowRun } from "../../shared/action-refresh.ts";
 import "./ChangeRequestDetailsDialog.css";
 
@@ -166,15 +166,25 @@ export function ChangeRequestDetailsDialog({
         />
         <div className="change-request-dialog-statuses">
           <StatusPill tone={changeRequestStatusTone[changeRequest.reviewStatus]}>
-            Review · {statusLabel(changeRequest.reviewStatus)}
+            {changeRequest.reviewStatus === "none" ? (
+              "No reviews"
+            ) : (
+              <>Review · {statusLabel(changeRequest.reviewStatus)}</>
+            )}
           </StatusPill>
           <StatusPill tone={changeRequestStatusTone[changeRequest.checkStatus]}>
-            Checks · {statusLabel(changeRequest.checkStatus)}
+            {changeRequest.checkStatus === "none" ? (
+              "No checks"
+            ) : (
+              <>Checks · {statusLabel(changeRequest.checkStatus)}</>
+            )}
           </StatusPill>
           <StatusPill tone={changeRequestStatusTone[changeRequest.mergeStatus]}>
             Merge · {statusLabel(changeRequest.mergeStatus)}
           </StatusPill>
-          <span>Updated {formatRelativeDate(changeRequest.updatedAt)}</span>
+          <span>
+            Updated <TimeDisplay dateTime={changeRequest.updatedAt} />
+          </span>
         </div>
         <div className="change-request-dialog-content" aria-busy={loading}>
           {loading ? (
@@ -295,7 +305,7 @@ export function ChangeRequestDetailsDialog({
                       <strong>{details.latestCommit.title}</strong>
                       <span>
                         {details.latestCommit.author ?? "Unknown author"} ·{" "}
-                        {formatRelativeDate(details.latestCommit.committedAt)}
+                        <TimeDisplay dateTime={details.latestCommit.committedAt} />
                       </span>
                     </div>
                   </section>

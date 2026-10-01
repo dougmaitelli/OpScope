@@ -1,5 +1,6 @@
 import type { WorkflowRunSummary, WorkflowState } from "../generated/contracts.ts";
-import { formatRelativeDate, formatRunDuration, runPresentation } from "../shared/workflow-runs.ts";
+import { formatRunDuration, runPresentation } from "../shared/workflow-runs.ts";
+import { TimeDisplay } from "./TimeDisplay.tsx";
 import "./WorkflowRunState.css";
 import { StatusPill } from "./StatusPill.tsx";
 
@@ -24,8 +25,11 @@ export function WorkflowRunState({ run, workflowState }: WorkflowRunStateProps) 
     <div className="run-state-block">
       <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
       <span className="run-timing">
-        {duration ? `${duration}${run.lifecycle === "running" ? " elapsed" : ""} · ` : ""}
-        <time dateTime={run.updatedAt}>{formatRelativeDate(run.updatedAt)}</time>
+        <TimeDisplay
+          dateTime={run.updatedAt}
+          duration={duration}
+          elapsed={run.lifecycle === "running"}
+        />
       </span>
     </div>
   );

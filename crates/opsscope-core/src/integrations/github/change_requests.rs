@@ -16,6 +16,7 @@ impl GitHubClient {
                   author { login }
                   headRefName
                   baseRefName
+                  reviews(first: 1) { totalCount }
                   commits(last: 1) {
                     nodes { commit { statusCheckRollup { state } } }
                   }
@@ -65,14 +66,21 @@ impl GitHubClient {
                 .data
                 .and_then(|data| data.repository)
                 .ok_or_else(|| graphql_failure(&response.errors))?;
-            change_requests.extend(
-                repository
-                    .pull_requests
-                    .nodes
-                    .into_iter()
-                    .flatten()
-                    .map(ChangeRequest::from),
-            );
+            let partial_response = !response.errors.is_empty();
+            change_requests.extend(repository.pull_requests.nodes.into_iter().flatten().map(
+                |request| {
+                    let mut summary = ChangeRequest::from(request);
+                    if partial_response {
+                        if summary.check_status == ChangeRequestCheckStatus::None {
+                            summary.check_status = ChangeRequestCheckStatus::Unknown;
+                        }
+                        if summary.review_status == ChangeRequestReviewStatus::None {
+                            summary.review_status = ChangeRequestReviewStatus::Unknown;
+                        }
+                    }
+                    summary
+                },
+            ));
             if !repository.pull_requests.page_info.has_next_page {
                 let ids = change_requests
                     .iter()
@@ -108,7 +116,7 @@ impl GitHubClient {
                 headRefName
                 baseRefName
                 labels(first: 50) { nodes { name } }
-                reviews(first: 100) { nodes { author { login } state submittedAt } }
+                reviews(first: 100) { totalCount nodes { author { login } state submittedAt } }
                 commits(last: 1) {
                   nodes {
                     commit {
@@ -307,7 +315,11 @@ pub(super) struct GitHubReview {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct GitHubReviewConnection {
+    #[serde(default)]
+    total_count: Option<usize>,
+    #[serde(default)]
     nodes: Vec<Option<GitHubReview>>,
 }
 
@@ -347,6 +359,13 @@ impl From<GitHubChangeRequest> for ChangeRequest {
             Some("APPROVED") => ChangeRequestReviewStatus::Approved,
             Some("CHANGES_REQUESTED") => ChangeRequestReviewStatus::ChangesRequested,
             Some("REVIEW_REQUIRED") => ChangeRequestReviewStatus::ReviewRequired,
+            None if change_request
+                .reviews
+                .as_ref()
+                .is_some_and(|reviews| reviews.total_count == Some(0)) =>
+            {
+                ChangeRequestReviewStatus::None
+            }
             _ => ChangeRequestReviewStatus::Unknown,
         };
         let check_status = match change_request
@@ -356,12 +375,15 @@ impl From<GitHubChangeRequest> for ChangeRequest {
             .rev()
             .flatten()
             .next()
-            .and_then(|node| node.commit.status_check_rollup.as_ref())
-            .map(|rollup| rollup.state.as_str())
+            .map(|node| node.commit.status_check_rollup.as_ref())
         {
-            Some("SUCCESS") => ChangeRequestCheckStatus::Passed,
-            Some("FAILURE" | "ERROR") => ChangeRequestCheckStatus::Failing,
-            Some("PENDING" | "EXPECTED") => ChangeRequestCheckStatus::Running,
+            Some(None) => ChangeRequestCheckStatus::None,
+            Some(Some(rollup)) => match rollup.state.as_str() {
+                "SUCCESS" => ChangeRequestCheckStatus::Passed,
+                "FAILURE" | "ERROR" => ChangeRequestCheckStatus::Failing,
+                "PENDING" | "EXPECTED" => ChangeRequestCheckStatus::Running,
+                _ => ChangeRequestCheckStatus::Unknown,
+            },
             _ => ChangeRequestCheckStatus::Unknown,
         };
         let merge_status = match change_request.merge_state_status.as_str() {

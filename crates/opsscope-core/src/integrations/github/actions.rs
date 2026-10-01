@@ -32,6 +32,27 @@ struct Author {
 struct Run {
     status: String,
     run_attempt: u64,
+    event: Option<String>,
+    path: Option<String>,
+}
+
+impl Run {
+    fn rerun_disabled_reason(&self) -> Option<&'static str> {
+        if self.event.as_deref() == Some("dynamic")
+            || self
+                .path
+                .as_deref()
+                .is_some_and(|path| path.starts_with("dynamic/"))
+        {
+            Some(
+                "GitHub-managed workflows cannot be re-run here. Open GitHub to use the feature's own controls.",
+            )
+        } else if self.status != "completed" {
+            Some("Wait for the current run to finish.")
+        } else {
+            None
+        }
+    }
 }
 
 impl GitHubClient {
@@ -58,8 +79,7 @@ impl GitHubClient {
                         SourceAction::RerunWorkflow,
                         "Re-run workflow",
                         "Re-run all jobs for this workflow run at its original commit? This can execute deployments and other workflow side effects.",
-                        (run.status != "completed")
-                            .then_some("Wait for the current run to finish."),
+                        run.rerun_disabled_reason(),
                     )],
                 })
             }
@@ -84,7 +104,7 @@ impl GitHubClient {
                 } else if pull.mergeable == Some(false) {
                     Some("Resolve merge conflicts in the provider first.")
                 } else if pull.mergeable.is_none() {
-                    Some("GitHub is still checking mergeability. Reload actions shortly.")
+                    Some("GitHub is still checking mergeability.")
                 } else {
                     None
                 };

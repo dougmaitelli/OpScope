@@ -1,7 +1,7 @@
 .change-request-row,
 .change-request-list-header {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 150px 120px 88px 64px 14px;
+  grid-template-columns: minmax(220px, 1fr) 150px 140px 88px 64px 14px;
 }
 
 .change-request-primary {
@@ -25,7 +25,7 @@
 @media (max-width: 1100px) {
   .change-request-row,
   .change-request-list-header {
-    grid-template-columns: minmax(220px, 1fr) 150px 120px 88px 14px;
+    grid-template-columns: minmax(220px, 1fr) 150px 140px 88px 14px;
   }
   .change-request-updated {
     display: none;

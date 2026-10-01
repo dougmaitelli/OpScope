@@ -8,7 +8,7 @@
   border-radius: 4px;
   color: var(--muted);
   background: var(--surface);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 .personal-scope-notice strong,
 .personal-scope-notice a {

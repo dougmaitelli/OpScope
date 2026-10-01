@@ -138,6 +138,9 @@ impl MergeRequest {
             .is_some_and(|a| !a.approved_by.is_empty() && a.approvals_left == Some(0))
         {
             Review::Approved
+        } else if approvals.is_some_and(|a| a.approved_by.is_empty() && a.approvals_left == Some(0))
+        {
+            Review::None
         } else {
             Review::Unknown
         };
@@ -155,7 +158,7 @@ impl MergeRequest {
             check_status: self
                 .head_pipeline
                 .as_ref()
-                .map_or(Check::Unknown, |pipeline| pipeline_status(&pipeline.status)),
+                .map_or(Check::None, |pipeline| pipeline_status(&pipeline.status)),
             merge_status,
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone(),

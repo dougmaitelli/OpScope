@@ -71,7 +71,7 @@ pub struct ActionRefresh {
     pub details: Option<crate::domain::ChangeRequestDetails>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ActionFailure {
     NotFound,
     Unsupported,
@@ -79,6 +79,9 @@ pub enum ActionFailure {
     Busy,
     StorageUnavailable,
     Source(ConnectionValidationFailure),
+    ProviderDenied {
+        message: String,
+    },
     /// A write may have reached the provider: never automatically retry it.
     OutcomeUnknown,
 }
@@ -92,6 +95,7 @@ impl std::fmt::Display for ActionFailure {
             Self::Busy => f.write_str("An action is already running for this resource."),
             Self::StorageUnavailable => f.write_str("Stored connection data is unavailable."),
             Self::Source(failure) => std::fmt::Display::fmt(failure, f),
+            Self::ProviderDenied { message } => write!(f, "The provider rejected the action (HTTP 403): {message}"),
             Self::OutcomeUnknown => f.write_str("The provider did not confirm the result. Check the provider before retrying; the action may already have been accepted."),
         }
     }

@@ -1,6 +1,72 @@
 use super::*;
 
 #[tokio::test]
+async fn dynamic_workflows_are_disabled_and_rejected_without_sending_a_rerun() {
+    for metadata in [
+        json!({"event":"dynamic","path":"dynamic/github-code-scanning/codeql"}),
+        json!({"event":"dynamic","path":"dynamic/dependabot/dependabot-updates"}),
+        json!({"event":"dynamic"}),
+        json!({"path":"dynamic/github-code-scanning/codeql"}),
+    ] {
+        let mut run = json!({"status":"completed","run_attempt":1});
+        run.as_object_mut()
+            .unwrap()
+            .extend(metadata.as_object().unwrap().clone());
+        let api = MockApi::start(vec![Exchange::json(
+            "/api/v3/repos/team/app/actions/runs/7",
+            "authorization: Bearer secret",
+            run,
+        )]);
+        assert_eq!(
+            action_service(&api)
+                .execute(
+                    "connection",
+                    "3",
+                    &ActionTarget::WorkflowRun {
+                        run_id: "7".into()
+                    },
+                    SourceAction::RerunWorkflow,
+                    Some("1"),
+                )
+                .await,
+            Err(ActionFailure::Conflict)
+        );
+        api.finish();
+    }
+}
+
+#[test]
+fn regular_codeql_and_dependabot_pr_workflows_remain_rerunnable() {
+    for (event, path) in [
+        ("push", ".github/workflows/codeql.yml"),
+        ("pull_request", ".github/workflows/dependabot-ci.yml"),
+    ] {
+        let run: Run = serde_json::from_value(json!({
+            "status":"completed", "run_attempt":1, "event":event, "path":path,
+        }))
+        .unwrap();
+        assert_eq!(run.rerun_disabled_reason(), None);
+    }
+    let run: Run = serde_json::from_value(json!({
+        "status":"in_progress", "run_attempt":1, "event":"push",
+    }))
+    .unwrap();
+    assert_eq!(
+        run.rerun_disabled_reason(),
+        Some("Wait for the current run to finish.")
+    );
+    let run: Run = serde_json::from_value(json!({
+        "status":"completed", "run_attempt":1, "event":"dynamic",
+    }))
+    .unwrap();
+    assert!(
+        run.rerun_disabled_reason()
+            .unwrap()
+            .contains("GitHub-managed")
+    );
+}
+
+#[tokio::test]
 async fn core_rejects_merge_when_state_or_revision_is_unsafe() {
     for (state, mergeable, draft, status, revision) in [
         ("closed", Some(true), false, "clean", "abc"),
@@ -339,6 +405,102 @@ async fn write_failures_are_classified_without_retrying() {
         );
         api.finish();
     }
+}
+
+#[tokio::test]
+async fn rerun_denials_preserve_provider_messages_and_sso_requirements() {
+    for (message, header, expected) in [
+        (
+            "Must have write access to repository",
+            "",
+            "Must have write access to repository",
+        ),
+        (
+            "Resource protected by organization SAML enforcement.",
+            "X-GitHub-SSO: required; url=https://github.example/sso\r\n",
+            "GitHub requires SSO authorization for this token.",
+        ),
+        (
+            "Personal access tokens (classic) are forbidden from accessing this organization.",
+            "",
+            "Personal access tokens (classic) are forbidden from accessing this organization.",
+        ),
+    ] {
+        let mut mutation = Exchange::json(
+            "/api/v3/repos/team/app/actions/runs/7/rerun",
+            "authorization: Bearer secret",
+            json!({"message":message}),
+        );
+        mutation.method = "POST".into();
+        mutation.status = 403;
+        mutation.headers.push_str(header);
+        let api = MockApi::start(vec![mutation]);
+        let client = GitHubClient::new().unwrap();
+        let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+            .into_iter()
+            .collect();
+        let failure = client
+            .perform_action(
+                &config,
+                &ProviderToken::new("secret".into()),
+                &relevance_repository(),
+                &ActionTarget::WorkflowRun {
+                    run_id: "7".into(),
+                },
+                SourceAction::RerunWorkflow,
+                Some("1"),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            failure,
+            ActionFailure::ProviderDenied {
+                message: expected.into()
+            }
+        );
+        let contract = crate::contracts::ActionErrorResponse::from(failure);
+        assert_eq!(contract.code, "action_provider_error");
+        assert_eq!(
+            contract.message,
+            format!("The provider rejected the action (HTTP 403): {expected}")
+        );
+        api.finish();
+    }
+}
+
+#[tokio::test]
+async fn rerun_rate_limits_are_not_reported_as_permission_denials() {
+    let mut mutation = Exchange::json(
+        "/api/v3/repos/team/app/actions/runs/7/rerun",
+        "authorization: Bearer secret",
+        json!({"message":"API rate limit exceeded"}),
+    );
+    mutation.method = "POST".into();
+    mutation.status = 403;
+    mutation.headers.push_str("X-RateLimit-Remaining: 0\r\n");
+    let api = MockApi::start(vec![mutation]);
+    let client = GitHubClient::new().unwrap();
+    let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+        .into_iter()
+        .collect();
+    assert_eq!(
+        client
+            .perform_action(
+                &config,
+                &ProviderToken::new("secret".into()),
+                &relevance_repository(),
+                &ActionTarget::WorkflowRun {
+                    run_id: "7".into()
+                },
+                SourceAction::RerunWorkflow,
+                Some("1"),
+            )
+            .await,
+        Err(ActionFailure::Source(
+            ConnectionValidationFailure::RateLimited
+        ))
+    );
+    api.finish();
 }
 
 #[tokio::test]

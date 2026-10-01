@@ -1,7 +1,7 @@
 .markdown-content {
   min-width: 0;
   color: #cbd3df;
-  font-size: 11px;
+  font-size: var(--font-size-body);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -29,16 +29,16 @@
   text-transform: none;
 }
 .markdown-content h1 {
-  font-size: 17px;
+  font-size: var(--font-size-heading-lg);
 }
 .markdown-content h2 {
-  font-size: 15px;
+  font-size: var(--font-size-heading);
 }
 .markdown-content h3 {
-  font-size: 13px;
+  font-size: var(--font-size-title);
 }
 .markdown-content :is(h4, h5, h6) {
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .markdown-content a {
   color: var(--accent);

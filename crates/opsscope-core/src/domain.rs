@@ -35,6 +35,7 @@ pub enum ChangeRequestState {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestReviewStatus {
+    None,
     Approved,
     ChangesRequested,
     ReviewRequired,
@@ -43,6 +44,7 @@ pub enum ChangeRequestReviewStatus {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ChangeRequestCheckStatus {
+    None,
     Passed,
     Failing,
     Running,

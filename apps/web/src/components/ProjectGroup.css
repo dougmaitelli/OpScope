@@ -47,7 +47,7 @@
   overflow: hidden;
   margin-bottom: 2px;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-size-title);
   font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -56,7 +56,7 @@
 .project-identity p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 
 .project-metadata {
@@ -65,7 +65,7 @@
   flex: 0 0 auto;
   gap: 10px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
   font-weight: 650;
 }
 

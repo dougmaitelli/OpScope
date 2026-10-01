@@ -76,9 +76,7 @@ impl GiteaClient {
                 let reason = if pull.state != "open" || pull.merged {
                     Some("The pull request is closed.")
                 } else if pull.mergeable != Some(true) {
-                    Some(
-                        "Mergeability is unknown or there are conflicts. Check the provider and reload actions.",
-                    )
+                    Some("Mergeability is unknown or there are conflicts.")
                 } else {
                     None
                 };

@@ -122,7 +122,7 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
             provider_conclusion: Some("success".to_owned()),
         }],
     };
-    let change_requests = ChangeRequestSnapshot {
+    let mut change_requests = ChangeRequestSnapshot {
         refreshed_at: 126,
         change_requests: vec![ChangeRequest {
             relationships: crate::domain::Relationships {
@@ -151,6 +151,13 @@ fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::erro
             web_url: "https://example.com/pulls/42".to_owned(),
         }],
     };
+    let mut no_signals = change_requests.change_requests[0].clone();
+    no_signals.id = "change-no-signals".to_owned();
+    no_signals.number = 41;
+    no_signals.web_url = "https://example.com/pulls/41".to_owned();
+    no_signals.check_status = ChangeRequestCheckStatus::None;
+    no_signals.review_status = ChangeRequestReviewStatus::None;
+    change_requests.change_requests.push(no_signals);
     let change_request_details = ChangeRequestDetailsSnapshot {
         refreshed_at: 127,
         details: crate::domain::ChangeRequestDetails {

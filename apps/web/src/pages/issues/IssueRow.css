@@ -30,13 +30,13 @@
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .issue-labels small {
   color: var(--subtle);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
   white-space: nowrap;
 }
 @media (max-width: 1050px) {

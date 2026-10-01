@@ -94,7 +94,7 @@ impl GiteaClient {
                 if page == 1 {
                     // Use Gitea's combined state, not a local reconstruction
                     // from the paginated check details.
-                    check_status = check_state(&data.state);
+                    check_status = data.check_status();
                 }
                 if data.statuses.is_empty() && checks.len() < data.total_count {
                     return Err(Failure::UnexpectedResponse);

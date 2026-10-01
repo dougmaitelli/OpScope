@@ -59,7 +59,10 @@ impl From<crate::application::ActionFailure> for ActionErrorResponse {
             ActionFailure::Conflict => "action_conflict",
             ActionFailure::Busy => "action_busy",
             ActionFailure::StorageUnavailable => "action_storage_unavailable",
-            ActionFailure::Source(_) => "action_provider_error",
+            ActionFailure::Source(_)
+            | ActionFailure::ProviderDenied {
+                ..
+            } => "action_provider_error",
             ActionFailure::OutcomeUnknown => "action_outcome_unknown",
         };
         Self {

@@ -59,10 +59,28 @@ describe("multi-provider issues", () => {
           },
         ],
       };
-      client.listIssues.mockResolvedValue({ selectedRepositoryCount: 1, issues: [issue] });
+      client.listIssues.mockResolvedValue({
+        selectedRepositoryCount: 1,
+        issues: [
+          issue,
+          { ...issue, id: "102", number: 8, title: "Unassigned work", assignees: [] },
+        ],
+      });
       client.issueDetails.mockResolvedValue(details);
       render(<IssuesPage />);
       await screen.findByRole("button", { name: /Fix build/ });
+      const summary = screen.getByRole("region", { name: "2 open issues" });
+      expect(
+        within(summary).getByRole("button", { name: "Show all open issues" }),
+      ).toHaveTextContent("2");
+      await user.type(screen.getByRole("searchbox", { name: "Search issues" }), "Fix build");
+      await user.click(within(summary).getByRole("button", { name: "Show 1 unassigned issue" }));
+      expect(screen.queryByRole("button", { name: /Fix build/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Unassigned work/ })).toBeInTheDocument();
+      await user.click(within(summary).getByRole("button", { name: "Show 1 assigned issue" }));
+      expect(screen.getByRole("button", { name: /Fix build/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Unassigned work/ })).not.toBeInTheDocument();
+      await user.click(within(summary).getByRole("button", { name: "Show all open issues" }));
       await user.click(screen.getByRole("button", { name: "Refresh" }));
       expect(client.synchronizeSources).toHaveBeenCalledExactlyOnceWith({ scope: "issues" });
       await user.click(await screen.findByRole("button", { name: /Fix build/ }));

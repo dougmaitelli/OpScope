@@ -6,6 +6,7 @@ import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
+import { InventorySummary } from "../../components/InventorySummary.tsx";
 import type { IssueSummary, ListIssuesResponse } from "../../generated/contracts.ts";
 import { IssueDetailsDialog } from "./IssueDetailsDialog.tsx";
 import { IssueFilters } from "./IssueFilters.tsx";
@@ -70,6 +71,14 @@ export function IssuesPage() {
   }, [issues, query, repository, assignment]);
 
   const projects = useMemo(() => groupByProject(filtered), [filtered]);
+  const assigned = issues.filter((issue) => issue.assignees.length > 0).length;
+  const unassigned = issues.length - assigned;
+  const unavailable = !!error || !inventory;
+  const selectAssignment = (nextAssignment: string) => {
+    setQuery("");
+    setRepository("all");
+    setAssignment(nextAssignment);
+  };
 
   return (
     <section className="page-view" aria-label="Issues">
@@ -78,6 +87,45 @@ export function IssuesPage() {
         title="Issues"
         description="Open issues across monitored repositories, with ownership and recent discussion."
         actions={<RefreshButton busy={refreshing} disabled={loading} onRefresh={refresh} />}
+      />
+      <InventorySummary
+        heading={
+          error
+            ? "Unable to load issues"
+            : loading && !inventory
+              ? "Loading issues"
+              : `${issues.length} open issue${issues.length === 1 ? "" : "s"}`
+        }
+        description={
+          error
+            ? "Check that the application service is running"
+            : inventory
+              ? `${inventory.selectedRepositoryCount} selected repositor${inventory.selectedRepositoryCount === 1 ? "y" : "ies"}`
+              : "Waiting for the application core"
+        }
+        tone={error ? "failing" : "idle"}
+        busy={loading || refreshing}
+        stats={[
+          {
+            label: "Open issues",
+            value: unavailable ? "—" : issues.length,
+            actionLabel: "Show all open issues",
+            onSelect: !unavailable && issues.length > 0 ? () => selectAssignment("all") : undefined,
+          },
+          {
+            label: "Assigned",
+            value: unavailable ? "—" : assigned,
+            actionLabel: `Show ${assigned} assigned issue${assigned === 1 ? "" : "s"}`,
+            onSelect: !unavailable && assigned > 0 ? () => selectAssignment("assigned") : undefined,
+          },
+          {
+            label: "Unassigned",
+            value: unavailable ? "—" : unassigned,
+            actionLabel: `Show ${unassigned} unassigned issue${unassigned === 1 ? "" : "s"}`,
+            onSelect:
+              !unavailable && unassigned > 0 ? () => selectAssignment("unassigned") : undefined,
+          },
+        ]}
       />
       {notice ? (
         <p className="issue-refresh-notice" role="status">

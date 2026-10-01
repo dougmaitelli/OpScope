@@ -38,9 +38,9 @@ export type ListRepositoriesResponse = { sources: Array<RepositorySourceSummary>
 
 export type ChangeRequestState = "open" | "closed" | "merged";
 
-export type ChangeRequestReviewStatus = "approved" | "changesRequested" | "reviewRequired" | "unknown";
+export type ChangeRequestReviewStatus = "none" | "approved" | "changesRequested" | "reviewRequired" | "unknown";
 
-export type ChangeRequestCheckStatus = "passed" | "failing" | "running" | "unknown";
+export type ChangeRequestCheckStatus = "none" | "passed" | "failing" | "running" | "unknown";
 
 export type ChangeRequestMergeStatus = "ready" | "blocked" | "conflicting" | "unknown";
 

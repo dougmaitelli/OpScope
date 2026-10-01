@@ -14,7 +14,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .connection-provider-mark {
   display: grid;
@@ -25,7 +25,7 @@
   border-radius: 4px;
   color: var(--muted);
   background: var(--surface-raised);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
   font-weight: 750;
 }
 .connection-identity,
@@ -37,13 +37,13 @@
 }
 .connection-identity strong,
 .connection-account strong {
-  font-size: 11px;
+  font-size: var(--font-size-body);
   font-weight: 650;
 }
 .connection-identity span,
 .connection-account span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 .connection-row-actions {
   display: flex;
@@ -63,7 +63,7 @@
 }
 .connection-disconnect-confirmation p {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 .connection-disconnect-confirmation > div {
   display: flex;

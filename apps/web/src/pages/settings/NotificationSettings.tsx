@@ -41,9 +41,9 @@ export function NotificationSettings({
     <section className="notification-settings" aria-labelledby="notification-settings-title">
       <h3 id="notification-settings-title">Notifications</h3>
       <p>
-        Choose events for desktop and Apprise notifications. “You” is the connection’s token owner.
-        Only show my work also filters these alerts. Existing items establish a baseline; enabling
-        an event does not replay changes already observed.
+        Choose which events trigger notifications. “You” is the connection’s token owner. Only show
+        my work also filters these alerts. Existing items establish a baseline; enabling an event
+        does not replay changes already observed.
       </p>
       <div className="notification-settings-groups">
         {groups.map((group) => (

@@ -1,0 +1,141 @@
+.summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 74px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.summary-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-heading p:last-child {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-small);
+}
+
+.summary-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  background: #1b222d;
+  font-size: var(--font-size-title);
+  font-weight: 800;
+}
+
+.summary-icon-passing {
+  border-color: #2e7551;
+  color: var(--success);
+  background: #122a20;
+}
+
+.summary-icon-running {
+  border-color: #7b6232;
+  color: var(--warning);
+  background: #2d2516;
+}
+
+.summary-icon-failing {
+  border-color: #7c3e43;
+  color: var(--danger);
+  background: #30191d;
+}
+
+.summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.summary-stats > div {
+  min-width: 68px;
+  padding: 1px 14px;
+  border-left: 1px solid var(--border);
+  text-align: center;
+}
+
+.summary-stats dt {
+  color: var(--muted);
+  font-size: var(--font-size-small);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.summary-stats dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: var(--font-size-title);
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-stat-link {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.summary-stat-link-failing {
+  color: var(--danger);
+}
+
+.summary-stat-link-running {
+  color: var(--warning);
+}
+
+.summary-stat-link-failing:hover {
+  color: #ff9b9e;
+}
+
+.summary-stat-link-running:hover {
+  color: #f4d58b;
+}
+
+@media (max-width: 700px) {
+  .summary-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summary-stats {
+    width: 100%;
+  }
+
+  .summary-stats > div {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 10px;
+  }
+
+  .summary-stats > div:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-bar {
+    padding: 14px;
+  }
+}

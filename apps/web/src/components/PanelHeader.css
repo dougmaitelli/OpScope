@@ -23,7 +23,7 @@
   border-radius: 4px;
   color: var(--muted);
   background: #171d27;
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 

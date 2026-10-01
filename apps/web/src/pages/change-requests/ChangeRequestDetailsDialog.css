@@ -40,12 +40,12 @@
 }
 .change-request-dialog-header h2 {
   margin: 0 0 3px;
-  font-size: 14px;
+  font-size: var(--font-size-heading);
 }
 .change-request-dialog-meta {
   margin: 0;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 .change-request-dialog-actions {
   display: flex;
@@ -66,7 +66,7 @@
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   background: #10161e;
-  font-size: 9px;
+  font-size: var(--font-size-small);
   font-weight: 650;
 }
 .change-request-dialog-content {
@@ -83,7 +83,7 @@
   padding: 24px;
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .change-request-dialog-error {
   flex-direction: column;
@@ -115,7 +115,7 @@
 .change-request-dialog-sidebar > section > h3 {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--font-size-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -127,7 +127,7 @@
 .change-request-empty {
   margin: 0;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 .change-request-labels {
   display: flex;
@@ -140,7 +140,7 @@
   border-radius: 10px;
   color: var(--muted);
   background: var(--surface);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
 }
 .change-request-reviews {
   display: grid;
@@ -150,7 +150,7 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 .change-request-checks {
   overflow: hidden;
@@ -168,7 +168,7 @@
   color: var(--text);
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--font-size-small);
   text-decoration: none;
 }
 .change-request-checks > button {
@@ -193,15 +193,15 @@
 }
 .change-request-commit code {
   color: var(--accent);
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 .change-request-commit strong {
-  font-size: 10px;
+  font-size: var(--font-size-small);
   font-weight: 600;
 }
 .change-request-commit span {
   color: var(--subtle);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
 }
 @media (max-width: 700px) {
   .change-request-dialog {

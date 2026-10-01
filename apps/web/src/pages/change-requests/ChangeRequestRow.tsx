@@ -11,12 +11,13 @@ import type {
   ChangeRequestReviewStatus,
   ChangeRequestSummary,
 } from "../../generated/contracts.ts";
-import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import "./ChangeRequestRow.css";
 import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
 import { StatusPill } from "../../components/StatusPill.tsx";
 
 const reviewLabels: Record<ChangeRequestReviewStatus, string> = {
+  none: "No reviews",
   approved: "Approved",
   changesRequested: "Changes requested",
   reviewRequired: "Review required",
@@ -24,6 +25,7 @@ const reviewLabels: Record<ChangeRequestReviewStatus, string> = {
 };
 
 const checkLabels: Record<ChangeRequestCheckStatus, string> = {
+  none: "No checks",
   passed: "Checks passed",
   failing: "Checks failing",
   running: "Checks running",
@@ -83,7 +85,7 @@ export function ChangeRequestRow({
         {mergeLabels[changeRequest.mergeStatus]}
       </StatusPill>
       <DataRowMeta className="change-request-updated">
-        {formatRelativeDate(changeRequest.updatedAt)}
+        <TimeDisplay dateTime={changeRequest.updatedAt} />
       </DataRowMeta>
       <RowChevron className="change-request-open" />
     </DataRow>

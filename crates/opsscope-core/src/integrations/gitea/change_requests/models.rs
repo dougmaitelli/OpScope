@@ -54,6 +54,16 @@ pub(super) struct CombinedStatus {
     pub total_count: usize,
     pub statuses: Vec<CommitStatus>,
 }
+
+impl CombinedStatus {
+    pub(super) fn check_status(&self) -> Check {
+        if self.total_count == 0 && self.statuses.is_empty() {
+            Check::None
+        } else {
+            check_state(&self.state)
+        }
+    }
+}
 #[derive(Deserialize)]
 pub(super) struct CommitStatus {
     pub context: String,
@@ -153,6 +163,9 @@ pub(super) fn check_state(state: &str) -> Check {
 // Gitea exposes individual reviews and outstanding reviewer requests, but no
 // combined review decision. Summarize only the current decisions here.
 pub(super) fn review_state(reviews: &[ChangeRequestReview]) -> Review {
+    if reviews.is_empty() {
+        return Review::None;
+    }
     for status in [
         Review::ChangesRequested,
         Review::ReviewRequired,

@@ -12,5 +12,5 @@
   margin: 0;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }

@@ -5,7 +5,7 @@ import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
 import { MarkdownContent } from "../../components/MarkdownContent.tsx";
 import type { IssueDetailsResponse, IssueSummary } from "../../generated/contracts.ts";
 import { requestErrorMessage } from "../../shared/errors.ts";
-import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import "./IssueDetailsDialog.css";
 
 export function IssueDetailsDialog({
@@ -77,7 +77,7 @@ export function IssueDetailsDialog({
           </p>
           <h2 id="issue-dialog-title">{current.title}</h2>
           <p className="issue-dialog-meta">
-            {issue.author ?? "Unknown author"} · opened {formatRelativeDate(issue.createdAt)}
+            {issue.author ?? "Unknown author"} · opened <TimeDisplay dateTime={issue.createdAt} />
           </p>
         </div>
         <div className="issue-dialog-actions">
@@ -97,7 +97,9 @@ export function IssueDetailsDialog({
           {current.state === "open" ? "Open" : "Closed"}
         </StatusPill>
         <span>{current.commentCount} comments</span>
-        <span>Updated {formatRelativeDate(current.updatedAt)}</span>
+        <span>
+          Updated <TimeDisplay dateTime={current.updatedAt} />
+        </span>
       </div>
       <div className="issue-dialog-content" aria-busy={loading}>
         {loading ? <p className="issue-dialog-message">Loading issue details…</p> : null}
@@ -133,7 +135,9 @@ export function IssueDetailsDialog({
                       <article key={comment.id}>
                         <header>
                           <strong>{comment.author ?? "Unknown author"}</strong>
-                          <span>{formatRelativeDate(comment.createdAt)}</span>
+                          <span>
+                            <TimeDisplay dateTime={comment.createdAt} />
+                          </span>
                         </header>
                         <div className="issue-comment-body">
                           <MarkdownContent content={comment.body} baseUrl={issue.webUrl} />

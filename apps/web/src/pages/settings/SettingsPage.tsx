@@ -195,8 +195,8 @@ export function SettingsPage() {
             <span className="settings-field-description">
               Show PRs you opened, reviewed, or were asked to review; issues you opened, follow, or
               discussed; and runs linked to your commits or PRs. “You” means each connection’s token
-              owner. Also limits desktop and Apprise notifications. Unverified items stay hidden
-              until relevance is available.
+              owner. Also limits notifications. Unverified items stay hidden until relevance is
+              available.
             </span>
             <input
               className="settings-scope-toggle"

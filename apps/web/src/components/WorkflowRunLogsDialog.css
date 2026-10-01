@@ -46,13 +46,13 @@
 
 .run-logs-header h2 {
   margin: 0 0 3px;
-  font-size: 14px;
+  font-size: var(--font-size-heading);
 }
 
 .run-logs-metadata {
   margin: 0;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 
 .run-logs-header-actions {
@@ -73,7 +73,7 @@
   border-bottom: 1px solid #6b562e;
   color: var(--warning);
   background: #272113;
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 
 .run-logs-content {
@@ -91,7 +91,7 @@
   padding: 24px;
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 
 .run-logs-error {
@@ -122,7 +122,7 @@
   background: transparent;
   cursor: pointer;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-size-small);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -153,7 +153,7 @@
   color: var(--muted);
   background: #111821;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-size-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -165,7 +165,7 @@
   color: #cbd3df;
   background: #090d12;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
+  font-size: var(--font-size-small);
   line-height: 1.55;
   tab-size: 2;
   white-space: pre;

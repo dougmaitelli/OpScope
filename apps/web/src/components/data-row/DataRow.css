@@ -5,9 +5,9 @@
   --row-padding-x: 10px;
   --row-gap: 14px;
   --row-copy-gap: 3px;
-  --row-title-size: 11px;
+  --row-title-size: var(--font-size-body);
   --row-title-weight: 680;
-  --row-meta-size: 9px;
+  --row-meta-size: var(--font-size-small);
   --row-surface: #10151c;
   --row-hover: #131a23;
   --row-border: #252d38;
@@ -78,7 +78,7 @@ button.data-row {
 
 .data-row-chevron {
   color: var(--subtle);
-  font-size: 16px;
+  font-size: var(--font-size-heading);
 }
 
 .data-row-header {
@@ -88,7 +88,7 @@ button.data-row {
   border-bottom: 1px solid var(--row-border);
   color: var(--subtle);
   background: #0e131a;
-  font-size: 8px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;

@@ -196,6 +196,7 @@ fn combined_status_mapping_preserves_unknown_states() {
     let missing: CombinedStatus =
         serde_json::from_value(json!({"total_count":0,"statuses":[]})).unwrap();
     assert_eq!(check_state(&missing.state), Check::Unknown);
+    assert_eq!(missing.check_status(), Check::None);
 }
 
 #[test]
@@ -205,7 +206,8 @@ fn current_gitea_reviews_prioritize_changes_and_outstanding_requests() {
         status,
         submitted_at: None,
     };
-    assert_eq!(review_state(&[]), Review::Unknown);
+    assert_eq!(review_state(&[]), Review::None);
+    assert_eq!(review_state(&[make(Review::Unknown)]), Review::Unknown);
     assert_eq!(review_state(&[make(Review::Approved)]), Review::Approved);
     assert_eq!(
         review_state(&[make(Review::Approved), make(Review::ReviewRequired)]),

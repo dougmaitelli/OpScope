@@ -16,7 +16,7 @@
 
 .activity-filter > span {
   color: var(--subtle);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -33,7 +33,7 @@
   color: var(--text);
   background: #0c1118;
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 
 .activity-filter input:focus,

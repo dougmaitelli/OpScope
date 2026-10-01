@@ -78,7 +78,7 @@ impl GitLabClient {
                         | "cannot_be_merged"
                         | "cannot_be_merged_recheck"
                 ) {
-                    Some("GitLab has not confirmed mergeability yet. Reload actions shortly.")
+                    Some("GitLab has not confirmed mergeability yet.")
                 } else {
                     None
                 };

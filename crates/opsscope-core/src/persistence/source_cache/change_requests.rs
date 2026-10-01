@@ -19,6 +19,7 @@ fn parse_change_request_state(value: &str) -> Result<ChangeRequestState, rusqlit
 
 fn review_status_name(status: ChangeRequestReviewStatus) -> &'static str {
     match status {
+        ChangeRequestReviewStatus::None => "none",
         ChangeRequestReviewStatus::Approved => "approved",
         ChangeRequestReviewStatus::ChangesRequested => "changes_requested",
         ChangeRequestReviewStatus::ReviewRequired => "review_required",
@@ -28,6 +29,7 @@ fn review_status_name(status: ChangeRequestReviewStatus) -> &'static str {
 
 fn parse_review_status(value: &str) -> Result<ChangeRequestReviewStatus, rusqlite::Error> {
     match value {
+        "none" => Ok(ChangeRequestReviewStatus::None),
         "approved" => Ok(ChangeRequestReviewStatus::Approved),
         "changes_requested" => Ok(ChangeRequestReviewStatus::ChangesRequested),
         "review_required" => Ok(ChangeRequestReviewStatus::ReviewRequired),
@@ -38,6 +40,7 @@ fn parse_review_status(value: &str) -> Result<ChangeRequestReviewStatus, rusqlit
 
 fn check_status_name(status: ChangeRequestCheckStatus) -> &'static str {
     match status {
+        ChangeRequestCheckStatus::None => "none",
         ChangeRequestCheckStatus::Passed => "passed",
         ChangeRequestCheckStatus::Failing => "failing",
         ChangeRequestCheckStatus::Running => "running",
@@ -47,6 +50,7 @@ fn check_status_name(status: ChangeRequestCheckStatus) -> &'static str {
 
 fn parse_check_status(value: &str) -> Result<ChangeRequestCheckStatus, rusqlite::Error> {
     match value {
+        "none" => Ok(ChangeRequestCheckStatus::None),
         "passed" => Ok(ChangeRequestCheckStatus::Passed),
         "failing" => Ok(ChangeRequestCheckStatus::Failing),
         "running" => Ok(ChangeRequestCheckStatus::Running),

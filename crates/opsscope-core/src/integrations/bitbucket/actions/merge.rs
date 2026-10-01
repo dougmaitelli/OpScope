@@ -85,9 +85,7 @@ impl BitbucketClient {
                     .iter()
                     .any(|check| check.kind == "git_mergeability_check" && check.status == "PASSED")
             {
-                Some(
-                    "Bitbucket has not confirmed conflict-free mergeability. Check the provider and reload actions.",
-                )
+                Some("Bitbucket has not confirmed conflict-free mergeability.")
             } else if checks
                 .values
                 .iter()

@@ -70,6 +70,7 @@ impl From<DomainChangeRequestActivityEvent> for ChangeRequestActivitySummary {
                 },
                 draft: change_request.draft,
                 review_status: match change_request.review_status {
+                    DomainChangeRequestReviewStatus::None => ChangeRequestReviewStatus::None,
                     DomainChangeRequestReviewStatus::Approved => {
                         ChangeRequestReviewStatus::Approved
                     }
@@ -82,6 +83,7 @@ impl From<DomainChangeRequestActivityEvent> for ChangeRequestActivitySummary {
                     DomainChangeRequestReviewStatus::Unknown => ChangeRequestReviewStatus::Unknown,
                 },
                 check_status: match change_request.check_status {
+                    DomainChangeRequestCheckStatus::None => ChangeRequestCheckStatus::None,
                     DomainChangeRequestCheckStatus::Passed => ChangeRequestCheckStatus::Passed,
                     DomainChangeRequestCheckStatus::Failing => ChangeRequestCheckStatus::Failing,
                     DomainChangeRequestCheckStatus::Running => ChangeRequestCheckStatus::Running,

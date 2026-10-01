@@ -11,6 +11,7 @@ pub enum ChangeRequestState {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ChangeRequestReviewStatus {
+    None,
     Approved,
     ChangesRequested,
     ReviewRequired,
@@ -20,6 +21,7 @@ pub enum ChangeRequestReviewStatus {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ChangeRequestCheckStatus {
+    None,
     Passed,
     Failing,
     Running,
@@ -94,6 +96,7 @@ impl From<DiscoveredChangeRequest> for ChangeRequestSummary {
             },
             draft,
             review_status: match review_status {
+                DomainChangeRequestReviewStatus::None => ChangeRequestReviewStatus::None,
                 DomainChangeRequestReviewStatus::Approved => ChangeRequestReviewStatus::Approved,
                 DomainChangeRequestReviewStatus::ChangesRequested => {
                     ChangeRequestReviewStatus::ChangesRequested
@@ -104,6 +107,7 @@ impl From<DiscoveredChangeRequest> for ChangeRequestSummary {
                 DomainChangeRequestReviewStatus::Unknown => ChangeRequestReviewStatus::Unknown,
             },
             check_status: match check_status {
+                DomainChangeRequestCheckStatus::None => ChangeRequestCheckStatus::None,
                 DomainChangeRequestCheckStatus::Passed => ChangeRequestCheckStatus::Passed,
                 DomainChangeRequestCheckStatus::Failing => ChangeRequestCheckStatus::Failing,
                 DomainChangeRequestCheckStatus::Running => ChangeRequestCheckStatus::Running,
@@ -207,6 +211,7 @@ impl From<DomainChangeRequestDetails> for ChangeRequestDetailsResponse {
                 .map(|review| ChangeRequestReviewSummary {
                     reviewer: review.reviewer,
                     status: match review.status {
+                        DomainChangeRequestReviewStatus::None => ChangeRequestReviewStatus::None,
                         DomainChangeRequestReviewStatus::Approved => {
                             ChangeRequestReviewStatus::Approved
                         }
@@ -229,6 +234,7 @@ impl From<DomainChangeRequestDetails> for ChangeRequestDetailsResponse {
                 .map(|check| ChangeRequestCheckSummary {
                     name: check.name,
                     status: match check.status {
+                        DomainChangeRequestCheckStatus::None => ChangeRequestCheckStatus::None,
                         DomainChangeRequestCheckStatus::Passed => ChangeRequestCheckStatus::Passed,
                         DomainChangeRequestCheckStatus::Failing => {
                             ChangeRequestCheckStatus::Failing

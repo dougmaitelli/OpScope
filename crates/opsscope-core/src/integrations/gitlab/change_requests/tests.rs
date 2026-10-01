@@ -110,7 +110,7 @@ fn lifecycle_draft_and_unknown_checks_are_not_guessed() {
         let mapped: MergeRequest = serde_json::from_value(value).unwrap();
         let summary = mapped.summary(None).unwrap();
         assert_eq!(summary.state, expected);
-        assert_eq!(summary.check_status, Check::Unknown);
+        assert_eq!(summary.check_status, Check::None);
         assert_eq!(summary.review_status, Review::Unknown);
     }
     let mut value = request();
@@ -156,6 +156,21 @@ async fn unavailable_approvals_do_not_claim_approval_and_fork_pipelines_stay_ext
     assert_eq!(details.change_request.review_status, Review::Unknown);
     assert_eq!(details.checks[0].workflow_run_id, None);
     api.finish();
+}
+
+#[test]
+fn known_empty_approvals_differ_from_unavailable_approvals() {
+    let mut value = request();
+    value["head_pipeline"]["status"] = json!("future-state");
+    let mapped: MergeRequest = serde_json::from_value(value).unwrap();
+    let empty = Approvals {
+        approvals_left: Some(0),
+        approved_by: vec![],
+    };
+    let summary = mapped.summary(Some(&empty)).unwrap();
+    assert_eq!(summary.check_status, Check::Unknown);
+    assert_eq!(summary.review_status, Review::None);
+    assert_eq!(mapped.summary(None).unwrap().review_status, Review::Unknown);
 }
 
 #[tokio::test]

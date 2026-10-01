@@ -9,7 +9,7 @@
 .page-description {
   margin-bottom: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-base);
 }
 
 @media (max-width: 480px) {

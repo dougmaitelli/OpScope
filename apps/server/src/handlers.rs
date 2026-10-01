@@ -196,7 +196,10 @@ fn http_action_error(
         ActionFailure::Source(
             ConnectionValidationFailure::InvalidCredentials
             | ConnectionValidationFailure::PermissionDenied,
-        ) => StatusCode::FORBIDDEN,
+        )
+        | ActionFailure::ProviderDenied {
+            ..
+        } => StatusCode::FORBIDDEN,
         ActionFailure::Source(ConnectionValidationFailure::RateLimited) => {
             StatusCode::TOO_MANY_REQUESTS
         }

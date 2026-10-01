@@ -7,7 +7,7 @@
   min-height: 32px;
   padding: 0 11px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: 650;
   cursor: pointer;
 }
@@ -58,7 +58,6 @@
 .compact-button {
   min-height: 28px;
   padding: 0 8px;
-  font-size: 10px;
 }
 
 .danger-button {
@@ -71,7 +70,7 @@
   border-radius: 4px;
   color: var(--danger);
   background: #27171a;
-  font-size: 10px;
+  font-size: var(--font-size-small);
   font-weight: 650;
   cursor: pointer;
 }

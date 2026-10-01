@@ -1,11 +1,12 @@
 .issues-panel {
+  margin-top: 12px;
   overflow: hidden;
 }
 .issue-refresh-notice {
   margin: 0;
   padding: 8px 12px;
   color: var(--warning);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .issue-list {
   min-height: 180px;
@@ -16,5 +17,5 @@
   margin: 0;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }

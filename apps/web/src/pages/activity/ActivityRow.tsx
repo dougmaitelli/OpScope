@@ -6,13 +6,10 @@ import {
   RowChevron,
 } from "../../components/data-row/DataRow.tsx";
 import type { WorkflowRunSummary, WorkflowSummary } from "../../generated/contracts.ts";
-import {
-  formatRelativeDate,
-  formatRunDuration,
-  runPresentation,
-} from "../../shared/workflow-runs.ts";
+import { formatRunDuration, runPresentation } from "../../shared/workflow-runs.ts";
 import "./ActivityRow.css";
 import { StatusPill } from "../../components/StatusPill.tsx";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 
 export interface WorkflowActivity {
   type: "workflow";
@@ -43,8 +40,11 @@ export function ActivityRow({
       <span className="activity-state-cell">
         <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
         <DataRowMeta>
-          {duration ? `${duration}${run.lifecycle === "running" ? " elapsed" : ""} · ` : ""}
-          <time dateTime={run.createdAt}>{formatRelativeDate(run.createdAt)}</time>
+          <TimeDisplay
+            dateTime={run.createdAt}
+            duration={duration}
+            elapsed={run.lifecycle === "running"}
+          />
         </DataRowMeta>
       </span>
       <DataRowIdentity

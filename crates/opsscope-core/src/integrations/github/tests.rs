@@ -413,6 +413,60 @@ fn github_change_request_maps_review_checks_and_merge_readiness()
 }
 
 #[test]
+fn github_distinguishes_absent_and_unknown_checks_and_reviews() {
+    let base = json!({
+        "id":"PR_example", "number":42, "title":"Change", "author":null,
+        "headRefName":"feature", "baseRefName":"main", "state":"OPEN",
+        "isDraft":false, "reviewDecision":null, "mergeStateStatus":"CLEAN",
+        "createdAt":"2026-09-26T18:00:00Z", "updatedAt":"2026-09-27T18:00:00Z",
+        "url":"https://github.com/team/app/pull/42"
+    });
+    for (commits, reviews, check_status, review_status) in [
+        (
+            json!({"nodes":[{"commit":{"statusCheckRollup":null}}]}),
+            json!({"totalCount":0}),
+            ChangeRequestCheckStatus::None,
+            ChangeRequestReviewStatus::None,
+        ),
+        (
+            json!({"nodes":[]}),
+            serde_json::Value::Null,
+            ChangeRequestCheckStatus::Unknown,
+            ChangeRequestReviewStatus::Unknown,
+        ),
+        (
+            json!({"nodes":[{"commit":{"statusCheckRollup":{"state":"FUTURE"}}}]}),
+            json!({"totalCount":1}),
+            ChangeRequestCheckStatus::Unknown,
+            ChangeRequestReviewStatus::Unknown,
+        ),
+        (
+            json!({"nodes":[{"commit":{"statusCheckRollup":{"state":"PENDING"}}}]}),
+            json!({"totalCount":0}),
+            ChangeRequestCheckStatus::Running,
+            ChangeRequestReviewStatus::None,
+        ),
+    ] {
+        let mut value = base.clone();
+        value["commits"] = commits;
+        value["reviews"] = reviews;
+        let request: GitHubChangeRequest = serde_json::from_value(value).unwrap();
+        let summary = ChangeRequest::from(request);
+        assert_eq!(summary.check_status, check_status);
+        assert_eq!(summary.review_status, review_status);
+    }
+    let mut value = base;
+    value["commits"] = json!({"nodes":[]});
+    value["reviews"] = json!({"totalCount":0});
+    value["reviewDecision"] = json!("REVIEW_REQUIRED");
+    let request: GitHubChangeRequest = serde_json::from_value(value).unwrap();
+    assert_eq!(
+        ChangeRequest::from(request).review_status,
+        ChangeRequestReviewStatus::ReviewRequired
+    );
+}
+
+#[test]
 fn github_change_request_details_map_provider_independent_sections()
 -> Result<(), Box<dyn std::error::Error>> {
     let change_request: GitHubChangeRequest = serde_json::from_str(

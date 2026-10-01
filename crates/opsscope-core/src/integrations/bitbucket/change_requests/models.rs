@@ -175,7 +175,13 @@ impl PullRequest {
             "DECLINED" | "SUPERSEDED" => ChangeRequestState::Closed,
             _ => return Err(Failure::UnexpectedResponse),
         };
-        let review_status = aggregate::reviews(self.reviews().iter().map(|review| review.status));
+        let mut review_status =
+            aggregate::reviews(self.reviews().iter().map(|review| review.status));
+        if review_status == Review::None
+            && (self.participants.is_none() || self.reviewers.is_none())
+        {
+            review_status = Review::Unknown;
+        }
         let check_status = aggregate::checks(checks.iter().map(|check| check.status));
         Ok(ChangeRequest {
             relationships: Relationships::default(),

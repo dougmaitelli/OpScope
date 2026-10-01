@@ -40,12 +40,12 @@
 }
 .issue-dialog-header h2 {
   margin: 0 0 3px;
-  font-size: 14px;
+  font-size: var(--font-size-heading);
 }
 .issue-dialog-meta {
   margin: 0;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 .issue-dialog-actions {
   display: flex;
@@ -66,7 +66,7 @@
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   background: #10161e;
-  font-size: 9px;
+  font-size: var(--font-size-small);
   font-weight: 650;
 }
 .issue-dialog-content {
@@ -83,7 +83,7 @@
   padding: 24px;
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 .issue-dialog-error {
   flex-direction: column;
@@ -112,7 +112,7 @@
 .issue-dialog-sidebar > section > h3 {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--font-size-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -125,7 +125,7 @@
 .issue-sidebar-value {
   margin: 0;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 .issue-sidebar-value {
   color: var(--muted);
@@ -142,7 +142,7 @@
   border-radius: 10px;
   color: var(--muted);
   background: var(--surface);
-  font-size: 8px;
+  font-size: var(--font-size-caption);
 }
 .issue-comment-list {
   display: grid;
@@ -160,7 +160,7 @@
   padding: 7px 9px;
   border-bottom: 1px solid var(--border);
   background: #10161e;
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 .issue-comment-list article > header span {
   color: var(--subtle);

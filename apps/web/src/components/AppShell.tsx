@@ -59,12 +59,6 @@ export function AppShell() {
             </span>
             Workflows
           </NavLink>
-          <NavLink className={navClass} to="/activity">
-            <span className="nav-symbol" aria-hidden="true">
-              A
-            </span>
-            Activity
-          </NavLink>
           {settings?.pullRequestsEnabled ? (
             <NavLink className={navClass} to="/pull-requests">
               <span className="nav-symbol" aria-hidden="true">
@@ -81,6 +75,12 @@ export function AppShell() {
               Issues
             </NavLink>
           ) : null}
+          <NavLink className={navClass} to="/activity">
+            <span className="nav-symbol" aria-hidden="true">
+              A
+            </span>
+            Activity
+          </NavLink>
           <NavLink className={navClass} to="/repositories">
             <span className="nav-symbol" aria-hidden="true">
               R

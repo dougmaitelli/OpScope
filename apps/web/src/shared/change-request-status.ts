@@ -8,6 +8,7 @@ export const changeRequestStatusTone: Record<
   ChangeRequestCheckStatus | ChangeRequestMergeStatus | ChangeRequestReviewStatus,
   "success" | "failure" | "warning" | "neutral"
 > = {
+  none: "neutral",
   approved: "success",
   passed: "success",
   ready: "success",

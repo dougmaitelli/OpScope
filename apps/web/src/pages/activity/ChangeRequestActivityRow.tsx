@@ -8,7 +8,7 @@ import type {
   ChangeRequestActivityKind,
   ChangeRequestActivitySummary,
 } from "../../generated/contracts.ts";
-import { formatRelativeDate } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import "./ActivityRow.css";
 import { StatusPill } from "../../components/StatusPill.tsx";
 
@@ -63,7 +63,7 @@ export function ChangeRequestActivityRow({
       <span className="activity-state-cell">
         <StatusPill tone={state.tone}>{state.label}</StatusPill>
         <DataRowMeta>
-          <time dateTime={activity.occurredAt}>{formatRelativeDate(activity.occurredAt)}</time>
+          <TimeDisplay dateTime={activity.occurredAt} />
         </DataRowMeta>
       </span>
       <DataRowIdentity

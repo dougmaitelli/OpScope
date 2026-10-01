@@ -147,7 +147,7 @@ fn cloud_lifecycle_and_missing_source_are_mapped_without_fabricated_success() {
         let mapped: PullRequest = serde_json::from_value(value).unwrap();
         let summary = mapped.summary(&[]).unwrap();
         assert_eq!(summary.state, expected);
-        assert_eq!(summary.check_status, Check::Unknown);
+        assert_eq!(summary.check_status, Check::None);
     }
 }
 
@@ -176,6 +176,18 @@ async fn missing_pr_is_none_but_bad_tokens_are_errors() {
         );
         api.finish();
     }
+}
+
+#[test]
+fn missing_review_metadata_does_not_claim_no_reviews() {
+    let mut value = request();
+    value["participants"] = json!([]);
+    value["reviewers"] = json!([]);
+    let known: PullRequest = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(known.summary(&[]).unwrap().review_status, Review::None);
+    value["participants"] = Value::Null;
+    let unknown: PullRequest = serde_json::from_value(value).unwrap();
+    assert_eq!(unknown.summary(&[]).unwrap().review_status, Review::Unknown);
 }
 
 #[test]

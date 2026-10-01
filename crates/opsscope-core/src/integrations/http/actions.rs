@@ -2,7 +2,7 @@ use crate::application::{ActionFailure, ConnectionValidationFailure};
 use reqwest::{Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 
-fn failure(response: &Response) -> ActionFailure {
+fn classify_failure(response: &Response) -> ActionFailure {
     match response.status() {
         StatusCode::NOT_FOUND => ActionFailure::NotFound,
         StatusCode::BAD_REQUEST | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
@@ -22,10 +22,57 @@ fn failure(response: &Response) -> ActionFailure {
     }
 }
 
+async fn failure(mut response: Response) -> ActionFailure {
+    let classified = classify_failure(&response);
+    if response.status() != StatusCode::FORBIDDEN
+        || !matches!(
+            classified,
+            ActionFailure::Source(ConnectionValidationFailure::PermissionDenied)
+        )
+    {
+        return classified;
+    }
+    if response.headers().get("x-github-sso").is_some_and(|value| {
+        value
+            .to_str()
+            .is_ok_and(|value| value.starts_with("required"))
+    }) {
+        return ActionFailure::ProviderDenied {
+            message: "GitHub requires SSO authorization for this token.".to_owned(),
+        };
+    }
+    // Read only a bounded error payload, never the full provider response.
+    let mut body = Vec::new();
+    while let Ok(Some(chunk)) = response.chunk().await {
+        if body.len() + chunk.len() > 16 * 1024 {
+            return classified;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    #[derive(serde::Deserialize)]
+    struct ProviderError {
+        message: String,
+    }
+    let Ok(error) = serde_json::from_slice::<ProviderError>(&body) else {
+        return classified;
+    };
+    let message = error
+        .message
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if message.is_empty() {
+        return classified;
+    }
+    ActionFailure::ProviderDenied {
+        message: message.chars().take(1000).collect(),
+    }
+}
+
 pub(crate) async fn read<T: DeserializeOwned>(request: RequestBuilder) -> Result<T, ActionFailure> {
     let response = super::send(request).await?;
     if !response.status().is_success() {
-        return Err(failure(&response));
+        return Err(failure(response).await);
     }
     super::decode(response).await.map_err(Into::into)
 }
@@ -62,6 +109,6 @@ pub(crate) async fn write_response(
     } else if response.status().is_server_error() {
         Err(ActionFailure::OutcomeUnknown)
     } else {
-        Err(failure(&response))
+        Err(failure(response).await)
     }
 }

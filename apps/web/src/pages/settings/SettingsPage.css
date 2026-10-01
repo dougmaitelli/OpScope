@@ -12,14 +12,14 @@
 
 .settings-field-title {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-size-base);
   font-weight: 680;
 }
 
 .settings-field-description {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 
 .settings-number-control {
@@ -39,7 +39,7 @@
   border-radius: 4px;
   color: var(--text);
   background: #0c1118;
-  font-size: 11px;
+  font-size: var(--font-size-body);
 }
 
 .settings-number-control input:focus {
@@ -50,7 +50,7 @@
 .settings-number-control span,
 .settings-field small {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--font-size-small);
 }
 
 .settings-field small {
@@ -63,7 +63,7 @@
   margin: 0;
   padding: 9px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 10px;
+  font-size: var(--font-size-small);
 }
 
 .settings-error {

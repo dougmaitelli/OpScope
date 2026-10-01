@@ -5,6 +5,7 @@ import { updateWorkflowRun } from "../../shared/action-refresh.ts";
 import { useSearchParams } from "react-router-dom";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { EmptyState } from "../../components/EmptyState.tsx";
+import { InventorySummary } from "../../components/InventorySummary.tsx";
 import { PageHeader } from "../../components/PageHeader.tsx";
 import { PanelHeader } from "../../components/PanelHeader.tsx";
 import { ProjectGroupList } from "../../components/ProjectGroup.tsx";
@@ -12,7 +13,7 @@ import { groupByProject } from "../../shared/project-groups.ts";
 import { WorkflowProjectGroup } from "./WorkflowProjectGroup.tsx";
 import { WorkflowFilters, type WorkflowStatusFilter } from "../../components/WorkflowFilters.tsx";
 import type { ListWorkflowsResponse, WorkflowSummary } from "../../generated/contracts.ts";
-import { formatRelativeUnix } from "../../shared/workflow-runs.ts";
+import { TimeDisplay } from "../../components/TimeDisplay.tsx";
 import "./WorkflowsPage.css";
 
 const WORKFLOW_STATUS_FILTERS = new Set<WorkflowStatusFilter>([
@@ -101,17 +102,13 @@ export function WorkflowsPage() {
         : workflows.length > 0
           ? "passing"
           : "idle";
-  const statusIcon =
-    statusTone === "failing"
-      ? "!"
-      : statusTone === "running"
-        ? "↻"
-        : statusTone === "passing"
-          ? "✓"
-          : "·";
-  const updated = inventory?.lastSuccessfulAt
-    ? `Last synchronized ${formatRelativeUnix(inventory.lastSuccessfulAt)}`
-    : "No run activity synchronized yet";
+  const updated = inventory?.lastSuccessfulAt ? (
+    <>
+      Last synchronized <TimeDisplay dateTime={inventory.lastSuccessfulAt} />
+    </>
+  ) : (
+    "No run activity synchronized yet"
+  );
 
   const updateFilters = (nextQuery: string, nextStatus: WorkflowStatusFilter) => {
     const next = new URLSearchParams(searchParams);
@@ -137,72 +134,40 @@ export function WorkflowsPage() {
         }
       />
 
-      <section
-        className="health-summary"
-        aria-labelledby="health-heading"
-        aria-busy={loading || backgroundSyncing}
-      >
-        <div className="health-heading">
-          <span className={`health-icon health-icon-${statusTone}`} aria-hidden="true">
-            {statusIcon}
-          </span>
-          <div>
-            <p className="section-label">Workflow inventory</p>
-            <h2 id="health-heading">{loading && !inventory ? "Loading workflows" : heading}</h2>
-            <p>
-              {error
-                ? "Check that the application service is running"
-                : inventory
-                  ? `${updated} · ${inventory.selectedRepositoryCount} selected repositor${inventory.selectedRepositoryCount === 1 ? "y" : "ies"}`
-                  : "Waiting for the application core"}
-            </p>
-          </div>
-        </div>
-        <dl className="health-stats">
-          <div>
-            <dt>Workflows</dt>
-            <dd>{error ? "—" : workflows.length}</dd>
-          </div>
-          <div>
-            <dt>Running</dt>
-            <dd>
-              {!error && running > 0 ? (
-                <button
-                  className="health-stat-link health-stat-link-running"
-                  type="button"
-                  aria-label={`Show ${running} running workflow${running === 1 ? "" : "s"}`}
-                  onClick={() => updateFilters("", "running")}
-                >
-                  {running}
-                </button>
-              ) : error ? (
-                "—"
-              ) : (
-                running
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>Failing</dt>
-            <dd>
-              {!error && failing > 0 ? (
-                <button
-                  className="health-stat-link health-stat-link-failing"
-                  type="button"
-                  aria-label={`Show ${failing} failing workflow${failing === 1 ? "" : "s"}`}
-                  onClick={() => updateFilters("", "failing")}
-                >
-                  {failing}
-                </button>
-              ) : error ? (
-                "—"
-              ) : (
-                failing
-              )}
-            </dd>
-          </div>
-        </dl>
-      </section>
+      <InventorySummary
+        heading={loading && !inventory ? "Loading workflows" : heading}
+        description={
+          error ? (
+            "Check that the application service is running"
+          ) : inventory ? (
+            <>
+              {updated} · {inventory.selectedRepositoryCount} selected repositor
+              {inventory.selectedRepositoryCount === 1 ? "y" : "ies"}
+            </>
+          ) : (
+            "Waiting for the application core"
+          )
+        }
+        tone={statusTone}
+        busy={loading || backgroundSyncing}
+        stats={[
+          { label: "Workflows", value: error ? "—" : workflows.length },
+          {
+            label: "Running",
+            value: error ? "—" : running,
+            tone: "running",
+            actionLabel: `Show ${running} running workflow${running === 1 ? "" : "s"}`,
+            onSelect: !error && running > 0 ? () => updateFilters("", "running") : undefined,
+          },
+          {
+            label: "Failing",
+            value: error ? "—" : failing,
+            tone: "failing",
+            actionLabel: `Show ${failing} failing workflow${failing === 1 ? "" : "s"}`,
+            onSelect: !error && failing > 0 ? () => updateFilters("", "failing") : undefined,
+          },
+        ]}
+      />
 
       {inventory?.stale ? (
         <div className="sync-warning" role="status">

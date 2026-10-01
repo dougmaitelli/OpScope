@@ -57,7 +57,27 @@ describe("multi-provider pull requests", () => {
       };
       client.listChangeRequests.mockResolvedValue({
         selectedRepositoryCount: 1,
-        changeRequests: [request, { ...request, id: "43", number: 8, title: "Unrelated PR" }],
+        changeRequests: [
+          { ...request, checkStatus: "failing" },
+          {
+            ...request,
+            id: "43",
+            number: 8,
+            title: "Unrelated PR",
+            reviewStatus: "approved",
+            checkStatus: "passed",
+            mergeStatus: "ready",
+          },
+          { ...request, id: "44", number: 9, title: "Draft PR", draft: true },
+          {
+            ...request,
+            id: "45",
+            number: 10,
+            title: "No checks PR",
+            checkStatus: "none",
+            reviewStatus: "none",
+          },
+        ],
       });
       client.listWorkflows.mockResolvedValue({ workflows: [] });
       client.changeRequestDetails.mockResolvedValue({
@@ -75,8 +95,35 @@ describe("multi-provider pull requests", () => {
         latestCommit: null,
       });
       render(<ChangeRequestsPage />);
-      const row = await screen.findByRole("button", { name: /Improve build checks/ });
-      expect(within(row).getByText("Checks unknown")).toBeInTheDocument();
+      await screen.findByRole("button", { name: /Improve build checks/ });
+      const emptyRow = screen.getByRole("button", { name: /No checks PR/ });
+      expect(within(emptyRow).getByText("No checks")).toBeInTheDocument();
+      expect(within(emptyRow).getByText("No reviews")).toBeInTheDocument();
+      const unknownRow = screen.getByRole("button", { name: /Draft PR/ });
+      expect(within(unknownRow).getByText("Checks unknown")).toBeInTheDocument();
+      expect(within(unknownRow).getByText("Review unknown")).toBeInTheDocument();
+      const summary = screen.getByRole("region", { name: "1 pull request needs attention" });
+      expect(
+        within(summary).getByRole("button", { name: "Show all open pull requests" }),
+      ).toHaveTextContent("4");
+      await user.type(screen.getByRole("searchbox", { name: "Search pull requests" }), "Improve");
+      await user.click(within(summary).getByRole("button", { name: "Show ready pull requests" }));
+      expect(screen.getByRole("button", { name: /Unrelated PR/ })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Improve build checks/ }),
+      ).not.toBeInTheDocument();
+      await user.click(within(summary).getByRole("button", { name: "Show draft pull requests" }));
+      expect(screen.getByRole("button", { name: /Draft PR/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Unrelated PR/ })).not.toBeInTheDocument();
+      await user.click(
+        within(summary).getByRole("button", { name: "Show pull requests needing attention" }),
+      );
+      expect(screen.getByRole("button", { name: /Improve build checks/ })).toBeInTheDocument();
+      await user.click(
+        within(summary).getByRole("button", { name: "Show all open pull requests" }),
+      );
+      const row = screen.getByRole("button", { name: /Improve build checks/ });
+      expect(within(row).getByText("Checks failing")).toBeInTheDocument();
       expect(within(row).getByText("Review unknown")).toBeInTheDocument();
       await user.click(row);
       const dialog = screen.getByRole("dialog", { name: request.title });

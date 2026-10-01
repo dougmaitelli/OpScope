@@ -4,7 +4,9 @@ use crate::domain::{ChangeRequestCheckStatus as Check, ChangeRequestReviewStatus
 
 pub(super) fn checks(states: impl IntoIterator<Item = Check>) -> Check {
     let states: Vec<_> = states.into_iter().collect();
-    if states.contains(&Check::Failing) {
+    if states.is_empty() {
+        Check::None
+    } else if states.contains(&Check::Failing) {
         Check::Failing
     } else if states.contains(&Check::Running) {
         Check::Running
@@ -17,7 +19,9 @@ pub(super) fn checks(states: impl IntoIterator<Item = Check>) -> Check {
 
 pub(super) fn reviews(states: impl IntoIterator<Item = Review>) -> Review {
     let states: Vec<_> = states.into_iter().collect();
-    if states.contains(&Review::ChangesRequested) {
+    if states.is_empty() {
+        Review::None
+    } else if states.contains(&Review::ChangesRequested) {
         Review::ChangesRequested
     } else if states.contains(&Review::ReviewRequired) {
         Review::ReviewRequired
