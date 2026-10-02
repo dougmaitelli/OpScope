@@ -37,6 +37,9 @@ use std::time::Duration;
 const DEFAULT_SERVER_URL: &str = "https://github.com";
 const DEFAULT_API_URL: &str = "https://api.github.com/";
 const API_VERSION: &str = "2026-03-10";
+// Older Enterprise Server releases only support this REST contract. Keep a
+// known response format rather than selecting an arbitrary advertised version.
+const ENTERPRISE_API_VERSION: &str = "2022-11-28";
 const ACCEPT_VALUE: &str = "application/vnd.github+json";
 const USER_AGENT: &str = "OpsScope/0.1";
 const REPOSITORIES_PER_PAGE: usize = 100;
@@ -86,7 +89,14 @@ impl GitHubClient {
         }
         .map_err(|_| ConnectionValidationFailure::InvalidConfiguration)?;
         let url = super::http::endpoint(base.as_str(), path)?;
-        Ok(self.authenticate(self.client.get(url), token))
+        let version = if server_url == DEFAULT_SERVER_URL {
+            API_VERSION
+        } else {
+            ENTERPRISE_API_VERSION
+        };
+        Ok(self
+            .authenticate(self.client.get(url), token)
+            .header("X-GitHub-Api-Version", version))
     }
 
     fn graphql_request(
@@ -117,7 +127,6 @@ impl GitHubClient {
             .bearer_auth(token.expose())
             .header(ACCEPT, ACCEPT_VALUE)
             .header(USER_AGENT_HEADER, USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION)
     }
 }
 

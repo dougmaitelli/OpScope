@@ -132,6 +132,16 @@ connection per normalized server URL per provider. Bitbucket Cloud supports one
 connection per workspace. Custom server URLs must be HTTPS origins (no path,
 query, or embedded credentials); HTTP is allowed only for loopback development.
 
+GitHub.com uses REST API version `2026-03-10`; Enterprise Server connections use
+`2022-11-28` for compatibility with older releases.
+
+Outbound HTTPS uses the operating system's certificate trust store. Install
+your organization's CA certificates on the machine running the desktop app or
+server, then restart OpsScope. In Docker, certificates must be trusted inside
+the container; the host's trust store is not inherited. A custom PEM CA bundle
+can be supplied with `SSL_CERT_FILE`; it replaces the default trust roots, so
+include any public roots your connections also need.
+
 ## Sources
 
 | Source | Connection | Available monitoring |

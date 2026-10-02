@@ -22,7 +22,7 @@ async fn feature_operations_execute_authenticated_enterprise_routes() {
     logs.status = 302;
     logs.headers
         .push_str("Location: http://127.0.0.1/unsafe-archive\r\n");
-    let api = MockApi::start(vec![
+    let mut exchanges = vec![
         Exchange::json(
             "/api/v3/user",
             auth,
@@ -41,7 +41,13 @@ async fn feature_operations_execute_authenticated_enterprise_routes() {
         ),
         missing,
         logs,
-    ]);
+    ];
+    for exchange in &mut exchanges {
+        exchange
+            .request_headers
+            .push(("X-GitHub-Api-Version".into(), "2022-11-28".into()));
+    }
+    let api = MockApi::start(exchanges);
     let client = GitHubClient::new().unwrap();
     let config = [(SERVER_URL_KEY.into(), api.url.clone())]
         .into_iter()
@@ -235,6 +241,7 @@ fn enterprise_server_is_normalized_and_uses_the_api_v3_prefix()
         request.url().as_str(),
         "https://github.example.com/api/v3/user"
     );
+    assert_eq!(request.headers()["X-GitHub-Api-Version"], "2022-11-28");
     Ok(())
 }
 
@@ -742,7 +749,7 @@ fn graphql_transport_preserves_headers_body_and_enterprise_endpoint() {
         assert_eq!(request.url().as_str(), url);
         assert_eq!(request.method(), reqwest::Method::POST);
         assert_eq!(request.headers()[ACCEPT], ACCEPT_VALUE);
-        assert_eq!(request.headers()["X-GitHub-Api-Version"], API_VERSION);
+        assert!(!request.headers().contains_key("X-GitHub-Api-Version"));
         assert_eq!(request.headers()[AUTHORIZATION], "Bearer test-token");
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(

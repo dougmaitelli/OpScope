@@ -47,6 +47,7 @@ pub(super) fn relevance_run(sha: &str) -> crate::domain::WorkflowRun {
 pub(super) struct Exchange {
     pub method: String,
     pub request_body: Option<serde_json::Value>,
+    pub request_headers: Vec<(String, String)>,
     pub path: String,
     pub authorization: String,
     pub status: u16,
@@ -81,6 +82,7 @@ impl Exchange {
         Self {
             method: "GET".into(),
             request_body: None,
+            request_headers: Vec::new(),
             path: path.into(),
             authorization: authorization.into(),
             status: 200,
@@ -149,6 +151,13 @@ impl MockApi {
                         .to_ascii_lowercase()
                         .contains(&exchange.authorization.to_ascii_lowercase())
                 );
+                for (name, value) in &exchange.request_headers {
+                    let actual = request.lines().skip(1).find_map(|line| {
+                        let (header, value) = line.split_once(':')?;
+                        header.eq_ignore_ascii_case(name).then(|| value.trim())
+                    });
+                    assert_eq!(actual, Some(value.as_str()), "request header {name}");
+                }
                 if let Some(expected) = &exchange.request_body {
                     let length = request
                         .lines()

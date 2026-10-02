@@ -25,6 +25,7 @@ async fn network_errors_are_classified_and_logs_are_bounded() {
     let api = MockApi::start(vec![Exchange {
         method: "GET".into(),
         request_body: None,
+        request_headers: Vec::new(),
         path: "/logs".into(),
         authorization: String::new(),
         status: 200,
