@@ -124,7 +124,7 @@ jobs:
             asset_suffix: windows_x86_64.exe
           - name: macOS universal
             runner: macos-latest
-            asset_suffix: macos_universal.app.zip
+            asset_suffix: macos_universal.dmg
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -169,12 +169,12 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run desktop:build
 
-      - name: Build macOS application bundle
+      - name: Build macOS disk image
         if: runner.os == 'macOS'
         env:
           APPLE_SIGNING_IDENTITY: "-"
         working-directory: apps/desktop
-        run: npx --no-install tauri build --target universal-apple-darwin --bundles app
+        run: npx --no-install tauri build --target universal-apple-darwin --bundles dmg
 
       - name: Stage Linux release asset
         if: runner.os == 'Linux'
@@ -202,14 +202,18 @@ jobs:
 
       - name: Stage macOS release asset
         if: runner.os == 'macOS'
+        shell: bash
         env:
           RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
-        run: >-
-          ditto -c -k --sequesterRsrc --keepParent
-          target/universal-apple-darwin/release/bundle/macos/OpsScope.app
-          "$RELEASE_ASSET"
+        run: |
+          source_asset="$(find target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          if [[ -z "$source_asset" ]]; then
+            echo "macOS DMG was not produced." >&2
+            exit 1
+          fi
+          cp "$source_asset" "$RELEASE_ASSET"
 
-      - name: Upload portable desktop asset
+      - name: Upload desktop asset
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}

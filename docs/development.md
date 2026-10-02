@@ -108,7 +108,7 @@ when changing versions.
 
 After validation, the release workflow builds:
 
-- A universal macOS `.app.zip` (Apple Silicon and Intel).
+- A universal macOS `.dmg` (Apple Silicon and Intel).
 - A Windows x86-64 portable `.exe`.
 - A Linux x86-64 AppImage and raw executable.
 - A `linux/amd64` container at `ghcr.io/dougmaitelli/opsscope`.

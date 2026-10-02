@@ -79,7 +79,7 @@ Download your platform's asset from
 
 | Platform | Download and run |
 | --- | --- |
-| macOS (Apple Silicon and Intel) | Extract the universal `.app.zip`, move OpsScope.app to Applications, and open it. |
+| macOS (Apple Silicon and Intel) | Open the universal `.dmg`, drag OpsScope.app to Applications, and open it. |
 | Windows x86-64 | Run the portable `.exe`. |
 | Linux x86-64 | Make the `.AppImage` executable and run it, or use the raw binary with its system dependencies installed. |
 
