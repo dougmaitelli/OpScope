@@ -70,10 +70,23 @@ jobs:
     outputs:
       release_id: ${{ steps.release.outputs.release_id }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --current --strip header
+
       - name: Create or find GitHub release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES_FILE: ${{ steps.cliff.outputs.changelog }}
         shell: bash
         run: |
           release_id="$(
@@ -92,7 +105,6 @@ jobs:
               --field tag_name="$GITHUB_REF_NAME" \
               --field name="OpsScope ${GITHUB_REF_NAME}" \
               --field target_commitish="$GITHUB_SHA" \
-              --field generate_release_notes=true \
               --field draft=true \
               --field prerelease="$prerelease" \
               --jq .id)"
@@ -102,6 +114,9 @@ jobs:
             echo "Draft release ID is invalid: $release_id" >&2
             exit 1
           fi
+
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            --field "body=@${RELEASE_NOTES_FILE}" > /dev/null
 
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 

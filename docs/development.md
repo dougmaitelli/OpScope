@@ -106,6 +106,10 @@ the tag matches `Cargo.toml`, `package.json`, and
 `apps/desktop/tauri.conf.json`. Keep corresponding lockfile versions in sync
 when changing versions.
 
+The release job fetches the full Git history and generates notes for the tagged
+release with git-cliff using `cliff.toml`. It sets the draft release body from
+that output, including when an existing draft is reused.
+
 After validation, the release workflow builds:
 
 - A universal macOS `.dmg` (Apple Silicon and Intel).
