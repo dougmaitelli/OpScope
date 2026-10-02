@@ -70,6 +70,20 @@ and bounded log reads without live provider credentials. Run them with
 `cargo test -p opsscope-core integrations`; the environment must permit binding
 loopback sockets.
 
+### Browser tests and README screenshots
+
+```sh
+npm run test:e2e:docker
+npm run screenshots:docker
+```
+
+Playwright validates the production frontend in a desktop Chromium
+viewport with behavior assertions and committed visual baselines. API fixtures
+provide controlled data; the suite does not run the Rust server or native shell.
+The screenshot task exports demonstration images used by the README separately
+from regression baselines. See [browser testing](../e2e/README.md) for local
+debugging, reviewed baseline updates, coverage, and failure reports.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run contracts:generate` | Regenerate committed TypeScript DTOs, routes, commands, and the client interface after changing Rust contracts. |

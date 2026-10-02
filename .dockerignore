@@ -10,3 +10,5 @@ apps/web/dist
 build
 dist
 .DS_Store
+playwright-report
+test-results

@@ -8,3 +8,5 @@ apps/desktop/gen/
 .env
 *.local
 .opsscope-data/
+playwright-report/
+test-results/

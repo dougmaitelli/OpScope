@@ -26,10 +26,17 @@ architecture. Available features depend on the provider; see [Sources](#sources)
 
 - **Workflows:** latest and previous runs, status filters, duration, and
   on-demand logs in a dialog.
-- **Pull requests:** open PRs grouped by repository, with reviews and checks;
-  supported workflow checks open run details directly.
-- **Issues:** open issues grouped by repository, with details and discussion.
-- **Activity:** a combined feed of workflow runs and observed PR changes.
+- **Pull requests:** open PRs grouped by repository, with reviews, checks, and
+  merge readiness. Supported workflow checks open run details directly.
+- **Provider actions:** re-run workflows, update PR branches, and merge PRs
+  through confirmation dialogs, where supported by the provider and permissions.
+  See [Workflow and PR actions](#workflow-and-pr-actions).
+- **Dependabot:** request rebase or recreate for GitHub Dependabot PRs from the
+  PR dialog, with confirmation and a warning before recreating.
+- **Issues:** open issues grouped by repository, with labels, assignees,
+  milestones, details, and discussion.
+- **Activity:** a combined feed of workflow runs, observed PR changes, and issue
+  events, with filters and links to their details.
 - **Background monitoring:** scheduled and manual refresh, cached results on
   reload, and freshness information when a source is unavailable.
 - **Notifications:** workflow failures, PR updates, and issue updates through
@@ -41,6 +48,27 @@ Both editions share the same core and UI. Each installation is intended for a
 single user: there are no separate workspaces or per-user data permissions.
 Workflow and PR dialogs provide confirmed provider actions where supported.
 Editing issues and approving PRs are not supported.
+
+## Screenshots
+
+### Workflows
+
+![Workflows grouped by repository with run status and history](screenshots/workflows.png)
+
+### Pull requests
+
+![Pull requests with review and check status](screenshots/pull-requests.png)
+
+### Issues
+
+![Issues with labels, assignments, and discussion counts](screenshots/issues.png)
+
+### Activity
+
+![Combined workflow, pull request, and issue activity](screenshots/activity.png)
+
+Screenshots use demonstration data. See the [browser testing guide](e2e/README.md)
+for the screenshot update task and UI validation workflow.
 
 ## Quick start
 
