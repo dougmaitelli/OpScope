@@ -116,6 +116,7 @@ jobs:
           fi
 
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            --field tag_name="$GITHUB_REF_NAME" \
             --field "body=@${RELEASE_NOTES_FILE}" > /dev/null
 
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
@@ -306,4 +307,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.create_release.outputs.release_id }}
-        run: gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --field draft=false
+        run: |
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            --field tag_name="$GITHUB_REF_NAME" \
+            --field draft=false
