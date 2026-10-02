@@ -25,7 +25,7 @@ export function AppShell() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusResponse | null>(null);
 
   useEffect(() => {
-    document.title = `${pageTitles[location.pathname] ?? "Workflows"} · OpsScope`;
+    document.title = `${pageTitles[location.pathname] ?? "Workflows"} · OpScope`;
   }, [location.pathname]);
 
   useEffect(() => {
@@ -48,8 +48,8 @@ export function AppShell() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-mark" src="/opsscope-logo.png" alt="" />
-          <span>OpsScope</span>
+          <img className="brand-mark" src="/opscope-logo.png" alt="" />
+          <span>OpScope</span>
         </div>
 
         <nav aria-label="Primary navigation">

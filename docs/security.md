@@ -1,6 +1,6 @@
 # Security model
 
-OpsScope handles tokens that may read private repositories. It is designed for
+OpScope handles tokens that may read private repositories. It is designed for
 one trusted user per installation, not multi-tenant isolation.
 Deployment instructions and environment variables are documented in the
 [README](../README.md#deployment).

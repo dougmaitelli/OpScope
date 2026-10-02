@@ -44,7 +44,7 @@ jobs:
           tag_version="${GITHUB_REF_NAME#v}"
           package_version="$(node --print "require('./package.json').version")"
           tauri_version="$(node --print "require('./apps/desktop/tauri.conf.json').version")"
-          cargo_version="$(cargo metadata --format-version 1 --no-deps | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => console.log(JSON.parse(input).packages.find(item => item.name === 'opsscope-core').version));")"
+          cargo_version="$(cargo metadata --format-version 1 --no-deps | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => console.log(JSON.parse(input).packages.find(item => item.name === 'opscope-core').version));")"
 
           if [[ "$GITHUB_REF_NAME" != "v$cargo_version" ]]; then
             echo "Release tag $GITHUB_REF_NAME must match Cargo version v$cargo_version." >&2
@@ -103,7 +103,7 @@ jobs:
 
             release_id="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
               --field tag_name="$GITHUB_REF_NAME" \
-              --field name="OpsScope ${GITHUB_REF_NAME}" \
+              --field name="OpScope ${GITHUB_REF_NAME}" \
               --field target_commitish="$GITHUB_SHA" \
               --field draft=true \
               --field prerelease="$prerelease" \
@@ -195,8 +195,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         env:
-          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
-          RAW_RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_linux_x86_64
+          RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+          RAW_RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_linux_x86_64
         run: |
           source_asset="$(find target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
           if [[ -z "$source_asset" ]]; then
@@ -205,21 +205,21 @@ jobs:
           fi
           cp "$source_asset" "$RELEASE_ASSET"
           chmod +x "$RELEASE_ASSET"
-          cp target/release/opsscope-desktop "$RAW_RELEASE_ASSET"
+          cp target/release/opscope-desktop "$RAW_RELEASE_ASSET"
           chmod +x "$RAW_RELEASE_ASSET"
 
       - name: Stage Windows release asset
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
-        run: Copy-Item target/release/opsscope-desktop.exe $env:RELEASE_ASSET
+          RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+        run: Copy-Item target/release/opscope-desktop.exe $env:RELEASE_ASSET
 
       - name: Stage macOS release asset
         if: runner.os == 'macOS'
         shell: bash
         env:
-          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+          RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
         run: |
           source_asset="$(find target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           if [[ -z "$source_asset" ]]; then
@@ -231,7 +231,7 @@ jobs:
       - name: Upload desktop asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
+          RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_${{ matrix.asset_suffix }}
         shell: bash
         run: gh release upload "$GITHUB_REF_NAME" "$RELEASE_ASSET" --clobber
 
@@ -239,7 +239,7 @@ jobs:
         if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ASSET: ${{ runner.temp }}/opsscope_${{ github.ref_name }}_linux_x86_64
+          RELEASE_ASSET: ${{ runner.temp }}/opscope_${{ github.ref_name }}_linux_x86_64
         shell: bash
         run: gh release upload "$GITHUB_REF_NAME" "$RELEASE_ASSET" --clobber
 
@@ -276,7 +276,7 @@ jobs:
             type=semver,pattern=v{{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
           labels: |
-            org.opencontainers.image.title=OpsScope
+            org.opencontainers.image.title=OpScope
             org.opencontainers.image.description=Operational dashboard for software delivery monitoring
 
       - name: Build and publish image

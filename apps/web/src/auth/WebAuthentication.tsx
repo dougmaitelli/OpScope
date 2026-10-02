@@ -68,8 +68,8 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
           : { enabled: true, authenticated: false, user: null, csrfToken: null },
       );
     };
-    globalThis.addEventListener("opsscope:unauthorized", unauthorized);
-    return () => globalThis.removeEventListener("opsscope:unauthorized", unauthorized);
+    globalThis.addEventListener("opscope:unauthorized", unauthorized);
+    return () => globalThis.removeEventListener("opscope:unauthorized", unauthorized);
   }, [loadSession]);
 
   const logout = useCallback(async () => {
@@ -109,7 +109,7 @@ export function WebAuthentication({ children }: { children: ReactNode }) {
     return (
       <AuthenticationScreen>
         <h1>Checking session</h1>
-        <p>Contacting the OpsScope server.</p>
+        <p>Contacting the OpScope server.</p>
       </AuthenticationScreen>
     );
   }
@@ -144,8 +144,8 @@ function AuthenticationScreen({ children }: { children: ReactNode }) {
     <main className="auth-screen">
       <section className="auth-panel" aria-live="polite">
         <div className="auth-brand">
-          <img className="auth-mark" src="/opsscope-logo.png" alt="" />
-          <span>OpsScope</span>
+          <img className="auth-mark" src="/opscope-logo.png" alt="" />
+          <span>OpScope</span>
         </div>
         {children}
       </section>

@@ -1,5 +1,5 @@
 use crate::state::DesktopState;
-use opsscope_core::contracts::{
+use opscope_core::contracts::{
     ActionErrorResponse, ActionOptions, ActionOptionsRequest, ChangeRequestDetailsErrorResponse,
     ChangeRequestDetailsRequest, ChangeRequestDetailsResponse, ConnectSourceRequest,
     ConnectionSummary, ConnectionValidationErrorResponse, DisconnectSourceRequest,
@@ -108,7 +108,7 @@ pub(crate) fn list_activity(
         .map(ListActivityResponse::from_domain)
         .map_err(|_| {
             ConnectionValidationErrorResponse::from(
-                opsscope_core::application::ListWorkflowsFailure::StorageUnavailable,
+                opscope_core::application::ListWorkflowsFailure::StorageUnavailable,
             )
         })
 }

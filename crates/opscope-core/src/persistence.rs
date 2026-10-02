@@ -1,8 +1,11 @@
 //! SQLite persistence for metadata, source snapshots, and encrypted server-side credentials.
 
+mod migration;
 mod relationships;
 mod source_cache;
 mod work_item_notifications;
+
+pub use migration::prepare_database_path;
 
 use crate::application::{
     ActivityEventRepository, ChangeRequestActivityEvent, ConnectionRepository,

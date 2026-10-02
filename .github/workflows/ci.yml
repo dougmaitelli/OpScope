@@ -99,7 +99,7 @@ jobs:
           flavor: latest=false
           tags: type=raw,value=dev
           labels: |
-            org.opencontainers.image.title=OpsScope
+            org.opencontainers.image.title=OpScope
             org.opencontainers.image.description=Operational dashboard for software delivery monitoring
 
       - name: Build and publish development image

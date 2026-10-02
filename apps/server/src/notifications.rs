@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use opsscope_core::application::{
+use opscope_core::application::{
     NoopNotificationSink, Notification, NotificationDeliveryFailure, NotificationSeverity,
     NotificationSink,
 };
@@ -11,11 +11,11 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub const APPRISE_URL_ENVIRONMENT_VARIABLE: &str = "OPSSCOPE_APPRISE_URL";
-pub const APPRISE_TAGS_ENVIRONMENT_VARIABLE: &str = "OPSSCOPE_APPRISE_TAGS";
+pub const APPRISE_URL_ENVIRONMENT_VARIABLE: &str = "OPSCOPE_APPRISE_URL";
+pub const APPRISE_TAGS_ENVIRONMENT_VARIABLE: &str = "OPSCOPE_APPRISE_TAGS";
 
 const INVALID_ENDPOINT: AppriseConfigurationError = AppriseConfigurationError(
-    "OPSSCOPE_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
+    "OPSCOPE_APPRISE_URL must be a valid HTTP or HTTPS Apprise notification endpoint",
 );
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ pub fn notification_sink_from_environment()
         Err(env::VarError::NotPresent) => String::new(),
         Err(env::VarError::NotUnicode(_)) => {
             return Err(AppriseConfigurationError(
-                "OPSSCOPE_APPRISE_TAGS must contain valid Unicode",
+                "OPSCOPE_APPRISE_TAGS must contain valid Unicode",
             ));
         }
     };

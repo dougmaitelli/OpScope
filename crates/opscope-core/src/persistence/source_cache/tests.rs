@@ -25,7 +25,7 @@ fn test_connection() -> StoredConnection {
 fn queued_runs_without_timestamps_remain_latest_after_cache_reload()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let database = SqliteDatabase::open(directory.path().join("opsscope.sqlite3"))?;
+    let database = SqliteDatabase::open(directory.path().join("opscope.sqlite3"))?;
     database.save(&test_connection())?;
     let queued = WorkflowRun {
         relationships: Default::default(),
@@ -78,7 +78,7 @@ fn queued_runs_without_timestamps_remain_latest_after_cache_reload()
 #[test]
 fn snapshots_persist_and_support_empty_results() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let database_path = directory.path().join("opsscope.sqlite3");
+    let database_path = directory.path().join("opscope.sqlite3");
     let repositories = RepositorySnapshot {
         refreshed_at: 123,
         repositories: vec![Repository {

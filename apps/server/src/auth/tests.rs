@@ -54,7 +54,7 @@ async fn login_endpoint_returns_retry_after_when_rate_limited() {
             "id_token_signing_alg_values_supported": ["RS256"]
         }))
         .unwrap(),
-        client_id: "opsscope".into(),
+        client_id: "opscope".into(),
         client_secret: "test".into(),
         redirect_url: "https://ops.example/api/auth/callback".into(),
         http_client: reqwest::Client::new(),

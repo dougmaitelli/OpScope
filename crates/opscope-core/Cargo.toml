@@ -1,5 +1,5 @@
 [package]
-name = "opsscope-core"
+name = "opscope-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

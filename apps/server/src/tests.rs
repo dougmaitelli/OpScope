@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use http_body_util::BodyExt;
-use opsscope_core::application::{
+use opscope_core::application::{
     ConfiguredSource, ConnectionConfiguration, ConnectionValidationFailure, CredentialField,
     NoopNotificationSink, NotifyRepositoryFailures, ProviderToken, SourceCapability,
     SourceDescriptor, SourceModule, SourceRegistry, ValidatedAccount, WorkflowRunLogsFailure,
 };
-use opsscope_core::contracts::{
+use opscope_core::contracts::{
     ACTIVITY_HTTP_PATH, CHANGE_REQUEST_DETAILS_HTTP_PATH, CHANGE_REQUESTS_HTTP_PATH,
     CONNECTIONS_HTTP_PATH, ConnectionSummary, HEALTH_HTTP_PATH, ListActivityResponse,
     ListChangeRequestsResponse, ListRepositoriesResponse, ListSourcesResponse,
@@ -18,15 +18,15 @@ use opsscope_core::contracts::{
     SYNCHRONIZATION_HTTP_PATH, SynchronizationResponse, SynchronizationStatusResponse,
     WORKFLOW_RUN_LOGS_HTTP_PATH, WORKFLOWS_HTTP_PATH, WorkflowRunLogsResponse,
 };
-use opsscope_core::contracts::{
+use opscope_core::contracts::{
     ISSUE_DETAILS_HTTP_PATH, ISSUES_HTTP_PATH, IssueDetailsResponse, ListIssuesResponse,
 };
-use opsscope_core::domain::{Issue, IssueDetails, IssueState};
-use opsscope_core::domain::{
+use opscope_core::domain::{Issue, IssueDetails, IssueState};
+use opscope_core::domain::{
     Repository, RepositoryVisibility, RunLifecycle, RunOutcome, Workflow, WorkflowRun,
     WorkflowRunLog, WorkflowRunLogs, WorkflowState,
 };
-use opsscope_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
+use opscope_core::persistence::{EncryptedSecretStore, ServerMasterKey, SqliteDatabase};
 use std::fs;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -38,7 +38,7 @@ struct TestSourceModule;
 #[tokio::test]
 async fn feature_settings_gate_sync_lists_and_details_and_are_reversible()
 -> Result<(), Box<dyn std::error::Error>> {
-    use opsscope_core::application::WorkItemNotificationRepository;
+    use opscope_core::application::WorkItemNotificationRepository;
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
     let app = router(test_dependencies(
@@ -122,9 +122,7 @@ async fn feature_settings_gate_sync_lists_and_details_and_are_reversible()
 #[tokio::test]
 async fn personal_scope_filters_cached_routes_and_is_reversible()
 -> Result<(), Box<dyn std::error::Error>> {
-    use opsscope_core::application::{
-        ConnectionRepository, MonitoringSettings, SettingsRepository,
-    };
+    use opscope_core::application::{ConnectionRepository, MonitoringSettings, SettingsRepository};
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
     let app = router(test_dependencies(
@@ -212,7 +210,7 @@ async fn personal_scope_filters_cached_routes_and_is_reversible()
         ..Default::default()
     })?;
     let mut observed =
-        opsscope_core::application::ActivityEventRepository::load_change_request_state(
+        opscope_core::application::ActivityEventRepository::load_change_request_state(
             &database,
             &connection.id,
             "repository-1",
@@ -220,7 +218,7 @@ async fn personal_scope_filters_cached_routes_and_is_reversible()
         .unwrap();
     let original_relevance = observed[0].relationships.clone();
     observed[0].relationships.authors.ids.clear();
-    opsscope_core::application::ActivityEventRepository::save_change_request_observation(
+    opscope_core::application::ActivityEventRepository::save_change_request_observation(
         &database,
         &connection.id,
         "repository-1",
@@ -235,7 +233,7 @@ async fn personal_scope_filters_cached_routes_and_is_reversible()
         serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
     assert!(activity.change_request_events.is_empty());
     observed[0].relationships = original_relevance;
-    opsscope_core::application::ActivityEventRepository::save_change_request_observation(
+    opscope_core::application::ActivityEventRepository::save_change_request_observation(
         &database,
         &connection.id,
         "repository-1",
@@ -350,8 +348,8 @@ impl SourceModule for TestSourceModule {
         assert_eq!(repository.id, "repository-1");
         Ok((1..=12)
             .map(|number| WorkflowRun {
-                relationships: opsscope_core::domain::Relationships {
-                    commit_authors: opsscope_core::domain::AccountSet::new(
+                relationships: opscope_core::domain::Relationships {
+                    commit_authors: opscope_core::domain::AccountSet::new(
                         if number % 2 == 0 {
                             vec!["42".into()]
                         } else {
@@ -421,17 +419,16 @@ impl SourceModule for TestSourceModule {
         _configuration: &ConnectionConfiguration,
         token: &ProviderToken,
         repository: &Repository,
-    ) -> Result<Option<Vec<opsscope_core::domain::ChangeRequest>>, ConnectionValidationFailure>
-    {
-        use opsscope_core::domain::{
+    ) -> Result<Option<Vec<opscope_core::domain::ChangeRequest>>, ConnectionValidationFailure> {
+        use opscope_core::domain::{
             ChangeRequest, ChangeRequestCheckStatus, ChangeRequestMergeStatus,
             ChangeRequestReviewStatus, ChangeRequestState,
         };
         assert_eq!(token.expose(), "test_credential");
         assert_eq!(repository.id, "repository-1");
         Ok(Some(vec![ChangeRequest {
-            relationships: opsscope_core::domain::Relationships {
-                authors: opsscope_core::domain::AccountSet::new(["42".into()], true),
+            relationships: opscope_core::domain::Relationships {
+                authors: opscope_core::domain::AccountSet::new(["42".into()], true),
                 ..Default::default()
             },
             id: "pr-1".to_owned(),
@@ -538,11 +535,11 @@ fn test_dependencies(
         settings: Arc::new(database.clone()),
         activity_events: Arc::new(database.clone()),
         failure_notifications: test_failure_notifications(database),
-        work_item_notifications: Some(opsscope_core::application::NotifyWorkItems::new(
+        work_item_notifications: Some(opscope_core::application::NotifyWorkItems::new(
             Arc::new(database.clone()),
             Arc::new(database.clone()),
             Arc::new(database.clone()),
-            Arc::new(opsscope_core::application::NoopNotificationSink),
+            Arc::new(opscope_core::application::NoopNotificationSink),
         )),
         authentication,
     }
@@ -628,7 +625,7 @@ async fn both_routes_use_the_shared_contract() -> Result<(), Box<dyn std::error:
 async fn web_assets_use_spa_fallback_without_masking_unknown_api_routes()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    fs::write(directory.path().join("index.html"), "<main>OpsScope</main>")?;
+    fs::write(directory.path().join("index.html"), "<main>OpScope</main>")?;
     fs::write(directory.path().join("asset.txt"), "asset")?;
     let database = SqliteDatabase::in_memory()?;
     let secrets = EncryptedSecretStore::new(database.clone(), ServerMasterKey::generate()?);
@@ -642,7 +639,7 @@ async fn web_assets_use_spa_fallback_without_masking_unknown_api_routes()
     );
 
     for (path, expected) in [
-        ("/settings", "<main>OpsScope</main>"),
+        ("/settings", "<main>OpScope</main>"),
         ("/asset.txt", "asset"),
     ] {
         let response = app
@@ -799,7 +796,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert!(!decoded.notifications.pull_request_review_requested);
     assert!(decoded.notifications.workflow_failures);
     assert!(
-        !opsscope_core::application::SettingsRepository::load_settings(&database)?
+        !opscope_core::application::SettingsRepository::load_settings(&database)?
             .notifications
             .issue_opened
     );
@@ -843,7 +840,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.workflows[0].runs.len(), 5);
     assert_eq!(
         decoded.workflows[0].runs[0].outcome,
-        opsscope_core::contracts::RunOutcome::Success
+        opscope_core::contracts::RunOutcome::Success
     );
 
     let activity = app
@@ -975,11 +972,11 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
         (Method::POST, WORKFLOW_RUN_LOGS_HTTP_PATH),
         (
             Method::POST,
-            opsscope_core::contracts::ACTION_OPTIONS_HTTP_PATH,
+            opscope_core::contracts::ACTION_OPTIONS_HTTP_PATH,
         ),
         (
             Method::POST,
-            opsscope_core::contracts::EXECUTE_ACTION_HTTP_PATH,
+            opscope_core::contracts::EXECUTE_ACTION_HTTP_PATH,
         ),
         (Method::GET, SETTINGS_HTTP_PATH),
         (Method::PUT, SETTINGS_HTTP_PATH),
@@ -1014,7 +1011,7 @@ async fn protected_routes_reject_anonymous_and_missing_csrf_requests()
         .clone()
         .oneshot(
             authenticated(
-                Request::post(opsscope_core::contracts::EXECUTE_ACTION_HTTP_PATH),
+                Request::post(opscope_core::contracts::EXECUTE_ACTION_HTTP_PATH),
                 &session,
                 false,
             )

@@ -282,9 +282,9 @@ export class HttpClient implements ApplicationClient {
   private async responseError(response: Response): Promise<Error> {
     if (
       response.status === 401 &&
-      response.headers.get("x-opsscope-session-error") === "unauthenticated"
+      response.headers.get("x-opscope-session-error") === "unauthenticated"
     ) {
-      globalThis.dispatchEvent(new Event("opsscope:unauthorized"));
+      globalThis.dispatchEvent(new Event("opscope:unauthorized"));
     }
     const fallback =
       response.status === 404

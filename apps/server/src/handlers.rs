@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use opsscope_core::application::{
+use opscope_core::application::{
     ActivityEventRepository, CheckForUpdates, ConnectSource, ConnectSourceFailure,
     ConnectionRepository, ConnectionValidationFailure, DisconnectSource, GetChangeRequestDetails,
     GetChangeRequestDetailsFailure, GetIssueDetails, GetIssueDetailsFailure, GetMonitoringSettings,
@@ -12,7 +12,7 @@ use opsscope_core::application::{
     SettingsRepository, SourceActions, SourceRegistry, SynchronizeSources, TrackWorkItemActivity,
     UpdateMonitoringSettings, WorkflowRunLogsFailure,
 };
-use opsscope_core::contracts::{
+use opscope_core::contracts::{
     ActionErrorResponse, ActionOptions, ActionOptionsRequest, ChangeRequestDetailsErrorResponse,
     ChangeRequestDetailsRequest, ChangeRequestDetailsResponse, ConnectSourceRequest,
     ConnectionSummary, ConnectionValidationErrorResponse, DisconnectSourceRequest,
@@ -25,7 +25,7 @@ use opsscope_core::contracts::{
     SynchronizationStatusResponse, UpdateMonitoringSettingsRequest, UpdateStatusResponse,
     WorkflowRunLogsErrorResponse, WorkflowRunLogsRequest, WorkflowRunLogsResponse,
 };
-use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
+use opscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -58,7 +58,7 @@ pub(crate) struct AppStateDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
-    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
+    pub work_item_notifications: Option<opscope_core::application::NotifyWorkItems>,
 }
 
 impl AppState {
@@ -183,9 +183,9 @@ pub(crate) async fn execute_action(
 }
 
 fn http_action_error(
-    failure: opsscope_core::application::ActionFailure,
+    failure: opscope_core::application::ActionFailure,
 ) -> (StatusCode, Json<ActionErrorResponse>) {
-    use opsscope_core::application::ActionFailure;
+    use opscope_core::application::ActionFailure;
     eprintln!("source action failed: {failure}");
     let status = match failure {
         ActionFailure::NotFound => StatusCode::NOT_FOUND,
@@ -511,20 +511,20 @@ fn http_validation_error(
         | ConnectSourceFailure::UnknownConnection
         | ConnectSourceFailure::DuplicateConnection
         | ConnectSourceFailure::Validation(
-            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration,
+            opscope_core::application::ConnectionValidationFailure::InvalidConfiguration,
         ) => StatusCode::BAD_REQUEST,
         ConnectSourceFailure::Validation(
-            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ConnectSourceFailure::Validation(
-            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
+            opscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ConnectSourceFailure::Validation(
-            opsscope_core::application::ConnectionValidationFailure::RateLimited,
+            opscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ConnectSourceFailure::Validation(
-            opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ConnectSourceFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
@@ -559,18 +559,18 @@ fn http_repository_error(
 ) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
     let status = match failure {
         ListRepositoriesFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ListRepositoriesFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
+            opscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ListRepositoriesFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::RateLimited,
+            opscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListRepositoriesFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration
-            | opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opscope_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | opscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListRepositoriesFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };
@@ -582,18 +582,18 @@ fn http_workflow_error(
 ) -> (StatusCode, Json<ConnectionValidationErrorResponse>) {
     let status = match failure {
         ListWorkflowsFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::InvalidCredentials,
+            opscope_core::application::ConnectionValidationFailure::InvalidCredentials,
         ) => StatusCode::UNAUTHORIZED,
         ListWorkflowsFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::PermissionDenied,
+            opscope_core::application::ConnectionValidationFailure::PermissionDenied,
         ) => StatusCode::FORBIDDEN,
         ListWorkflowsFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::RateLimited,
+            opscope_core::application::ConnectionValidationFailure::RateLimited,
         ) => StatusCode::TOO_MANY_REQUESTS,
         ListWorkflowsFailure::Source(
-            opsscope_core::application::ConnectionValidationFailure::InvalidConfiguration
-            | opsscope_core::application::ConnectionValidationFailure::ProviderUnavailable
-            | opsscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
+            opscope_core::application::ConnectionValidationFailure::InvalidConfiguration
+            | opscope_core::application::ConnectionValidationFailure::ProviderUnavailable
+            | opscope_core::application::ConnectionValidationFailure::UnexpectedResponse,
         ) => StatusCode::BAD_GATEWAY,
         ListWorkflowsFailure::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
     };

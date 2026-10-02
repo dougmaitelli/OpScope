@@ -31,7 +31,7 @@ pub const AUTH_LOGIN_PATH: &str = "/api/auth/login";
 pub const AUTH_CALLBACK_PATH: &str = "/api/auth/callback";
 pub const AUTH_LOGOUT_PATH: &str = "/api/auth/logout";
 pub const CSRF_HEADER: &str = "x-csrf-token";
-pub const SESSION_ERROR_HEADER: &str = "x-opsscope-session-error";
+pub const SESSION_ERROR_HEADER: &str = "x-opscope-session-error";
 
 const LOGIN_LIFETIME: Duration = Duration::from_secs(10 * 60);
 
@@ -118,17 +118,17 @@ impl WebAuthentication {
 
     fn session_cookie_name(&self) -> &'static str {
         if self.secure_cookies {
-            "__Host-opsscope-session"
+            "__Host-opscope-session"
         } else {
-            "opsscope-session"
+            "opscope-session"
         }
     }
 
     fn login_cookie_name(&self) -> &'static str {
         if self.secure_cookies {
-            "__Host-opsscope-oidc"
+            "__Host-opscope-oidc"
         } else {
-            "opsscope-oidc"
+            "opscope-oidc"
         }
     }
 
@@ -423,7 +423,7 @@ fn safe_return_to(value: Option<&str>) -> String {
     }) else {
         return "/".to_owned();
     };
-    let Ok(base) = reqwest::Url::parse("https://opsscope.invalid/") else {
+    let Ok(base) = reqwest::Url::parse("https://opscope.invalid/") else {
         return "/".to_owned();
     };
     let Ok(destination) = base.join(value) else {

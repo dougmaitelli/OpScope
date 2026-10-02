@@ -34,7 +34,7 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "npm run build --workspace @opsscope/web && npm exec --workspace @opsscope/web -- vite preview --host 127.0.0.1 --port 1430 --strictPort",
+      "npm run build --workspace @opscope/web && npm exec --workspace @opscope/web -- vite preview --host 127.0.0.1 --port 1430 --strictPort",
     url: "http://127.0.0.1:1430",
     reuseExistingServer: false,
     timeout: 120_000,

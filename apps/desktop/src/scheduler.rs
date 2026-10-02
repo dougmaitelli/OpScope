@@ -1,4 +1,4 @@
-use opsscope_core::application::{
+use opscope_core::application::{
     DEFAULT_SYNCHRONIZATION_INTERVAL, GetMonitoringSettings, SynchronizeSources,
 };
 use std::sync::Mutex;

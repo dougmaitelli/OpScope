@@ -26,13 +26,13 @@ describe("HTTP session expiration", () => {
       async () =>
         new Response(null, {
           status: 401,
-          headers: { "x-opsscope-session-error": "unauthenticated" },
+          headers: { "x-opscope-session-error": "unauthenticated" },
         }),
     );
 
     await expect(client.listWorkflows()).rejects.toThrow("401");
     expect(dispatch).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ type: "opsscope:unauthorized" }),
+      expect.objectContaining({ type: "opscope:unauthorized" }),
     );
   });
 
@@ -45,7 +45,7 @@ describe("HTTP session expiration", () => {
       async () =>
         new Response(null, {
           status,
-          headers: { "x-opsscope-session-error": marker },
+          headers: { "x-opscope-session-error": marker },
         }),
     );
 

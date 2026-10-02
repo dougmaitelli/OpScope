@@ -1,4 +1,4 @@
-use opsscope_core::application::{
+use opscope_core::application::{
     ActivityEventRepository, CheckForUpdates, ConnectSource, ConnectionRepository,
     DisconnectSource, GetChangeRequestDetails, GetIssueDetails, GetMonitoringSettings,
     GetWorkflowRunLogs, ListActivity, ListChangeRequests, ListIssues, ListRepositories,
@@ -6,7 +6,7 @@ use opsscope_core::application::{
     SaveRepositorySelection, SecretStore, SettingsRepository, SourceActions, SourceRegistry,
     SynchronizeSources, TrackWorkItemActivity, UpdateMonitoringSettings,
 };
-use opsscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
+use opscope_core::source_data::{ReadThroughSourceData, SourceDataCache, SourceDataCachePolicy};
 use std::sync::Arc;
 
 pub(crate) struct DesktopState {
@@ -38,7 +38,7 @@ pub(crate) struct DesktopStateDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
-    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
+    pub work_item_notifications: Option<opscope_core::application::NotifyWorkItems>,
 }
 
 impl DesktopState {

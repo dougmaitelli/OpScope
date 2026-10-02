@@ -1,13 +1,13 @@
 # Architecture
 
-OpsScope has one Rust application core and two delivery shells. Desktop and
+OpScope has one Rust application core and two delivery shells. Desktop and
 self-hosted editions share a React/TypeScript frontend, generated contracts,
 and application behavior; neither edition depends on the other.
 
 ## Structure and boundaries
 
 ```text
-crates/opsscope-core/src/
+crates/opscope-core/src/
   domain/          Provider-independent types
   application/     Use cases, ports, caching, synchronization, notifications
   contracts/       Transport DTOs and generated client definitions

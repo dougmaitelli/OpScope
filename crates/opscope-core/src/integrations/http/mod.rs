@@ -22,7 +22,7 @@ pub(super) fn client() -> Result<Client, Failure> {
     Client::builder()
         .timeout(Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("OpsScope/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("OpScope/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|_| Failure::ProviderUnavailable)
 }

@@ -17,10 +17,9 @@ use crate::keyring::KeyringSecretStore;
 use crate::notifications::DesktopNotificationSink;
 use crate::scheduler::SynchronizationScheduler;
 use crate::state::{DesktopState, DesktopStateDependencies};
-use opsscope_core::application::NotifyRepositoryFailures;
-use opsscope_core::integrations::registered_sources;
-use opsscope_core::persistence::SqliteDatabase;
-use std::fs;
+use opscope_core::application::NotifyRepositoryFailures;
+use opscope_core::integrations::registered_sources;
+use opscope_core::persistence::{SqliteDatabase, prepare_database_path};
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -30,12 +29,15 @@ fn main() {
         .setup(|app| {
             tray::setup(app)?;
             let data_dir = app.path().app_data_dir()?;
-            fs::create_dir_all(&data_dir)?;
-            let database = Arc::new(SqliteDatabase::open(data_dir.join("opsscope.sqlite3"))?);
+            let legacy_data_dir = data_dir.with_file_name("dev.opsscope.desktop");
+            let database = Arc::new(SqliteDatabase::open(prepare_database_path(
+                &data_dir,
+                Some(&legacy_data_dir),
+            )?)?);
             let sources = registered_sources()?;
             let secrets = Arc::new(KeyringSecretStore);
             let notification_sink = Arc::new(DesktopNotificationSink::new(app.handle().clone()));
-            let work_item_notifications = Some(opsscope_core::application::NotifyWorkItems::new(
+            let work_item_notifications = Some(opscope_core::application::NotifyWorkItems::new(
                 database.clone(),
                 database.clone(),
                 database.clone(),

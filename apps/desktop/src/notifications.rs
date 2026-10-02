@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use opsscope_core::application::{Notification, NotificationDeliveryFailure, NotificationSink};
+use opscope_core::application::{Notification, NotificationDeliveryFailure, NotificationSink};
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 

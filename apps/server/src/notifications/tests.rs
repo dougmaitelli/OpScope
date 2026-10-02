@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 
 #[test]
 fn requires_an_http_endpoint() {
-    assert!(AppriseNotificationSink::new("https://apprise.test/notify/opsscope").is_ok());
+    assert!(AppriseNotificationSink::new("https://apprise.test/notify/opscope").is_ok());
     assert!(AppriseNotificationSink::new("ftp://apprise.test/notify").is_err());
     assert!(AppriseNotificationSink::new("not a url").is_err());
 }
@@ -32,16 +32,16 @@ fn serializes_the_apprise_failure_contract_without_tags() {
 
 #[test]
 fn parses_comma_separated_tags_and_ignores_empty_entries() {
-    let sink = AppriseNotificationSink::new("https://apprise.test/notify/opsscope")
+    let sink = AppriseNotificationSink::new("https://apprise.test/notify/opscope")
         .expect("valid endpoint")
-        .with_tags(" opsscope, , alerts,, ");
-    assert_eq!(sink.tags, ["opsscope", "alerts"]);
+        .with_tags(" opscope, , alerts,, ");
+    assert_eq!(sink.tags, ["opscope", "alerts"]);
 }
 
 #[test]
 fn empty_or_whitespace_tags_leave_routing_unfiltered() {
     for tags in ["", "   ", " , , "] {
-        let sink = AppriseNotificationSink::new("https://apprise.test/notify/opsscope")
+        let sink = AppriseNotificationSink::new("https://apprise.test/notify/opscope")
             .expect("valid endpoint")
             .with_tags(tags);
         assert!(sink.tags.is_empty());
@@ -53,7 +53,7 @@ async fn captured_payload(severity: NotificationSeverity) -> Value {
     let address = listener.local_addr().expect("address");
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
     let router = Router::new().route(
-        "/notify/opsscope",
+        "/notify/opscope",
         post(move |Json(payload): Json<Value>| {
             let sender = sender.clone();
             async move {
@@ -63,9 +63,9 @@ async fn captured_payload(severity: NotificationSeverity) -> Value {
         }),
     );
     let server = tokio::spawn(async move { axum::serve(listener, router).await });
-    let sink = AppriseNotificationSink::new(&format!("http://{address}/notify/opsscope"))
+    let sink = AppriseNotificationSink::new(&format!("http://{address}/notify/opscope"))
         .expect("valid endpoint")
-        .with_tags(" opsscope, alerts, ");
+        .with_tags(" opscope, alerts, ");
     let result = sink
         .send(&Notification {
             title: "Workflow failed".to_owned(),
@@ -88,7 +88,7 @@ async fn sends_routing_tags_in_the_notification_request() {
             "body": "Build",
             "type": "failure",
             "format": "text",
-            "tag": ["opsscope", "alerts"]
+            "tag": ["opscope", "alerts"]
         })
     );
 }
@@ -97,5 +97,5 @@ async fn sends_routing_tags_in_the_notification_request() {
 async fn work_item_notifications_are_informational_and_keep_routing_tags() {
     let payload = captured_payload(NotificationSeverity::Info).await;
     assert_eq!(payload["type"], "info");
-    assert_eq!(payload["tag"], json!(["opsscope", "alerts"]));
+    assert_eq!(payload["tag"], json!(["opscope", "alerts"]));
 }

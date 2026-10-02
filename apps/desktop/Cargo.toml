@@ -1,5 +1,5 @@
 [package]
-name = "opsscope-desktop"
+name = "opscope-desktop"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,7 @@ tauri-build.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-opsscope-core.workspace = true
+opscope-core.workspace = true
 keyring = "4.2.0"
 tauri.workspace = true
 tauri-plugin-notification.workspace = true

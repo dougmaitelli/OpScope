@@ -1,5 +1,5 @@
 [package]
-name = "opsscope-server"
+name = "opscope-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 base64.workspace = true
-opsscope-core.workspace = true
+opscope-core.workspace = true
 getrandom.workspace = true
 openidconnect.workspace = true
 reqwest.workspace = true

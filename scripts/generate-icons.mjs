@@ -12,10 +12,10 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = join(repositoryRoot, "assets", "opsscope-logo.png");
+const source = join(repositoryRoot, "assets", "opscope-logo.png");
 const desktopIcons = join(repositoryRoot, "apps", "desktop", "icons");
-const webIcon = join(repositoryRoot, "apps", "web", "public", "opsscope-logo.png");
-const generatedIcons = mkdtempSync(join(tmpdir(), "opsscope-icons-"));
+const webIcon = join(repositoryRoot, "apps", "web", "public", "opscope-logo.png");
+const generatedIcons = mkdtempSync(join(tmpdir(), "opscope-icons-"));
 const tauri = join(
   repositoryRoot,
   "node_modules",
@@ -54,4 +54,4 @@ const generatedWebIcon = join(generatedIcons, "128x128@2x.png");
 if (!filesMatch(generatedWebIcon, webIcon)) copyFileSync(generatedWebIcon, webIcon);
 
 rmSync(generatedIcons, { recursive: true, force: true });
-console.log("Generated desktop icons and web favicon from assets/opsscope-logo.png");
+console.log("Generated desktop icons and web favicon from assets/opscope-logo.png");

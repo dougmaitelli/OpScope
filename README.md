@@ -1,23 +1,23 @@
-# OpsScope
+# OpScope
 
 <p align="center">
-  <img src="assets/opsscope-logo.png" alt="OpsScope logo" width="256" height="256">
+  <img src="assets/opscope-logo.png" alt="OpScope logo" width="256" height="256">
 </p>
 
 An operational dashboard for your repositories: see failing workflows, pull
 requests that need attention, and open issues in one place. Run it on your
 desktop or host it yourself.
 
-## Why OpsScope?
+## Why OpScope?
 
 Following work across repositories means switching between Actions pages,
 pull request lists, and issue trackers just to answer “what needs my attention?”
-OpsScope brings those signals together in a compact, project-grouped view.
+OpScope brings those signals together in a compact, project-grouped view.
 
 It complements your source platform rather than replacing it. Inspect status,
 activity, and run logs here; open the original page when you need to act.
 Credentials and cached data stay on your machine or server, with no
-OpsScope-hosted service required.
+OpScope-hosted service required.
 
 GitHub, GitLab, Gitea, and Bitbucket Cloud connect through the same source-module
 architecture. Available features depend on the provider; see [Sources](#sources).
@@ -82,11 +82,11 @@ for the screenshot update task and UI validation workflow.
 ### Desktop
 
 Download your platform's asset from
-[Releases](https://github.com/dougmaitelli/OpsScope/releases).
+[Releases](https://github.com/dougmaitelli/OpScope/releases).
 
 | Platform | Download and run |
 | --- | --- |
-| macOS (Apple Silicon and Intel) | Open the universal `.dmg`, drag OpsScope.app to Applications, and open it. |
+| macOS (Apple Silicon and Intel) | Open the universal `.dmg`, drag OpScope.app to Applications, and open it. |
 | Windows x86-64 | Run the portable `.exe`. |
 | Linux x86-64 | Make the `.AppImage` executable and run it, or use the raw binary with its system dependencies installed. |
 
@@ -104,16 +104,16 @@ Save this as `compose.yaml`:
 
 ```yaml
 services:
-  opsscope:
-    image: ghcr.io/dougmaitelli/opsscope:latest
+  opscope:
+    image: ghcr.io/dougmaitelli/opscope:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:4317:4317"
     volumes:
-      - opsscope-data:/data
+      - opscope-data:/data
 
 volumes:
-  opsscope-data:
+  opscope-data:
 ```
 
 Run `docker compose up -d`, then open **http://127.0.0.1:4317** and connect
@@ -144,7 +144,7 @@ GitHub.com uses REST API version `2026-03-10`; Enterprise Server connections use
 
 Outbound HTTPS uses the operating system's certificate trust store. Install
 your organization's CA certificates on the machine running the desktop app or
-server, then restart OpsScope. In Docker, certificates must be trusted inside
+server, then restart OpScope. In Docker, certificates must be trusted inside
 the container; the host's trust store is not inherited. A custom PEM CA bundle
 can be supplied with `SSL_CERT_FILE`; it replaces the default trust roots, so
 include any public roots your connections also need.
@@ -180,7 +180,7 @@ on August 20, 2026.
 GitLab and Bitbucket display one pipeline stream per repository; Gitea displays
 individual Actions workflows. Run history is bounded to the latest 100 runs
 fetched per repository. Timing and actor information can be absent when the
-provider's list API does not supply it; OpsScope does not substitute fetch time
+provider's list API does not supply it; OpScope does not substitute fetch time
 for execution time. Bitbucket Data Center and app passwords are not supported.
 
 For Bitbucket Cloud, grant the API token **`read:user:bitbucket`**,
@@ -192,7 +192,7 @@ workspace slug from its URL, not its display name.
 For a GitHub fine-grained token, grant access to the selected repositories and read
 access to **Metadata, Actions, Pull requests, Issues, Checks, and Commit
 statuses**. A classic token with **repo** scope is also supported; it grants
-broader permissions than OpsScope uses. Organization token approval and access
+broader permissions than OpScope uses. Organization token approval and access
 policies still apply.
 
 ### Workflow and PR actions
@@ -236,15 +236,15 @@ disables merging rather than assuming it is safe.
 Merging requires a separate confirmation and rechecks the current revision.
 GitLab uses its project/MR merge settings without overriding squashing. Gitea uses
 the repository's default merge style, and Bitbucket uses the target branch's
-default merge strategy. When those defaults are unset, OpsScope requests squash.
-GitHub has no repository-default merge method exposed by this API, so OpsScope
+default merge strategy. When those defaults are unset, OpScope requests squash.
+GitHub has no repository-default merge method exposed by this API, so OpScope
 requests squash. If the selected strategy is disallowed, use the provider UI;
-OpsScope does not retry with a different strategy. A failed settings lookup does
-not trigger a squash fallback. OpsScope does not request force-merge, auto-merge, or source-branch
+OpScope does not retry with a different strategy. A failed settings lookup does
+not trigger a squash fallback. OpScope does not request force-merge, auto-merge, or source-branch
 deletion; provider-side automatic cleanup settings can still apply.
 
 GitHub, GitLab, and Gitea enforce the expected head commit in the merge request.
-Bitbucket's merge API has no equivalent atomic revision guard: OpsScope checks
+Bitbucket's merge API has no equivalent atomic revision guard: OpScope checks
 both branch revisions immediately beforehand, but a concurrent push can still
 be included. The confirmation calls out this limitation. Bitbucket merge queues
 must be handled in the provider UI.
@@ -263,12 +263,12 @@ directory must be writable by the container user.
 For remote access, put an HTTPS reverse proxy in front of the service and
 configure OIDC below, or provide an equivalent trusted access boundary.
 Proxy the entire site, including `/api`, at the root of its public origin.
-A proxy in another container should reach `opsscope:4317` over a shared Docker
+A proxy in another container should reach `opscope:4317` over a shared Docker
 network; the host's loopback mapping is not that container's loopback.
 
 Use a version tag such as `:v0.3.1` instead of `:latest` for controlled upgrades.
 
-For unreleased changes, use `ghcr.io/dougmaitelli/opsscope:dev`. This rolling
+For unreleased changes, use `ghcr.io/dougmaitelli/opscope:dev`. This rolling
 development image is published after checks pass on pushes to `master`; it may be
 less stable than a release.
 
@@ -279,16 +279,16 @@ service's `environment` section. They are not desktop settings.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPSSCOPE_BIND_ADDRESS` | `127.0.0.1:4317`; container: `0.0.0.0:4317` | HTTP listening address. |
-| `OPSSCOPE_DATA_DIR` | `.opsscope-data`; container: `/data` | SQLite database and default encryption-key directory. |
-| `OPSSCOPE_MASTER_KEY_FILE` | `<data directory>/master.key` | Raw 32-byte credential-encryption key file; created if absent. |
-| `OPSSCOPE_APPRISE_URL` | Unset (delivery disabled) | Apprise HTTP(S) notification endpoint. |
-| `OPSSCOPE_APPRISE_TAGS` | Unset (no tag filter) | Comma-separated Apprise routing tags. |
-| `OPSSCOPE_PUBLIC_URL` | Unset | Browser-visible origin, required with OIDC. |
-| `OPSSCOPE_OIDC_ISSUER` | Unset | OIDC discovery issuer URL. |
-| `OPSSCOPE_OIDC_CLIENT_ID` | Unset | Confidential OIDC client ID. |
-| `OPSSCOPE_OIDC_CLIENT_SECRET` | Unset | Confidential OIDC client secret. |
-| `OPSSCOPE_OIDC_ALLOWED_SUBJECTS` | Unset | Optional comma-separated allowed `sub` values. |
+| `OPSCOPE_BIND_ADDRESS` | `127.0.0.1:4317`; container: `0.0.0.0:4317` | HTTP listening address. |
+| `OPSCOPE_DATA_DIR` | `.opscope-data`; container: `/data` | SQLite database and default encryption-key directory. |
+| `OPSCOPE_MASTER_KEY_FILE` | `<data directory>/master.key` | Raw 32-byte credential-encryption key file; created if absent. |
+| `OPSCOPE_APPRISE_URL` | Unset (delivery disabled) | Apprise HTTP(S) notification endpoint. |
+| `OPSCOPE_APPRISE_TAGS` | Unset (no tag filter) | Comma-separated Apprise routing tags. |
+| `OPSCOPE_PUBLIC_URL` | Unset | Browser-visible origin, required with OIDC. |
+| `OPSCOPE_OIDC_ISSUER` | Unset | OIDC discovery issuer URL. |
+| `OPSCOPE_OIDC_CLIENT_ID` | Unset | Confidential OIDC client ID. |
+| `OPSCOPE_OIDC_CLIENT_SECRET` | Unset | Confidential OIDC client secret. |
+| `OPSCOPE_OIDC_ALLOWED_SUBJECTS` | Unset | Optional comma-separated allowed `sub` values. |
 
 ### Optional OIDC authentication
 
@@ -303,15 +303,15 @@ Add this to the Compose service:
 
 ```yaml
     environment:
-      OPSSCOPE_PUBLIC_URL: https://ops.example.com
-      OPSSCOPE_OIDC_ISSUER: https://identity.example.com/your-issuer
-      OPSSCOPE_OIDC_CLIENT_ID: opsscope
-      OPSSCOPE_OIDC_CLIENT_SECRET: ${OPSSCOPE_OIDC_CLIENT_SECRET:?Set the OIDC client secret}
-      OPSSCOPE_OIDC_ALLOWED_SUBJECTS: your-subject-id
+      OPSCOPE_PUBLIC_URL: https://ops.example.com
+      OPSCOPE_OIDC_ISSUER: https://identity.example.com/your-issuer
+      OPSCOPE_OIDC_CLIENT_ID: opscope
+      OPSCOPE_OIDC_CLIENT_SECRET: ${OPSCOPE_OIDC_CLIENT_SECRET:?Set the OIDC client secret}
+      OPSCOPE_OIDC_ALLOWED_SUBJECTS: your-subject-id
 ```
 
 Supply the secret through your deployment environment; do not commit it.
-OpsScope uses authorization-code flow with PKCE. The public URL must be an
+OpScope uses authorization-code flow with PKCE. The public URL must be an
 origin without a path, and HTTPS is required except on loopback.
 
 OIDC is disabled when issuer, client ID, and client secret are all unset or
@@ -326,23 +326,23 @@ credentials. The source token owner—not the OIDC login—defines “me.”
 
 ### Apprise notifications
 
-Set `OPSSCOPE_APPRISE_URL` to a reachable Apprise API notification endpoint,
-for example `http://apprise:8000/notify/opsscope`. Configure destinations and
-their credentials in Apprise, not in OpsScope. OpsScope sends a notification
+Set `OPSCOPE_APPRISE_URL` to a reachable Apprise API notification endpoint,
+for example `http://apprise:8000/notify/opscope`. Configure destinations and
+their credentials in Apprise, not in OpScope. OpScope sends a notification
 payload to that endpoint; it does not run Apprise for you.
 Leave the variable unset to disable delivery.
 
 To route notifications to tagged destinations in your Apprise configuration,
-set `OPSSCOPE_APPRISE_TAGS`. For example, in the Compose service:
+set `OPSCOPE_APPRISE_TAGS`. For example, in the Compose service:
 
 ```yaml
     environment:
-      OPSSCOPE_APPRISE_URL: http://apprise:8000/notify/opsscope
-      OPSSCOPE_APPRISE_TAGS: opsscope,alerts
+      OPSCOPE_APPRISE_URL: http://apprise:8000/notify/opscope
+      OPSCOPE_APPRISE_TAGS: opscope,alerts
 ```
 
 Whitespace around tags and empty entries are ignored. When unset or blank,
-OpsScope sends no tag filter, preserving the endpoint's default routing.
+OpScope sends no tag filter, preserving the endpoint's default routing.
 Tags alone do not enable notifications; the endpoint must also be configured.
 
 Choose notification events in **Settings → Notifications**:
@@ -373,7 +373,7 @@ a failed delivery is logged but not automatically retried.
 
 Desktop metadata lives in the application's OS data directory, and tokens live
 in the OS keychain. The server stores metadata and encrypted tokens in
-`opsscope.sqlite3`, using `master.key` by default.
+`opscope.sqlite3`, using `master.key` by default.
 
 Persist the entire server data directory. For a simple consistent backup,
 stop the container and back up the volume **and its encryption key** before
@@ -382,7 +382,7 @@ Losing the key makes stored tokens unreadable; replacing it is not a key
 rotation procedure.
 
 For stronger separation, mount a raw 32-byte key file and set
-`OPSSCOPE_MASTER_KEY_FILE` to its path. It must be readable by the server user
+`OPSCOPE_MASTER_KEY_FILE` to its path. It must be readable by the server user
 and, on Unix, grant no group or world permissions. A separate mount is not
 enforced: the generated default key works in deployed containers too.
 Encryption protects a database-only disclosure, not a compromised host or a

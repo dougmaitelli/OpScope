@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const LATEST_RELEASE_API_URL: &str =
-    "https://api.github.com/repos/dougmaitelli/OpsScope/releases/latest";
+    "https://api.github.com/repos/dougmaitelli/OpScope/releases/latest";
 const UPDATE_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -132,7 +132,7 @@ impl ReleaseProvider for GithubReleaseProvider {
             .client
             .get(LATEST_RELEASE_API_URL)
             .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-            .header(reqwest::header::USER_AGENT, "OpsScope update checker")
+            .header(reqwest::header::USER_AGENT, "OpScope update checker")
             .timeout(UPDATE_REQUEST_TIMEOUT)
             .send()
             .await

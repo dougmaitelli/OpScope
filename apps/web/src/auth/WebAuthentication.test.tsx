@@ -64,7 +64,7 @@ describe("WebAuthentication", () => {
     );
     expect(await screen.findByText("Workflows")).toBeInTheDocument();
     act(() => {
-      globalThis.dispatchEvent(new Event("opsscope:unauthorized"));
+      globalThis.dispatchEvent(new Event("opscope:unauthorized"));
     });
     expect(screen.getByText("Workflows")).toBeInTheDocument();
   });
@@ -110,7 +110,7 @@ describe("WebAuthentication", () => {
       async () =>
         new Response(null, {
           status: 401,
-          headers: { "x-opsscope-session-error": "unauthenticated" },
+          headers: { "x-opscope-session-error": "unauthenticated" },
         }),
     );
     await act(async () => {

@@ -16,11 +16,11 @@ use handlers::{
     save_repository_selection, synchronization_status, synchronize_sources, update_settings,
     update_status, workflow_run_logs,
 };
-use opsscope_core::application::{
+use opscope_core::application::{
     ActivityEventRepository, ConnectionRepository, GetMonitoringSettings, NotifyRepositoryFailures,
     RepositorySelectionRepository, SecretStore, SettingsRepository, SourceRegistry,
 };
-use opsscope_core::contracts::{
+use opscope_core::contracts::{
     ACTION_OPTIONS_HTTP_PATH, ACTIVITY_HTTP_PATH, CHANGE_REQUEST_DETAILS_HTTP_PATH,
     CHANGE_REQUESTS_HTTP_PATH, CONNECTIONS_HTTP_PATH, EXECUTE_ACTION_HTTP_PATH, HEALTH_HTTP_PATH,
     ISSUE_DETAILS_HTTP_PATH, ISSUES_HTTP_PATH, REPOSITORIES_HTTP_PATH,
@@ -28,14 +28,14 @@ use opsscope_core::contracts::{
     SYNCHRONIZATION_HTTP_PATH, UPDATE_STATUS_HTTP_PATH, WORKFLOW_RUN_LOGS_HTTP_PATH,
     WORKFLOWS_HTTP_PATH,
 };
-use opsscope_core::source_data::SourceDataCache;
+use opscope_core::source_data::SourceDataCache;
 use std::path::Path;
 use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
 
 pub struct ServerApplication {
     pub router: Router,
-    pub synchronizer: opsscope_core::application::SynchronizeSources,
+    pub synchronizer: opscope_core::application::SynchronizeSources,
     pub settings: GetMonitoringSettings,
 }
 
@@ -48,7 +48,7 @@ pub struct ServerDependencies {
     pub settings: Arc<dyn SettingsRepository>,
     pub activity_events: Arc<dyn ActivityEventRepository>,
     pub failure_notifications: NotifyRepositoryFailures,
-    pub work_item_notifications: Option<opsscope_core::application::NotifyWorkItems>,
+    pub work_item_notifications: Option<opscope_core::application::NotifyWorkItems>,
     pub authentication: WebAuthentication,
 }
 

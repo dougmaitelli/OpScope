@@ -259,7 +259,7 @@ fn encrypted_secret_round_trips_without_plaintext_storage() -> Result<(), Box<dy
 #[test]
 fn encrypted_secret_survives_database_and_key_reload() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let database_path = directory.path().join("opsscope.sqlite3");
+    let database_path = directory.path().join("opscope.sqlite3");
     let key_path = directory.path().join("master.key");
     let reference = SecretReference::for_connection("example", "test");
 
@@ -287,7 +287,7 @@ fn encrypted_secret_survives_database_and_key_reload() -> Result<(), Box<dyn std
 fn repository_selection_round_trips_and_is_removed_with_connection()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let database_path = directory.path().join("opsscope.sqlite3");
+    let database_path = directory.path().join("opscope.sqlite3");
     {
         let database = SqliteDatabase::open(&database_path)?;
         database.save(&test_connection())?;

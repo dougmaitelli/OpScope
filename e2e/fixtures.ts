@@ -59,7 +59,7 @@ export const test = base.extend<{
               currentVersion: applicationVersion,
               latestVersion: applicationVersion,
               updateAvailable: false,
-              releaseUrl: "https://github.com/dougmaitelli/OpsScope/releases",
+              releaseUrl: "https://github.com/dougmaitelli/OpScope/releases",
             };
             break;
           case httpRoutes.settings:

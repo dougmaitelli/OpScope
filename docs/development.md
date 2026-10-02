@@ -24,7 +24,7 @@ npm run web:dev
 ```
 
 Open `http://127.0.0.1:1420`. Vite proxies `/api` to the Rust server on
-`127.0.0.1:4317`. The server stores development data in `.opsscope-data/`.
+`127.0.0.1:4317`. The server stores development data in `.opscope-data/`.
 
 For the desktop UI:
 
@@ -54,8 +54,8 @@ with a jsdom environment. Keep tests beside the code they cover as `*.test.ts`
 live in `apps/web/src/test/setup.ts`. Tests are type-checked and linted with the app.
 
 ```sh
-npm test --workspace @opsscope/web
-npm run test:watch --workspace @opsscope/web
+npm test --workspace @opscope/web
+npm run test:watch --workspace @opscope/web
 ```
 
 Prefer accessible roles and labels, user interactions, and observable behavior
@@ -67,7 +67,7 @@ real-browser, layout, or native desktop end-to-end tests.
 Provider adapters also have Rust contract tests against scripted local HTTP
 servers. They verify request authentication, routes, pagination, response mapping,
 and bounded log reads without live provider credentials. Run them with
-`cargo test -p opsscope-core integrations`; the environment must permit binding
+`cargo test -p opscope-core integrations`; the environment must permit binding
 loopback sockets.
 
 ### Browser tests and README screenshots
@@ -89,11 +89,11 @@ debugging, reviewed baseline updates, coverage, and failure reports.
 | `npm run contracts:generate` | Regenerate committed TypeScript DTOs, routes, commands, and the client interface after changing Rust contracts. |
 | `npm run contracts:check` | Detect generated-contract drift. |
 | `npm run desktop:build` | Build a desktop executable without packaging an installer. |
-| `npm run icons:generate` | Regenerate web and desktop icons from `assets/opsscope-logo.png`. |
+| `npm run icons:generate` | Regenerate web and desktop icons from `assets/opscope-logo.png`. |
 
 ## Code organization
 
-The workspace has one shared Rust library, `crates/opsscope-core`, and two
+The workspace has one shared Rust library, `crates/opscope-core`, and two
 executable crates, `apps/server` and `apps/desktop`. The React application in
 `apps/web` is shared by both. See [architecture](architecture.md) for dependency
 boundaries, persistence, and source-module extension points.
@@ -115,4 +115,4 @@ After validation, the release workflow builds:
 - A universal macOS `.dmg` (Apple Silicon and Intel).
 - A Windows x86-64 portable `.exe`.
 - A Linux x86-64 AppImage and raw executable.
-- A `linux/amd64` container at `ghcr.io/dougmaitelli/opsscope`.
+- A `linux/amd64` container at `ghcr.io/dougmaitelli/opscope`.

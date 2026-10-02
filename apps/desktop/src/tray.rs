@@ -5,11 +5,11 @@ use tauri::{App, AppHandle, Manager};
 const MAIN_WINDOW_LABEL: &str = "main";
 
 pub(crate) fn setup(app: &mut App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show OpsScope", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show OpScope", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
-    let mut tray = TrayIconBuilder::with_id("opsscope")
-        .tooltip("OpsScope")
+    let mut tray = TrayIconBuilder::with_id("opscope")
+        .tooltip("OpScope")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

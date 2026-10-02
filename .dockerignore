@@ -1,5 +1,6 @@
 .git
 .github
+.opscope-data
 .opsscope-data
 .env
 *.local

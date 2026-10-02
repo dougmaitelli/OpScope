@@ -41,7 +41,7 @@ const API_VERSION: &str = "2026-03-10";
 // known response format rather than selecting an arbitrary advertised version.
 const ENTERPRISE_API_VERSION: &str = "2022-11-28";
 const ACCEPT_VALUE: &str = "application/vnd.github+json";
-const USER_AGENT: &str = "OpsScope/0.1";
+const USER_AGENT: &str = "OpScope/0.1";
 const REPOSITORIES_PER_PAGE: usize = 100;
 const MAX_REPOSITORY_PAGES: usize = 100;
 const WORKFLOWS_PER_PAGE: usize = 100;

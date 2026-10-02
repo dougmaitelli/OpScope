@@ -102,7 +102,7 @@ export function ConnectionsPage() {
       <PageHeader
         eyebrow="Workspace settings"
         title="Connections"
-        description="Manage the services OpsScope uses to discover monitoring data."
+        description="Manage the services OpScope uses to discover monitoring data."
         actions={
           <button
             className="primary-button compact-button connection-add-button"

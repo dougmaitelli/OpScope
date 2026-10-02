@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpsScope",
+  "productName": "OpScope",
   "version": "0.6.0",
-  "identifier": "dev.opsscope.desktop",
+  "identifier": "dev.opscope.desktop",
   "build": {
     "beforeBuildCommand": "npm --prefix web run build",
     "beforeDevCommand": "npm --prefix web run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpsScope",
+        "title": "OpScope",
         "width": 960,
         "height": 640
       }

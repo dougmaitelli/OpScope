@@ -1,5 +1,5 @@
 {
-  "name": "opsscope-workspace",
+  "name": "opscope-workspace",
   "private": true,
   "version": "0.6.0",
   "workspaces": [
@@ -11,15 +11,15 @@
     "@types/node": "26.6.3"
   },
   "scripts": {
-    "build": "npm run contracts:check && cargo build --workspace && npm run build --workspace @opsscope/web",
-    "check": "npm run contracts:check && cargo fmt --all --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-targets && npm run check --workspace @opsscope/web",
-    "contracts:check": "cargo run --quiet -p opsscope-core --bin export-contracts -- check",
-    "contracts:generate": "cargo run --quiet -p opsscope-core --bin export-contracts -- generate",
+    "build": "npm run contracts:check && cargo build --workspace && npm run build --workspace @opscope/web",
+    "check": "npm run contracts:check && cargo fmt --all --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-targets && npm run check --workspace @opscope/web",
+    "contracts:check": "cargo run --quiet -p opscope-core --bin export-contracts -- check",
+    "contracts:generate": "cargo run --quiet -p opscope-core --bin export-contracts -- generate",
     "desktop:build": "cd apps/desktop && tauri build --no-bundle",
     "desktop:dev": "cd apps/desktop && tauri dev",
     "icons:generate": "node scripts/generate-icons.mjs",
-    "server:dev": "cargo run -p opsscope-server",
-    "web:dev": "npm run dev --workspace @opsscope/web",
+    "server:dev": "cargo run -p opscope-server",
+    "web:dev": "npm run dev --workspace @opscope/web",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:update": "playwright test --update-snapshots",
