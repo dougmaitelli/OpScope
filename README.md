@@ -51,21 +51,28 @@ Editing issues and approving PRs are not supported.
 
 ## Screenshots
 
-### Workflows
-
-![Workflows grouped by repository with run status and history](screenshots/workflows.png)
-
-### Pull requests
-
-![Pull requests with review and check status](screenshots/pull-requests.png)
-
-### Issues
-
-![Issues with labels, assignments, and discussion counts](screenshots/issues.png)
-
-### Activity
-
-![Combined workflow, pull request, and issue activity](screenshots/activity.png)
+<table>
+<tr>
+<td width="50%">
+<a href="screenshots/workflows.png"><img src="screenshots/workflows.png" alt="Workflows grouped by repository with run status and history"></a>
+<p><em>Workflows — latest and previous runs grouped by repository, with running, passed, and failed states.</em></p>
+</td>
+<td width="50%">
+<a href="screenshots/pull-requests.png"><img src="screenshots/pull-requests.png" alt="Pull requests with review and check status"></a>
+<p><em>Pull requests — reviews, checks, and merge readiness across repositories.</em></p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="screenshots/issues.png"><img src="screenshots/issues.png" alt="Issues with labels, assignments, and discussion counts"></a>
+<p><em>Issues — open issues grouped by repository, with labels, assignees, and discussion counts.</em></p>
+</td>
+<td width="50%">
+<a href="screenshots/activity.png"><img src="screenshots/activity.png" alt="Combined workflow, pull request, and issue activity"></a>
+<p><em>Activity — workflow runs, pull request changes, and issue events in one timeline.</em></p>
+</td>
+</tr>
+</table>
 
 Screenshots use demonstration data. See the [browser testing guide](e2e/README.md)
 for the screenshot update task and UI validation workflow.
