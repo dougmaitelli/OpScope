@@ -4,6 +4,12 @@
   <img src="assets/opscope-logo.png" alt="OpScope logo" width="256" height="256">
 </p>
 
+<p align="center">
+  <a href="#desktop"><img src="assets/platforms/macos.svg" alt="macOS: Apple Silicon and Intel"></a>
+  <a href="#desktop"><img src="assets/platforms/windows.svg" alt="Windows: x86-64"></a>
+  <a href="#desktop"><img src="assets/platforms/linux.svg" alt="Linux: x86-64"></a>
+</p>
+
 An operational dashboard for your repositories: see failing workflows, pull
 requests that need attention, and open issues in one place. Run it on your
 desktop or host it yourself.

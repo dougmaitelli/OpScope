@@ -72,7 +72,9 @@ npm run screenshots
 
 scripts/take-screenshots.ts shares fixtures, screen helpers, and rendering setup
 with the regression suite. It exports the four monitoring images referenced in the
-README to screenshots/. Review and commit them when the documented UI changes.
+README to screenshots/, with a macOS-style window frame and transparent padding.
+The frame styling lives in scripts/screenshot-frame.css. Review and commit the
+images when the documented UI changes.
 Documentation export never updates regression baselines; baseline updates never
 export documentation images. CI uploads the HTML report, image differences,
 traces and failure videos as ui-test-report.

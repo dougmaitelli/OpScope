@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="20" role="img" aria-label="Windows: x86-64">
+  <title>Windows: x86-64</title>
+  <defs><clipPath id="rounded"><rect width="144" height="20" rx="3"/></clipPath></defs>
+  <g clip-path="url(#rounded)">
+    <rect width="87" height="20" fill="#555"/>
+    <rect x="87" width="57" height="20" fill="#0078d4"/>
+  </g>
+  <path transform="translate(7 3) scale(.583333)" fill="white" d="M0 0h11v11H0zm13 0h11v11H13zM0 13h11v11H0zm13 0h11v11H13z"/>
+  <g font-family="Verdana,DejaVu Sans,sans-serif" font-size="11" text-anchor="middle">
+    <text x="54.5" y="14" fill="white">Windows</text>
+    <text x="115.5" y="14" fill="white">x86-64</text>
+  </g>
+</svg>
