@@ -104,7 +104,8 @@ boundaries, persistence, and source-module extension points.
 [Release](../.github/workflows/release.yml) runs on `v*` tags and checks that
 the tag matches `Cargo.toml`, `package.json`, and
 `apps/desktop/tauri.conf.json`. Keep corresponding lockfile versions in sync
-when changing versions.
+when changing versions. Release creation also requires the browser integration
+and visual regression tests to pass.
 
 The release job fetches the full Git history and generates notes for the tagged
 release with git-cliff using `cliff.toml`. It sets the draft release body from

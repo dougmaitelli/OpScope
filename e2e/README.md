@@ -56,7 +56,11 @@ generated contracts, fixed dates, locale, timezone, identifiers and data. Tests
 fail on browser exceptions and unexpected API or external requests. Screenshots
 wait for meaningful content, fonts and images, with animations disabled and zero
 differing pixels (Playwright's default per-pixel color threshold). No arbitrary
-sleeps or whole-region masks hide differences.
+sleeps or whole-region masks hide differences. Visual comparisons freeze the sidebar
+version label to the original baseline value (`0.7.0`), so release version bumps
+preserve the same typography and layout without requiring new baselines. A
+separate browser test checks that the real label matches the generated application
+version. Documentation screenshots retain the real version.
 
 Add focused interactions and snapshots when extending the UI. Fixtures should
 model new API contracts explicitly. Passing this suite does not establish backend

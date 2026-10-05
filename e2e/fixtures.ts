@@ -251,3 +251,12 @@ export async function prepareScreenshot(page: Page) {
     );
   });
 }
+
+// Freeze release metadata to the original baseline value, while retaining its
+// typography and layout. Documentation exports use prepareScreenshot instead.
+export async function prepareVisualScreenshot(page: Page) {
+  await prepareScreenshot(page);
+  await page.locator(".sidebar-version > span").evaluate((element) => {
+    element.textContent = "Version 0.7.0";
+  });
+}

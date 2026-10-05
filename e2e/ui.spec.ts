@@ -1,6 +1,20 @@
-import { test, expect, prepareScreenshot } from "./fixtures";
+import {
+  test,
+  expect,
+  prepareVisualScreenshot as prepareScreenshot,
+} from "./fixtures";
 import { screens, openScreen } from "./screens";
-import { httpRoutes } from "../apps/web/src/generated/contracts";
+import {
+  applicationVersion,
+  httpRoutes,
+} from "../apps/web/src/generated/contracts";
+
+test("sidebar displays the current application version", async ({ page }) => {
+  await openScreen(page, screens[0]);
+  await expect(page.locator(".sidebar-version > span")).toHaveText(
+    `Version ${applicationVersion}`,
+  );
+});
 
 for (const screen of screens) {
   test(`${screen.title} layout`, async ({ page }) => {
