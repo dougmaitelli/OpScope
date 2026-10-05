@@ -1,6 +1,7 @@
 use super::{
-    ConnectionRepository, Notification, NotificationProcessingFailure as Failure,
-    NotificationSeverity, NotificationSink, PersistenceFailure, SettingsRepository,
+    ConnectionRepository, Notification, NotificationEvents,
+    NotificationProcessingFailure as Failure, NotificationSeverity, NotificationSink,
+    PersistenceFailure, SettingsRepository, WorkItemEvent, WorkItemKind, WorkItemTransition,
 };
 use crate::domain::{
     ChangeRequest, ChangeRequestReviewStatus, ChangeRequestState, Issue, IssueState, Repository,
@@ -217,13 +218,8 @@ impl NotifyWorkItems {
         }
         self.sink
             .send(&Notification {
-                title: format!(
-                    "{} updates in {}/{}",
-                    events.len(),
-                    repository.owner,
-                    repository.name
-                ),
-                body: events.join("\n"),
+                repository: repository.clone(),
+                events: NotificationEvents::WorkItems(events),
                 severity: NotificationSeverity::Info,
             })
             .await

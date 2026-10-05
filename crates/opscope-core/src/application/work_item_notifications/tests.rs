@@ -279,22 +279,22 @@ fn detects_each_pull_request_transition_and_not_unchanged_observations() {
         1
     );
     for (expected, current) in [
-        ("requests your review", {
+        (WorkItemTransition::ReviewRequested, {
             let mut p = base.clone();
             p.relationships.requested_reviewers.ids.push("42".into());
             p
         }),
-        ("has changes requested", {
+        (WorkItemTransition::ChangesRequested, {
             let mut p = base.clone();
             p.review_status = ChangeRequestReviewStatus::ChangesRequested;
             p
         }),
-        ("merged", {
+        (WorkItemTransition::Merged, {
             let mut p = base.clone();
             p.state = ChangeRequestState::Merged;
             p
         }),
-        ("closed", {
+        (WorkItemTransition::Closed, {
             let mut p = base.clone();
             p.state = ChangeRequestState::Closed;
             p
@@ -307,9 +307,9 @@ fn detects_each_pull_request_transition_and_not_unchanged_observations() {
             "42",
         );
         assert_eq!(events.len(), 1);
-        assert!(events[0].contains(expected));
-        assert!(events[0].contains(&current.title));
-        assert!(events[0].contains(&current.web_url));
+        assert_eq!(events[0].transition, expected);
+        assert_eq!(events[0].title, current.title);
+        assert_eq!(events[0].url, current.web_url);
         assert!(
             transitions::pull_requests(
                 Some(std::slice::from_ref(&current)),
@@ -335,7 +335,7 @@ fn changes_requested_is_detected_after_an_unset_review_decision() {
         "42",
     );
     assert_eq!(events.len(), 1);
-    assert!(events[0].contains("has changes requested"));
+    assert_eq!(events[0].transition, WorkItemTransition::ChangesRequested);
 }
 
 #[test]
@@ -373,7 +373,8 @@ fn detects_issue_open_assignment_close_and_reopen() {
             "42",
             Some("me")
         )[0]
-        .contains("assigned to you")
+        .transition
+            == WorkItemTransition::Assigned
     );
     assert!(
         transitions::issues(
@@ -405,7 +406,8 @@ fn detects_issue_open_assignment_close_and_reopen() {
             "42",
             Some("me")
         )[0]
-        .contains("closed")
+        .transition
+            == WorkItemTransition::Closed
     );
     assert!(
         transitions::issues(
@@ -415,7 +417,8 @@ fn detects_issue_open_assignment_close_and_reopen() {
             "42",
             Some("me")
         )[0]
-        .contains("reopened")
+        .transition
+            == WorkItemTransition::Reopened
     );
 }
 
@@ -557,7 +560,18 @@ async fn groups_events_and_deduplicates_across_restart() {
     {
         let sent = sink.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].body.lines().count(), 2);
+        assert_eq!(sent[0].repository, repository());
+        let NotificationEvents::WorkItems(events) = &sent[0].events else {
+            panic!("expected work items")
+        };
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].kind, WorkItemKind::PullRequest);
+        assert_eq!(events[0].number, 2);
+        assert_eq!(events[0].title, "Change 2");
+        assert_eq!(events[0].url, "https://example.test/pull/2");
+        assert_eq!(events[1].kind, WorkItemKind::Issue);
+        assert_eq!(events[1].number, 2);
+        assert_eq!(events[1].url, "https://example.test/issues/2");
         assert_eq!(sent[0].severity, NotificationSeverity::Info);
     }
     drop(service);
@@ -619,7 +633,11 @@ async fn missing_items_are_retained_until_details_confirm_closure_and_reopen_is_
         )
         .await
         .unwrap();
-    assert!(sink.sent.lock().unwrap()[1].body.contains("reopened"));
+    let sent = sink.sent.lock().unwrap();
+    let NotificationEvents::WorkItems(events) = &sent[1].events else {
+        panic!("expected work items")
+    };
+    assert_eq!(events[0].transition, WorkItemTransition::Reopened);
 }
 
 #[tokio::test]

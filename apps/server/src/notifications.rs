@@ -1,3 +1,5 @@
+mod rendering;
+
 use async_trait::async_trait;
 use opscope_core::application::{
     NoopNotificationSink, Notification, NotificationDeliveryFailure, NotificationSeverity,
@@ -99,6 +101,7 @@ struct AppriseNotification<'a> {
 #[async_trait]
 impl NotificationSink for AppriseNotificationSink {
     async fn send(&self, notification: &Notification) -> Result<(), NotificationDeliveryFailure> {
+        let (title, body) = rendering::render(notification);
         let kind = match notification.severity {
             NotificationSeverity::Failure => "failure",
             NotificationSeverity::Info => "info",
@@ -106,8 +109,8 @@ impl NotificationSink for AppriseNotificationSink {
         self.client
             .post(self.endpoint.clone())
             .json(&AppriseNotification {
-                title: &notification.title,
-                body: &notification.body,
+                title: &title,
+                body: &body,
                 kind,
                 format: "text",
                 tag: &self.tags,

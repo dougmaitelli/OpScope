@@ -1,3 +1,5 @@
+mod rendering;
+
 use async_trait::async_trait;
 use opscope_core::application::{Notification, NotificationDeliveryFailure, NotificationSink};
 use tauri::AppHandle;
@@ -18,11 +20,12 @@ impl DesktopNotificationSink {
 #[async_trait]
 impl NotificationSink for DesktopNotificationSink {
     async fn send(&self, notification: &Notification) -> Result<(), NotificationDeliveryFailure> {
+        let (title, body) = rendering::render(notification);
         self.app
             .notification()
             .builder()
-            .title(&notification.title)
-            .body(&notification.body)
+            .title(&title)
+            .body(&body)
             .show()
             .map_err(|_| NotificationDeliveryFailure)
     }

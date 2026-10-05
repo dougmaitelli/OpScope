@@ -15,7 +15,7 @@ pub(super) fn pull_requests(
     current: &[ChangeRequest],
     settings: &MonitoringSettings,
     account_id: &str,
-) -> Vec<String> {
+) -> Vec<WorkItemEvent> {
     let Some(previous) = previous else {
         return Vec::new();
     };
@@ -30,18 +30,21 @@ pub(super) fn pull_requests(
             continue;
         }
         let old = prior.get(item.id.as_str()).copied();
-        let mut add = |enabled: bool, condition: bool, label: &str| {
+        let mut add = |enabled: bool, condition: bool, transition: WorkItemTransition| {
             if enabled && condition {
-                events.push(format!(
-                    "PR #{} {}: {} — {}",
-                    item.number, label, item.title, item.web_url
-                ));
+                events.push(WorkItemEvent {
+                    kind: WorkItemKind::PullRequest,
+                    transition,
+                    number: item.number,
+                    title: item.title.clone(),
+                    url: item.web_url.clone(),
+                });
             }
         };
         add(
             prefs.pull_request_opened,
             old.is_none() && item.state == ChangeRequestState::Open,
-            "opened",
+            WorkItemTransition::Opened,
         );
         add(
             prefs.pull_request_review_requested,
@@ -49,7 +52,7 @@ pub(super) fn pull_requests(
                 && review_requested(item, account_id) == Some(true)
                 && (old.is_none()
                     || old.is_some_and(|old| review_requested(old, account_id) == Some(false))),
-            "requests your review",
+            WorkItemTransition::ReviewRequested,
         );
         if let Some(old) = old {
             add(
@@ -57,17 +60,17 @@ pub(super) fn pull_requests(
                 item.state == ChangeRequestState::Open
                     && item.review_status == ChangeRequestReviewStatus::ChangesRequested
                     && old.review_status != ChangeRequestReviewStatus::ChangesRequested,
-                "has changes requested",
+                WorkItemTransition::ChangesRequested,
             );
             add(
                 prefs.pull_request_merged,
                 item.state == ChangeRequestState::Merged && old.state != item.state,
-                "merged",
+                WorkItemTransition::Merged,
             );
             add(
                 prefs.pull_request_closed,
                 item.state == ChangeRequestState::Closed && old.state != item.state,
-                "closed",
+                WorkItemTransition::Closed,
             );
         }
     }
@@ -80,7 +83,7 @@ pub(super) fn issues(
     settings: &MonitoringSettings,
     account_id: &str,
     handle: Option<&str>,
-) -> Vec<String> {
+) -> Vec<WorkItemEvent> {
     let Some(previous) = previous else {
         return Vec::new();
     };
@@ -102,34 +105,37 @@ pub(super) fn issues(
             continue;
         }
         let old = prior.get(item.id.as_str()).copied();
-        let mut add = |enabled: bool, condition: bool, label: &str| {
+        let mut add = |enabled: bool, condition: bool, transition: WorkItemTransition| {
             if enabled && condition {
-                events.push(format!(
-                    "Issue #{} {}: {} — {}",
-                    item.number, label, item.title, item.web_url
-                ));
+                events.push(WorkItemEvent {
+                    kind: WorkItemKind::Issue,
+                    transition,
+                    number: item.number,
+                    title: item.title.clone(),
+                    url: item.web_url.clone(),
+                });
             }
         };
         add(
             prefs.issue_opened,
             old.is_none() && item.state == IssueState::Open,
-            "opened",
+            WorkItemTransition::Opened,
         );
         add(
             prefs.issue_assigned,
             item.state == IssueState::Open && assigned(item) && !old.is_some_and(assigned),
-            "assigned to you",
+            WorkItemTransition::Assigned,
         );
         if let Some(old) = old {
             add(
                 prefs.issue_reopened,
                 old.state == IssueState::Closed && item.state == IssueState::Open,
-                "reopened",
+                WorkItemTransition::Reopened,
             );
             add(
                 prefs.issue_closed,
                 old.state == IssueState::Open && item.state == IssueState::Closed,
-                "closed",
+                WorkItemTransition::Closed,
             );
         }
     }

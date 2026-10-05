@@ -68,8 +68,22 @@ async fn captured_payload(severity: NotificationSeverity) -> Value {
         .with_tags(" opscope, alerts, ");
     let result = sink
         .send(&Notification {
-            title: "Workflow failed".to_owned(),
-            body: "Build".to_owned(),
+            repository: opscope_core::domain::Repository {
+                id: "repo".into(),
+                owner: "owner".into(),
+                name: "project".into(),
+                description: None,
+                visibility: opscope_core::domain::RepositoryVisibility::Private,
+                web_url: "https://example.test/owner/project".into(),
+            },
+            events: opscope_core::application::NotificationEvents::WorkflowFailures(vec![
+                opscope_core::application::WorkflowFailureEvent {
+                    workflow_id: "build".into(),
+                    name: "Build".into(),
+                    run_id: Some("run".into()),
+                    attempt: Some(1),
+                },
+            ]),
             severity,
         })
         .await;
@@ -84,7 +98,7 @@ async fn sends_routing_tags_in_the_notification_request() {
     assert_eq!(
         payload,
         json!({
-            "title": "Workflow failed",
+            "title": "Workflow failed in owner/project",
             "body": "Build",
             "type": "failure",
             "format": "text",

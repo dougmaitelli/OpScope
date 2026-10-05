@@ -25,8 +25,9 @@ pub use repositories::*;
 
 pub use notifications::{
     LatestRunNotificationState, NoopNotificationSink, Notification, NotificationDeliveryFailure,
-    NotificationProcessingFailure, NotificationSeverity, NotificationSink,
-    NotificationStateRepository, NotifyRepositoryFailures,
+    NotificationEvents, NotificationProcessingFailure, NotificationSeverity, NotificationSink,
+    NotificationStateRepository, NotifyRepositoryFailures, WorkItemEvent, WorkItemKind,
+    WorkItemTransition, WorkflowFailureEvent,
 };
 pub use run_logs::{GetWorkflowRunLogs, ResolvedWorkflowRunLogs};
 pub use settings::{

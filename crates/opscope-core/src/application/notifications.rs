@@ -13,9 +13,49 @@ pub enum NotificationSeverity {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Notification {
-    pub title: String,
-    pub body: String,
+    pub repository: Repository,
+    pub events: NotificationEvents,
     pub severity: NotificationSeverity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NotificationEvents {
+    WorkItems(Vec<WorkItemEvent>),
+    WorkflowFailures(Vec<WorkflowFailureEvent>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkItemEvent {
+    pub kind: WorkItemKind,
+    pub transition: WorkItemTransition,
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkItemKind {
+    PullRequest,
+    Issue,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkItemTransition {
+    Opened,
+    ReviewRequested,
+    ChangesRequested,
+    Merged,
+    Closed,
+    Assigned,
+    Reopened,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowFailureEvent {
+    pub workflow_id: String,
+    pub name: String,
+    pub run_id: Option<String>,
+    pub attempt: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -219,23 +259,19 @@ fn failure_notification(
     repository: &Repository,
     failures: &[(&Workflow, &LatestRunNotificationState)],
 ) -> Notification {
-    let repository_name = format!("{}/{}", repository.owner, repository.name);
-    let title = if failures.len() == 1 {
-        format!("Workflow failed in {repository_name}")
-    } else {
-        format!("{} workflows failed in {repository_name}", failures.len())
-    };
-    let body = failures
-        .iter()
-        .map(|(workflow, state)| match state.attempt {
-            Some(attempt) if attempt > 1 => format!("{} (attempt {attempt})", workflow.name),
-            _ => workflow.name.clone(),
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
     Notification {
-        title,
-        body,
+        repository: repository.clone(),
+        events: NotificationEvents::WorkflowFailures(
+            failures
+                .iter()
+                .map(|(workflow, state)| WorkflowFailureEvent {
+                    workflow_id: workflow.id.clone(),
+                    name: workflow.name.clone(),
+                    run_id: state.run_id.clone(),
+                    attempt: state.attempt,
+                })
+                .collect(),
+        ),
         severity: NotificationSeverity::Failure,
     }
 }

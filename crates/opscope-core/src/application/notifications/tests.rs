@@ -120,7 +120,11 @@ async fn personal_scope_filters_before_aggregation_without_replaying_on_toggle()
     {
         let sent = sink.0.lock().unwrap();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].body, "Build");
+        let NotificationEvents::WorkflowFailures(events) = &sent[0].events else {
+            panic!("expected workflow failures")
+        };
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].name, "Build");
     }
     *settings.0.lock().unwrap() = false;
     notifier
@@ -274,8 +278,17 @@ async fn groups_new_latest_failures_once_per_repository() {
 
     let sent = sink.0.lock().expect("notification lock");
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].title, "2 workflows failed in owner/project");
-    assert_eq!(sent[0].body, "Build, Test");
+    assert_eq!(sent[0].repository, repository);
+    let NotificationEvents::WorkflowFailures(events) = &sent[0].events else {
+        panic!("expected workflow failures")
+    };
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Build", "Test"]
+    );
     assert_eq!(sent[0].severity, NotificationSeverity::Failure);
 }
 
