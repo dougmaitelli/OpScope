@@ -5,7 +5,7 @@ use opscope_core::application::{
 pub(super) fn render(notification: &Notification) -> (String, String) {
     let repository = &notification.repository;
     let repository_name = format!("{}/{}", repository.owner, repository.name);
-    match &notification.events {
+    let (title, body) = match &notification.events {
         NotificationEvents::WorkItems(events) => {
             let title = format!("{} updates in {repository_name}", events.len());
             let body = events
@@ -49,7 +49,8 @@ pub(super) fn render(notification: &Notification) -> (String, String) {
                 .join(", ");
             (title, body)
         }
-    }
+    };
+    (format!("OpScope - {title}"), body)
 }
 
 #[cfg(test)]
@@ -91,7 +92,7 @@ mod tests {
                 url: "https://example.test/issues/7".into(),
             },
         ]));
-        assert_eq!(render(&notification), ("2 updates in owner/project".into(), "PR #42 merged: Fix — login — https://example.test/pull/42\nIssue #7 reopened: Crash — https://example.test/issues/7".into()));
+        assert_eq!(render(&notification), ("OpScope - 2 updates in owner/project".into(), "PR #42 merged: Fix — login — https://example.test/pull/42\nIssue #7 reopened: Crash — https://example.test/issues/7".into()));
     }
 
     #[test]
@@ -107,7 +108,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "Workflow failed in owner/project".into(),
+                "OpScope - Workflow failed in owner/project".into(),
                 "Build (attempt 2)".into()
             )
         );
@@ -123,7 +124,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "2 workflows failed in owner/project".into(),
+                "OpScope - 2 workflows failed in owner/project".into(),
                 "Build (attempt 2), Test".into()
             )
         );
