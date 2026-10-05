@@ -7,7 +7,7 @@ pub(super) fn render(notification: &Notification) -> (String, String) {
     let repository_name = format!("{}/{}", repository.owner, repository.name);
     match &notification.events {
         NotificationEvents::WorkItems(events) => {
-            let title = format!("{} updates in {repository_name}", events.len());
+            let title = format!("🔔 {} updates in {repository_name}", events.len());
             let body = events
                 .iter()
                 .map(|event| {
@@ -32,9 +32,9 @@ pub(super) fn render(notification: &Notification) -> (String, String) {
         }
         NotificationEvents::WorkflowFailures(events) => {
             let title = if events.len() == 1 {
-                format!("Workflow failed in {repository_name}")
+                format!("❌ Workflow failed in {repository_name}")
             } else {
-                format!("{} workflows failed in {repository_name}", events.len())
+                format!("❌ {} workflows failed in {repository_name}", events.len())
             };
             let body = events
                 .iter()
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "2 updates in owner/project".into(),
+                "🔔 2 updates in owner/project".into(),
                 "PR #42 merged: Fix — login\nIssue #7 reopened: Crash".into()
             )
         );
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "Workflow failed in owner/project".into(),
+                "❌ Workflow failed in owner/project".into(),
                 "Build (attempt 2)".into()
             )
         );
@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "2 workflows failed in owner/project".into(),
+                "❌ 2 workflows failed in owner/project".into(),
                 "Build (attempt 2), Test".into()
             )
         );

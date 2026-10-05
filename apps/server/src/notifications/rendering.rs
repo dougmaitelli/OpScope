@@ -7,7 +7,7 @@ pub(super) fn render(notification: &Notification) -> (String, String) {
     let repository_name = format!("{}/{}", repository.owner, repository.name);
     let (title, body) = match &notification.events {
         NotificationEvents::WorkItems(events) => {
-            let title = format!("{} updates in {repository_name}", events.len());
+            let title = format!("🔔 {} updates in {repository_name}", events.len());
             let body = events
                 .iter()
                 .map(|event| {
@@ -35,9 +35,9 @@ pub(super) fn render(notification: &Notification) -> (String, String) {
         }
         NotificationEvents::WorkflowFailures(events) => {
             let title = if events.len() == 1 {
-                format!("Workflow failed in {repository_name}")
+                format!("❌ Workflow failed in {repository_name}")
             } else {
-                format!("{} workflows failed in {repository_name}", events.len())
+                format!("❌ {} workflows failed in {repository_name}", events.len())
             };
             let body = events
                 .iter()
@@ -92,7 +92,7 @@ mod tests {
                 url: "https://example.test/issues/7".into(),
             },
         ]));
-        assert_eq!(render(&notification), ("OpScope - 2 updates in owner/project".into(), "PR #42 merged: Fix — login — https://example.test/pull/42\nIssue #7 reopened: Crash — https://example.test/issues/7".into()));
+        assert_eq!(render(&notification), ("OpScope - 🔔 2 updates in owner/project".into(), "PR #42 merged: Fix — login — https://example.test/pull/42\nIssue #7 reopened: Crash — https://example.test/issues/7".into()));
     }
 
     #[test]
@@ -108,7 +108,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "OpScope - Workflow failed in owner/project".into(),
+                "OpScope - ❌ Workflow failed in owner/project".into(),
                 "Build (attempt 2)".into()
             )
         );
@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(
             render(&notification),
             (
-                "OpScope - 2 workflows failed in owner/project".into(),
+                "OpScope - ❌ 2 workflows failed in owner/project".into(),
                 "Build (attempt 2), Test".into()
             )
         );

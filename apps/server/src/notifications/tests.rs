@@ -98,7 +98,7 @@ async fn sends_routing_tags_in_the_notification_request() {
     assert_eq!(
         payload,
         json!({
-            "title": "OpScope - Workflow failed in owner/project",
+            "title": "OpScope - ❌ Workflow failed in owner/project",
             "body": "Build",
             "type": "failure",
             "format": "text",
