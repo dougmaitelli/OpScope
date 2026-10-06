@@ -42,6 +42,7 @@ impl GitLabClient {
                 )?)
                 .await?;
                 Ok(ActionOptions {
+                    change_request: None,
                     revision: Some(pipeline.updated_at),
                     actions: vec![AvailableAction::new(
                         SourceAction::RerunWorkflow,
@@ -83,6 +84,7 @@ impl GitLabClient {
                     None
                 };
                 Ok(ActionOptions {
+                    change_request: None,
                     revision: Some(mr.sha),
                     actions: vec![
                         AvailableAction::new(

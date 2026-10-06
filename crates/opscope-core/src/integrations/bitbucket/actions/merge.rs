@@ -99,6 +99,7 @@ impl BitbucketClient {
             }
         };
         Ok(ActionOptions {
+            change_request: None,
             revision: Some(format!(
                 "{}:{}",
                 pull.source.commit.hash, pull.destination.commit.hash

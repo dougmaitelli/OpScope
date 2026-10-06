@@ -49,6 +49,7 @@ impl GiteaClient {
                     "completed" | "success" | "failure" | "cancelled" | "skipped"
                 );
                 Ok(ActionOptions {
+                    change_request: None,
                     revision: Some(run.run_attempt.to_string()),
                     actions: vec![AvailableAction::new(
                         SourceAction::RerunWorkflow,
@@ -81,6 +82,7 @@ impl GiteaClient {
                     None
                 };
                 Ok(ActionOptions {
+                    change_request: None,
                     revision: Some(pull.head.sha),
                     actions: vec![
                         AvailableAction::new(

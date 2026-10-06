@@ -62,6 +62,9 @@ pub struct ActionOptions {
     pub actions: Vec<AvailableAction>,
     // Fresh provider revision, never a cached authorization decision.
     pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub change_request: Option<crate::contracts::ChangeRequestSummary>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -215,9 +218,44 @@ impl SourceActions {
     ) -> Result<ActionOptions, ActionFailure> {
         let (connection, module, token, repository) =
             self.resolve(source_id, repository_id).await?;
-        module
+        let change_request = if let ActionTarget::ChangeRequest {
+            number,
+        } = target
+        {
+            let details = self
+                .data
+                .change_request_details(source_id, &repository, *number, RefreshMode::Force)
+                .await
+                .map_err(|failure| match failure {
+                    crate::source_data::SourceDataFailure::Source(failure) => {
+                        ActionFailure::Source(failure)
+                    }
+                    crate::source_data::SourceDataFailure::StorageUnavailable => {
+                        ActionFailure::StorageUnavailable
+                    }
+                })?
+                .ok_or(ActionFailure::NotFound)?;
+            Some(
+                super::DiscoveredChangeRequest {
+                    source: super::ConnectedSource {
+                        id: connection.id.clone(),
+                        account_id: connection.account.external_id.clone(),
+                        descriptor: module.descriptor(),
+                        label: connection.label.clone(),
+                    },
+                    repository: repository.clone(),
+                    change_request: details.change_request,
+                }
+                .into(),
+            )
+        } else {
+            None
+        };
+        let mut options = module
             .action_options(&connection.configuration, &token, &repository, target)
-            .await
+            .await?;
+        options.change_request = change_request;
+        Ok(options)
     }
 
     pub async fn execute(

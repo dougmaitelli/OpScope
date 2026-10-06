@@ -74,6 +74,7 @@ impl GitHubClient {
                 )?)
                 .await?;
                 Ok(ActionOptions {
+                    change_request: None,
                     revision: Some(run.run_attempt.to_string()),
                     actions: vec![AvailableAction::new(
                         SourceAction::RerunWorkflow,
@@ -131,6 +132,7 @@ impl GitHubClient {
                     actions.push(AvailableAction::new(SourceAction::DependabotRecreate, "Dependabot: recreate", "Post @dependabot recreate? This can overwrite manual edits to the PR branch. Dependabot will process the request asynchronously.", closed.then_some("The pull request is closed.")));
                 }
                 Ok(ActionOptions {
+                    change_request: None,
                     actions,
                     revision: Some(pull.head.sha),
                 })

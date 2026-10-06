@@ -21,7 +21,7 @@ describe("multi-provider pull requests", () => {
     "opens grouped %s requests through the shared details dialog",
     async (sourceName) => {
       vi.clearAllMocks();
-      client.actionOptions.mockResolvedValue({
+      const actionOptions = {
         actions: [
           {
             action: "mergeChangeRequest",
@@ -31,7 +31,7 @@ describe("multi-provider pull requests", () => {
           },
         ],
         revision: "head",
-      });
+      };
       const user = userEvent.setup();
       const request: ChangeRequestSummary = {
         id: "42",
@@ -55,6 +55,15 @@ describe("multi-provider pull requests", () => {
         repositoryOwner: "team",
         repositoryName: "project",
       };
+      client.actionOptions.mockResolvedValue({
+        ...actionOptions,
+        changeRequest: {
+          ...request,
+          reviewStatus: "approved",
+          checkStatus: "passed",
+          mergeStatus: "ready",
+        },
+      });
       client.listChangeRequests.mockResolvedValue({
         selectedRepositoryCount: 1,
         changeRequests: [
@@ -133,6 +142,10 @@ describe("multi-provider pull requests", () => {
           level: 2,
         }),
       ).toBeInTheDocument();
+      expect(await within(dialog).findByText("Checks · Passed")).toBeInTheDocument();
+      expect(within(dialog).getByText("Merge · Ready")).toBeInTheDocument();
+      expect(within(row).getByText("Checks passed")).toBeInTheDocument();
+      expect(within(row).getByText("Approved")).toBeInTheDocument();
       expect(within(dialog).getByText("Release notes").tagName).toBe("SUMMARY");
       expect(client.changeRequestDetails).toHaveBeenCalledWith({
         sourceId: "connection-1",

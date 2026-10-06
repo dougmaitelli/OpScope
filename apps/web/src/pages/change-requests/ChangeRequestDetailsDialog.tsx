@@ -154,6 +154,12 @@ export function ChangeRequestDetailsDialog({
           sourceId={changeRequest.sourceId}
           repositoryId={changeRequest.repositoryId}
           target={{ type: "changeRequest", number: changeRequest.number }}
+          onOptionsLoaded={(response) => {
+            if (response.changeRequest) {
+              setChangeRequest(response.changeRequest);
+              onUpdated?.(response.changeRequest);
+            }
+          }}
           onAccepted={(response) => {
             if (response.details) {
               setDetails(response.details);

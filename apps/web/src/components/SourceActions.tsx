@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import { useApplicationClient } from "../api/application-client.tsx";
 import type {
   ActionOptions,
@@ -14,10 +14,12 @@ export function SourceActions({
   repositoryId,
   target,
   onAccepted,
+  onOptionsLoaded,
 }: {
   sourceId: string;
   repositoryId: string;
   target: ActionTarget;
+  onOptionsLoaded?: (options: ActionOptions) => void;
   onAccepted?: (response: ExecuteActionResponse) => void;
 }) {
   const client = useApplicationClient();
@@ -42,6 +44,8 @@ export function SourceActions({
     ),
   ];
 
+  const optionsLoaded = useEffectEvent((response: ActionOptions) => onOptionsLoaded?.(response));
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -52,7 +56,10 @@ export function SourceActions({
     void client
       .actionOptions({ sourceId, repositoryId, target: JSON.parse(targetKey) as ActionTarget })
       .then((response) => {
-        if (active) setOptions(response);
+        if (active) {
+          optionsLoaded(response);
+          setOptions(response);
+        }
       })
       .catch((failure: unknown) => {
         if (active) setError(requestErrorSentence(failure));

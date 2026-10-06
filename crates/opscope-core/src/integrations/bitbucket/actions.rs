@@ -94,6 +94,7 @@ impl BitbucketClient {
             None
         };
         Ok(ActionOptions {
+            change_request: None,
             revision: pipeline.completed_on,
             actions: vec![AvailableAction::new(
                 SourceAction::RerunWorkflow,

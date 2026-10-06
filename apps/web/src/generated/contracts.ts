@@ -92,7 +92,7 @@ export type SourceAction = "rerunWorkflow" | "updateBranch" | "mergeChangeReques
 
 export type AvailableAction = { action: SourceAction, label: string, confirmation: string, disabledReason: string | null, };
 
-export type ActionOptions = { actions: Array<AvailableAction>, revision: string | null, };
+export type ActionOptions = { actions: Array<AvailableAction>, revision: string | null, changeRequest?: ChangeRequestSummary, };
 
 export type ActionOptionsRequest = { sourceId: string, repositoryId: string, target: ActionTarget, };
 
