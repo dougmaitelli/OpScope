@@ -21,6 +21,7 @@ struct MergeRequest {
     detailed_merge_status: String,
     rebase_in_progress: bool,
     draft: Option<bool>,
+    diverged_commits_count: Option<u64>,
 }
 
 impl GitLabClient {
@@ -62,7 +63,10 @@ impl GitLabClient {
                         token,
                         &["projects", &repo.id, "merge_requests", &number.to_string()],
                     )?
-                    .query(&[("include_rebase_in_progress", "true")]),
+                    .query(&[
+                        ("include_rebase_in_progress", "true"),
+                        ("include_diverged_commits_count", "true"),
+                    ]),
                 )
                 .await?;
                 let reason = if mr.state != "opened" {
@@ -91,7 +95,15 @@ impl GitLabClient {
                             SourceAction::UpdateBranch,
                             "Rebase branch",
                             "Rebase the source branch onto the latest target branch? This rewrites source-branch commits; it does not merge or approve the merge request.",
-                            reason,
+                            reason.or(match mr.diverged_commits_count {
+                                Some(0) => {
+                                    Some("The branch is already up to date with the target branch.")
+                                }
+                                Some(_) => None,
+                                None => Some(
+                                    "GitLab has not confirmed whether the branch needs rebasing.",
+                                ),
+                            }),
                         ),
                         AvailableAction::new(
                             SourceAction::MergeChangeRequest,

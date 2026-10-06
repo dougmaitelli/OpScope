@@ -313,9 +313,14 @@ async fn dependabot_commands_require_bot_identity_and_use_only_allowlisted_comme
         let mut exchanges = vec![Exchange::json(
             "/api/v3/repos/team/app/pulls/7",
             auth,
-            json!({"state":"open","merged":false,"mergeable":false,"head":{"sha":"abc"},"user":{"login":"dependabot","type":kind}}),
+            json!({"state":"open","merged":false,"mergeable":false,"head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"dependabot","type":kind}}),
         )];
         if kind == "Bot" {
+            exchanges.push(Exchange::json(
+                "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+                auth,
+                json!({"behind_by":1}),
+            ));
             let mut write =
                 Exchange::json("/api/v3/repos/team/app/issues/7/comments", auth, json!({}));
             write.method = "POST".into();
@@ -691,4 +696,53 @@ async fn branch_update_uses_update_endpoint_not_merge_endpoint() {
         .await
         .unwrap();
     api.finish();
+}
+
+#[tokio::test]
+async fn rebase_is_enabled_only_when_the_branch_is_behind() {
+    for count in [Some(0), Some(2)] {
+        let auth = "authorization: Bearer secret";
+        let mut exchanges = vec![Exchange::json(
+            "/api/v3/repos/team/app/pulls/7",
+            auth,
+            json!({"state":"open","merged":false,"mergeable":true,"draft":false,"mergeable_state":"clean","head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"dependabot[bot]","type":"Bot"}}),
+        )];
+        exchanges.push(Exchange::json(
+            "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+            auth,
+            json!({"behind_by":count.unwrap()}),
+        ));
+        let api = MockApi::start(exchanges);
+        let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+            .into_iter()
+            .collect();
+        let options = GitHubClient::new()
+            .unwrap()
+            .actions(
+                &config,
+                &ProviderToken::new("secret".into()),
+                &relevance_repository(),
+                &ActionTarget::ChangeRequest {
+                    number: 7,
+                },
+            )
+            .await
+            .unwrap();
+        let rebase = options
+            .actions
+            .iter()
+            .find(|a| a.action == SourceAction::DependabotRebase)
+            .unwrap();
+        assert_eq!(
+            rebase.disabled_reason.is_none(),
+            count.is_some_and(|count| count > 0)
+        );
+        let merge = options
+            .actions
+            .iter()
+            .find(|a| a.action == SourceAction::MergeChangeRequest)
+            .unwrap();
+        assert!(merge.disabled_reason.is_none());
+        api.finish();
+    }
 }
