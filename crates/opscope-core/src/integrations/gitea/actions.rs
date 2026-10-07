@@ -15,10 +15,15 @@ struct Pull {
     mergeable: Option<bool>,
     draft: Option<bool>,
     head: Head,
+    base: Option<Head>,
 }
 #[derive(Deserialize)]
 struct Head {
     sha: String,
+}
+#[derive(Deserialize)]
+struct Comparison {
+    total_commits: u64,
 }
 #[derive(Deserialize)]
 struct Run {
@@ -81,6 +86,27 @@ impl GiteaClient {
                 } else {
                     None
                 };
+                let update_reason = if reason.is_some() {
+                    reason
+                } else if let Some(base) = &pull.base {
+                    // Reverse the comparison to count target commits missing from the PR.
+                    let comparison: Comparison = read(self.request(
+                        config,
+                        token,
+                        &[
+                            "repos",
+                            &repo.owner,
+                            &repo.name,
+                            "compare",
+                            &format!("{}...{}", pull.head.sha, base.sha),
+                        ],
+                    )?)
+                    .await?;
+                    (comparison.total_commits == 0)
+                        .then_some("The branch is already up to date with the target branch.")
+                } else {
+                    Some("Gitea has not confirmed whether the branch needs updating.")
+                };
                 Ok(ActionOptions {
                     change_request: None,
                     revision: Some(pull.head.sha),
@@ -89,7 +115,7 @@ impl GiteaClient {
                             SourceAction::UpdateBranch,
                             "Update branch",
                             "Merge the latest target branch into this PR branch? This does not merge or approve the PR.",
-                            reason,
+                            update_reason,
                         ),
                         AvailableAction::new(
                             SourceAction::MergeChangeRequest,

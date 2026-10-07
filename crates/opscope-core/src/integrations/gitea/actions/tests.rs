@@ -185,7 +185,12 @@ async fn branch_update_uses_update_endpoint_not_merge_endpoint() {
         Exchange::json(
             "/api/v1/repos/team/app/pulls/7",
             auth,
-            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"}}),
+            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"base":{"sha":"base"}}),
+        ),
+        Exchange::json(
+            "/api/v1/repos/team/app/compare/abc...base",
+            auth,
+            json!({"total_commits":2}),
         ),
         mutation,
     ]);
@@ -215,4 +220,46 @@ async fn branch_update_uses_update_endpoint_not_merge_endpoint() {
         .await
         .unwrap();
     api.finish();
+}
+
+#[tokio::test]
+async fn branch_updates_require_missing_target_commits() {
+    for count in [None, Some(0), Some(2)] {
+        let auth = "authorization: token secret";
+        let mut exchanges = vec![Exchange::json(
+            "/api/v1/repos/team/app/pulls/7",
+            auth,
+            json!({"state":"open","merged":false,"mergeable":true,"draft":false,
+                   "head":{"sha":"abc"},"base":count.map(|_| json!({"sha":"base"}))}),
+        )];
+        if let Some(count) = count {
+            exchanges.push(Exchange::json(
+                "/api/v1/repos/team/app/compare/abc...base",
+                auth,
+                json!({"total_commits":count}),
+            ));
+        }
+        let api = MockApi::start(exchanges);
+        let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+            .into_iter()
+            .collect();
+        let options = GiteaClient::new()
+            .unwrap()
+            .actions(
+                &config,
+                &ProviderToken::new("secret".into()),
+                &relevance_repository(),
+                &ActionTarget::ChangeRequest {
+                    number: 7,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            options.actions[0].disabled_reason.is_none(),
+            count.is_some_and(|n| n > 0)
+        );
+        assert!(options.actions[1].disabled_reason.is_none());
+        api.finish();
+    }
 }

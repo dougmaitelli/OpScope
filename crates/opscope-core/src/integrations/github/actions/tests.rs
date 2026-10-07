@@ -315,12 +315,12 @@ async fn dependabot_commands_require_bot_identity_and_use_only_allowlisted_comme
             auth,
             json!({"state":"open","merged":false,"mergeable":false,"head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"dependabot","type":kind}}),
         )];
+        exchanges.push(Exchange::json(
+            "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+            auth,
+            json!({"behind_by":1}),
+        ));
         if kind == "Bot" {
-            exchanges.push(Exchange::json(
-                "/api/v3/repos/team/app/compare/base...abc?per_page=1",
-                auth,
-                json!({"behind_by":1}),
-            ));
             let mut write =
                 Exchange::json("/api/v3/repos/team/app/issues/7/comments", auth, json!({}));
             write.method = "POST".into();
@@ -522,7 +522,12 @@ async fn accepted_pr_action_refreshes_only_its_details_and_returns_the_updated_i
         Exchange::json(
             "/api/v3/repos/team/app/pulls/7",
             auth,
-            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"user":{"login":"alice","type":"User"}}),
+            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"alice","type":"User"}}),
+        ),
+        Exchange::json(
+            "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+            auth,
+            json!({"behind_by":2}),
         ),
         mutation,
         Exchange::graphql(
@@ -666,7 +671,12 @@ async fn branch_update_uses_update_endpoint_not_merge_endpoint() {
         Exchange::json(
             "/api/v3/repos/team/app/pulls/7",
             auth,
-            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"user":{"login":"alice","type":"User"}}),
+            json!({"state":"open","merged":false,"mergeable":true,"head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"alice","type":"User"}}),
+        ),
+        Exchange::json(
+            "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+            auth,
+            json!({"behind_by":2}),
         ),
         mutation,
     ]);
@@ -699,50 +709,139 @@ async fn branch_update_uses_update_endpoint_not_merge_endpoint() {
 }
 
 #[tokio::test]
-async fn rebase_is_enabled_only_when_the_branch_is_behind() {
-    for count in [Some(0), Some(2)] {
+async fn branch_updates_are_enabled_only_when_the_branch_is_behind() {
+    for (login, kind) in [
+        ("alice", "User"),
+        ("dependabot", "User"),
+        ("dependabot", "Bot"),
+        ("dependabot[bot]", "Bot"),
+    ] {
+        for count in [None, Some(0), Some(2)] {
+            let auth = "authorization: Bearer secret";
+            let mut exchanges = vec![Exchange::json(
+                "/api/v3/repos/team/app/pulls/7",
+                auth,
+                json!({"state":"open","merged":false,"mergeable":true,"draft":false,"mergeable_state":"clean","head":{"sha":"abc"},"base":count.map(|_| json!({"sha":"base"})),"user":{"login":login,"type":kind}}),
+            )];
+            if let Some(count) = count {
+                exchanges.push(Exchange::json(
+                    "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+                    auth,
+                    json!({"behind_by":count}),
+                ));
+            }
+            let api = MockApi::start(exchanges);
+            let config = [(SERVER_URL_KEY.into(), api.url.clone())]
+                .into_iter()
+                .collect();
+            let options = GitHubClient::new()
+                .unwrap()
+                .actions(
+                    &config,
+                    &ProviderToken::new("secret".into()),
+                    &relevance_repository(),
+                    &ActionTarget::ChangeRequest {
+                        number: 7,
+                    },
+                )
+                .await
+                .unwrap();
+            for action in [SourceAction::UpdateBranch, SourceAction::DependabotRebase] {
+                if action == SourceAction::DependabotRebase && kind != "Bot" {
+                    continue;
+                }
+                let option = options.actions.iter().find(|a| a.action == action).unwrap();
+                if action == SourceAction::UpdateBranch && kind == "Bot" {
+                    assert_eq!(
+                        option.disabled_reason.as_deref(),
+                        Some("Use Dependabot: rebase to update this PR.")
+                    );
+                } else {
+                    assert_eq!(
+                        option.disabled_reason.is_none(),
+                        count.is_some_and(|count| count > 0)
+                    );
+                }
+            }
+            let merge = options
+                .actions
+                .iter()
+                .find(|a| a.action == SourceAction::MergeChangeRequest)
+                .unwrap();
+            assert!(merge.disabled_reason.is_none());
+            api.finish();
+        }
+    }
+}
+
+#[tokio::test]
+async fn core_rejects_up_to_date_updates_without_writing() {
+    for action in [SourceAction::UpdateBranch, SourceAction::DependabotRebase] {
         let auth = "authorization: Bearer secret";
-        let mut exchanges = vec![Exchange::json(
-            "/api/v3/repos/team/app/pulls/7",
-            auth,
-            json!({"state":"open","merged":false,"mergeable":true,"draft":false,"mergeable_state":"clean","head":{"sha":"abc"},"base":{"sha":"base"},"user":{"login":"dependabot[bot]","type":"Bot"}}),
-        )];
-        exchanges.push(Exchange::json(
-            "/api/v3/repos/team/app/compare/base...abc?per_page=1",
-            auth,
-            json!({"behind_by":count.unwrap()}),
-        ));
-        let api = MockApi::start(exchanges);
-        let config = [(SERVER_URL_KEY.into(), api.url.clone())]
-            .into_iter()
-            .collect();
-        let options = GitHubClient::new()
-            .unwrap()
-            .actions(
-                &config,
-                &ProviderToken::new("secret".into()),
-                &relevance_repository(),
-                &ActionTarget::ChangeRequest {
-                    number: 7,
-                },
-            )
-            .await
-            .unwrap();
-        let rebase = options
-            .actions
-            .iter()
-            .find(|a| a.action == SourceAction::DependabotRebase)
-            .unwrap();
+        let api = MockApi::start(vec![
+            Exchange::json(
+                "/api/v3/repos/team/app/pulls/7",
+                auth,
+                json!({"state":"open","merged":false,"mergeable":true,
+                    "head":{"sha":"abc"},"base":{"sha":"base"},
+                    "user":{"login":"dependabot[bot]","type":"Bot"}}),
+            ),
+            Exchange::json(
+                "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+                auth,
+                json!({"behind_by":0}),
+            ),
+        ]);
         assert_eq!(
-            rebase.disabled_reason.is_none(),
-            count.is_some_and(|count| count > 0)
+            action_service(&api)
+                .execute(
+                    "connection",
+                    "3",
+                    &ActionTarget::ChangeRequest {
+                        number: 7
+                    },
+                    action,
+                    Some("abc")
+                )
+                .await,
+            Err(ActionFailure::Conflict)
         );
-        let merge = options
-            .actions
-            .iter()
-            .find(|a| a.action == SourceAction::MergeChangeRequest)
-            .unwrap();
-        assert!(merge.disabled_reason.is_none());
+        api.finish();
+    }
+}
+
+#[tokio::test]
+async fn core_rejects_normal_updates_for_dependabot_without_writing() {
+    for login in ["dependabot", "dependabot[bot]"] {
+        let auth = "authorization: Bearer secret";
+        let api = MockApi::start(vec![
+            Exchange::json(
+                "/api/v3/repos/team/app/pulls/7",
+                auth,
+                json!({"state":"open","merged":false,"mergeable":true,
+                    "head":{"sha":"abc"},"base":{"sha":"base"},
+                    "user":{"login":login,"type":"Bot"}}),
+            ),
+            Exchange::json(
+                "/api/v3/repos/team/app/compare/base...abc?per_page=1",
+                auth,
+                json!({"behind_by":2}),
+            ),
+        ]);
+        assert_eq!(
+            action_service(&api)
+                .execute(
+                    "connection",
+                    "3",
+                    &ActionTarget::ChangeRequest {
+                        number: 7
+                    },
+                    SourceAction::UpdateBranch,
+                    Some("abc")
+                )
+                .await,
+            Err(ActionFailure::Conflict)
+        );
         api.finish();
     }
 }

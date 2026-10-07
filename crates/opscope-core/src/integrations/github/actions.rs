@@ -104,6 +104,8 @@ impl GitHubClient {
                     ],
                 )?)
                 .await?;
+                let dependabot = pull.user.kind == "Bot"
+                    && matches!(pull.user.login.as_str(), "dependabot[bot]" | "dependabot");
                 let closed = pull.state != "open" || pull.merged;
                 let reason = if closed {
                     Some("The pull request is closed.")
@@ -114,11 +116,38 @@ impl GitHubClient {
                 } else {
                     None
                 };
+                let update_reason = if closed {
+                    Some("The pull request is closed.")
+                } else if let Some(base) = &pull.base {
+                    let comparison: Comparison = read(
+                        self.request(
+                            config,
+                            token,
+                            &[
+                                "repos",
+                                &repo.owner,
+                                &repo.name,
+                                "compare",
+                                &format!("{}...{}", base.sha, pull.head.sha),
+                            ],
+                        )?
+                        .query(&[("per_page", "1")]),
+                    )
+                    .await?;
+                    (comparison.behind_by == 0)
+                        .then_some("The branch is already up to date with the target branch.")
+                } else {
+                    Some("GitHub has not confirmed whether the branch needs rebasing.")
+                };
                 let mut actions = vec![AvailableAction::new(
                     SourceAction::UpdateBranch,
                     "Update branch",
                     "Merge the latest target branch into this PR branch? This does not merge or approve the PR.",
-                    reason,
+                    closed
+                        .then_some("The pull request is closed.")
+                        .or(dependabot.then_some("Use Dependabot: rebase to update this PR."))
+                        .or(reason)
+                        .or(update_reason),
                 )];
                 let merge_reason = reason.or_else(|| {
                     if pull.draft != Some(false) {
@@ -130,33 +159,8 @@ impl GitHubClient {
                     }
                 });
                 actions.push(AvailableAction::new(SourceAction::MergeChangeRequest, "Merge PR", "Merge this PR into its target branch using squash? This changes the target branch and may trigger deployments. Repository policies apply; no auto-merge or bypass will be requested.", merge_reason));
-                if pull.user.kind == "Bot"
-                    && matches!(pull.user.login.as_str(), "dependabot[bot]" | "dependabot")
-                {
-                    let rebase_reason = if closed {
-                        Some("The pull request is closed.")
-                    } else if let Some(base) = &pull.base {
-                        let comparison: Comparison = read(
-                            self.request(
-                                config,
-                                token,
-                                &[
-                                    "repos",
-                                    &repo.owner,
-                                    &repo.name,
-                                    "compare",
-                                    &format!("{}...{}", base.sha, pull.head.sha),
-                                ],
-                            )?
-                            .query(&[("per_page", "1")]),
-                        )
-                        .await?;
-                        (comparison.behind_by == 0)
-                            .then_some("The branch is already up to date with the target branch.")
-                    } else {
-                        Some("GitHub has not confirmed whether the branch needs rebasing.")
-                    };
-                    actions.push(AvailableAction::new(SourceAction::DependabotRebase, "Dependabot: rebase", "Post @dependabot rebase on this PR? Dependabot will process the request asynchronously.", rebase_reason));
+                if dependabot {
+                    actions.push(AvailableAction::new(SourceAction::DependabotRebase, "Dependabot: rebase", "Post @dependabot rebase on this PR? Dependabot will process the request asynchronously.", update_reason));
                     actions.push(AvailableAction::new(SourceAction::DependabotRecreate, "Dependabot: recreate", "Post @dependabot recreate? This can overwrite manual edits to the PR branch. Dependabot will process the request asynchronously.", closed.then_some("The pull request is closed.")));
                 }
                 Ok(ActionOptions {
