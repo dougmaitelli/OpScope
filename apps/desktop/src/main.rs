@@ -26,6 +26,7 @@ use tauri::Manager;
 fn main() {
     let application = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             tray::setup(app)?;
             let data_dir = app.path().app_data_dir()?;

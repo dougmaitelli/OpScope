@@ -14,6 +14,7 @@ opscope-core.workspace = true
 keyring = "4.2.0"
 tauri.workspace = true
 tauri-plugin-notification.workspace = true
+tauri-plugin-opener.workspace = true
 tokio.workspace = true
 
 [lints]
