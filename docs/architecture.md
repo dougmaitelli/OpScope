@@ -12,13 +12,15 @@ crates/opscope-core/src/
   application/     Use cases, ports, caching, synchronization, notifications
   contracts/       Transport DTOs and generated client definitions
   integrations/    Compiled source modules and provider adapters
-  persistence.rs   SQLite setup and persistence adapters
-  persistence/     Persistence implementation modules and tests
+  persistence/     SQLite setup, persistence adapters, and tests
 apps/
   server/          Axum HTTP adapter, OIDC, Apprise, server composition
   desktop/         Tauri IPC adapter, OS keychain, tray, native notifications
   web/             Shared React UI, feature pages, components, client adapters
 ```
+
+Rust modules with separate test files keep their implementation in `mod.rs`
+beside `tests.rs` inside the module directory.
 
 Domain and application code must not depend on Axum, Tauri, UI code, or
 provider response types. Application ports separate business behavior from
