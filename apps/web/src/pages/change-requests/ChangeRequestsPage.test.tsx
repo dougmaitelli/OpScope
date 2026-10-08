@@ -17,7 +17,7 @@ vi.mock("../../api/application-client.tsx", () => ({
 }));
 
 describe("multi-provider pull requests", () => {
-  it.each(["GitLab", "Gitea", "Bitbucket Cloud"])(
+  it.each(["GitHub", "GitLab", "Gitea", "Bitbucket Cloud"])(
     "opens grouped %s requests through the shared details dialog",
     async (sourceName) => {
       vi.clearAllMocks();
@@ -92,7 +92,14 @@ describe("multi-provider pull requests", () => {
       client.changeRequestDetails.mockResolvedValue({
         body: "## Provider pull request description\n\n<details><summary>Release notes</summary><p>A formatted update.</p></details>",
         labels: [],
-        reviews: [],
+        reviews: [
+          { reviewer: "bob", status: "approved", submittedAt: "2026-09-02T00:00:00Z" },
+          {
+            reviewer: "bob",
+            status: "changesRequested",
+            submittedAt: "2026-09-01T00:00:00Z",
+          },
+        ],
         checks: [
           {
             name: "External build",
@@ -147,6 +154,10 @@ describe("multi-provider pull requests", () => {
       expect(within(row).getByText("Checks passed")).toBeInTheDocument();
       expect(within(row).getByText("Approved")).toBeInTheDocument();
       expect(within(dialog).getByText("Release notes").tagName).toBe("SUMMARY");
+      expect(within(dialog).getAllByText("bob")).toHaveLength(1);
+      expect(
+        within(within(dialog).getByText("bob").parentElement!).getByText("Approved"),
+      ).toBeInTheDocument();
       expect(client.changeRequestDetails).toHaveBeenCalledWith({
         sourceId: "connection-1",
         repositoryId: "repo-1",

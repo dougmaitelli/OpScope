@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApplicationClient } from "../../api/application-client.tsx";
 import { StatusPill } from "../../components/StatusPill.tsx";
 import { changeRequestStatusTone } from "../../shared/change-request-status.ts";
+import { latestReviewerReviews } from "../../shared/change-request-reviews.ts";
 import { DialogCloseButton } from "../../components/DialogCloseButton.tsx";
 import { MarkdownContent } from "../../components/MarkdownContent.tsx";
 import { SourceActions } from "../../components/SourceActions.tsx";
@@ -37,6 +38,7 @@ export function ChangeRequestDetailsDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const [changeRequest, setChangeRequest] = useState(initialChangeRequest);
   const [details, setDetails] = useState<ChangeRequestDetailsResponse | null>(null);
+  const reviewerReviews = useMemo(() => latestReviewerReviews(details?.reviews ?? []), [details]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
@@ -291,8 +293,8 @@ export function ChangeRequestDetailsDialog({
                   <h3>Reviews</h3>
                   {details.reviews.length > 0 ? (
                     <div className="change-request-reviews">
-                      {details.reviews.map((review, index) => (
-                        <div key={`${review.reviewer ?? "unknown"}:${review.submittedAt ?? index}`}>
+                      {reviewerReviews.map((review, index) => (
+                        <div key={review.reviewer?.toLowerCase() ?? `unknown:${index}`}>
                           <span>{review.reviewer ?? "Unknown reviewer"}</span>
                           <StatusPill tone={changeRequestStatusTone[review.status]}>
                             {statusLabel(review.status)}
