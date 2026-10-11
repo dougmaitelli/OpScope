@@ -9,7 +9,7 @@ RUN npm ci
 COPY apps/web apps/web
 RUN npm run build --workspace @opscope/web
 
-FROM rust:1.98.1-bookworm AS server
+FROM rust:1.99.0-bookworm AS server
 
 WORKDIR /source
 
