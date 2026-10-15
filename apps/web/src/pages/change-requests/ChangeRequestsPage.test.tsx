@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ChangeRequestSummary } from "../../generated/contracts.ts";
@@ -17,9 +17,15 @@ vi.mock("../../api/application-client.tsx", () => ({
 }));
 
 describe("multi-provider pull requests", () => {
-  it.each(["GitHub", "GitLab", "Gitea", "Bitbucket Cloud"])(
-    "opens grouped %s requests through the shared details dialog",
-    async (sourceName) => {
+  it.each([
+    ["GitHub", false],
+    ["GitLab", false],
+    ["Gitea", false],
+    ["Bitbucket Cloud", false],
+    ["GitHub", true],
+  ] as const)(
+    "opens grouped %s requests through the shared details dialog (close before merge: %s)",
+    async (sourceName, closeBeforeMerge) => {
       vi.clearAllMocks();
       const actionOptions = {
         actions: [
@@ -171,10 +177,10 @@ describe("multi-provider pull requests", () => {
         "href",
         "https://ci.example/build/1",
       );
-      client.executeAction.mockResolvedValue({
+      const mergeResponse = {
         accepted: true,
         run: null,
-        changeRequest: { ...request, state: "merged" },
+        changeRequest: { ...request, state: "merged" as const },
         details: {
           body: "Fresh merged description",
           labels: [],
@@ -182,10 +188,27 @@ describe("multi-provider pull requests", () => {
           checks: [],
           latestCommit: null,
         },
-      });
+      };
+      let resolveMerge!: (response: typeof mergeResponse) => void;
+      client.executeAction.mockReturnValue(
+        closeBeforeMerge
+          ? new Promise<typeof mergeResponse>((resolve) => {
+              resolveMerge = resolve;
+            })
+          : Promise.resolve(mergeResponse),
+      );
       await user.click(await within(dialog).findByRole("button", { name: "Merge PR" }));
       await user.click(within(dialog).getByRole("button", { name: "Confirm action" }));
-      expect(await within(dialog).findByText("Fresh merged description")).toBeInTheDocument();
+      if (closeBeforeMerge) {
+        await user.click(
+          within(dialog).getByRole("button", { name: "Close pull request details" }),
+        );
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        await act(async () => resolveMerge(mergeResponse));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      } else {
+        expect(await within(dialog).findByText("Fresh merged description")).toBeInTheDocument();
+      }
       expect(
         screen.queryByRole("button", { name: /Improve build checks/ }),
       ).not.toBeInTheDocument();
@@ -193,7 +216,11 @@ describe("multi-provider pull requests", () => {
       expect(client.listChangeRequests).toHaveBeenCalledTimes(1);
       expect(client.changeRequestDetails).toHaveBeenCalledTimes(1);
       expect(client.listWorkflows).toHaveBeenCalledTimes(1);
-      await user.click(within(dialog).getByRole("button", { name: "Close pull request details" }));
+      if (!closeBeforeMerge) {
+        await user.click(
+          within(dialog).getByRole("button", { name: "Close pull request details" }),
+        );
+      }
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       client.synchronizeSources.mockResolvedValue({
         failedRepositoryCount: 0,

@@ -175,7 +175,13 @@ export function ChangeRequestsPage() {
           changeRequest={selected}
           onClose={() => setSelected(null)}
           onUpdated={(updated) => {
-            setSelected(updated);
+            setSelected((current) =>
+              current?.sourceId === updated.sourceId &&
+              current.repositoryId === updated.repositoryId &&
+              current.number === updated.number
+                ? updated
+                : current,
+            );
             setInventory(
               (current) =>
                 current && {
