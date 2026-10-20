@@ -36,6 +36,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Audit JavaScript dependencies
         run: npm audit --audit-level=high
 
