@@ -5,6 +5,7 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,14 +21,16 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      app: ${{ github.ref_type == 'tag' || steps.filter.outputs.app == 'true' }}
+      app: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.app == 'true' }}
+      browser: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.app == 'true' || steps.filter.outputs.browser == 'true' }}
+      runtime: ${{ github.ref_type == 'tag' || steps.filter.outputs.runtime == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: dorny/paths-filter@v4
         id: filter
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && github.event_name != 'workflow_dispatch'
         with:
           predicate-quantifier: every
           filters: |
@@ -37,6 +40,10 @@ jobs:
               - '!screenshots/**'
               - '!*.md'
               - '!LICENSE'
+            browser:
+              - 'screenshots/**'
+            runtime:
+              - '{apps/**,crates/**,Cargo.toml,Cargo.lock,rust-toolchain.toml,package.json,package-lock.json,Dockerfile,.dockerignore}'
 
   check:
     needs: changes
@@ -76,8 +83,10 @@ jobs:
 
   ui:
     needs: changes
-    if: needs.changes.outputs.app == 'true'
-    name: UI integration and screenshots
+    if: >-
+      needs.changes.outputs.browser == 'true' &&
+      (github.event_name != 'push' || github.ref_type == 'tag')
+    name: Browser tests
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -104,7 +113,7 @@ jobs:
     needs: [changes, ci-result]
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-      needs.ci-result.result == 'success' && needs.changes.outputs.app == 'true'
+      needs.ci-result.result == 'success' && needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     permissions:
