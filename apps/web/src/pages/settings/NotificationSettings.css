@@ -50,3 +50,10 @@
   margin: 0;
   accent-color: var(--accent);
 }
+
+.notification-settings-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}

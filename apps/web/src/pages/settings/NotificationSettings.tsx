@@ -2,7 +2,13 @@ import type { NotificationPreferencesContract } from "../../generated/contracts.
 import "./NotificationSettings.css";
 
 const groups: { title: string; events: [keyof NotificationPreferencesContract, string][] }[] = [
-  { title: "Workflows", events: [["workflowFailures", "Latest run fails"]] },
+  {
+    title: "Workflows",
+    events: [
+      ["workflowFailures", "Latest run fails"],
+      ["dependabotUpdateFailures", "Dependabot update failures"],
+    ],
+  },
   {
     title: "Pull requests",
     events: [
@@ -61,11 +67,18 @@ export function NotificationSettings({
                 <input
                   type="checkbox"
                   checked={value[key]}
+                  disabled={key === "dependabotUpdateFailures" && !value.workflowFailures}
                   onChange={(event) => onChange({ ...value, [key]: event.currentTarget.checked })}
                 />
                 <span>{label}</span>
               </label>
             ))}
+            {group.title === "Workflows" ? (
+              <p className="notification-settings-hint">
+                Turn off Dependabot update failures to mute update jobs. CI on Dependabot pull
+                requests still follows “Latest run fails”.
+              </p>
+            ) : null}
           </fieldset>
         ))}
       </div>

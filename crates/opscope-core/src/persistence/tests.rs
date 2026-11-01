@@ -317,6 +317,7 @@ fn monitoring_settings_have_defaults_and_persist_updates() -> Result<(), Box<dyn
         pull_requests_enabled: false,
         issues_enabled: false,
         notifications: crate::application::NotificationPreferences {
+            dependabot_update_failures: false,
             issue_closed: false,
             pull_request_opened: false,
             ..Default::default()

@@ -203,6 +203,57 @@ test("settings save, feature navigation and reload", async ({ page }) => {
   ).not.toBeChecked();
 });
 
+test("Dependabot notification preference saves, reverts and survives reload", async ({
+  page,
+  api,
+}) => {
+  await openScreen(page, screens[4]);
+  const dependabot = page.getByRole("checkbox", {
+    name: "Dependabot update failures",
+    exact: true,
+  });
+  const failures = page.getByRole("checkbox", {
+    name: "Latest run fails",
+    exact: true,
+  });
+  await expect(dependabot).toBeChecked();
+  await dependabot.uncheck();
+  await page.getByRole("button", { name: "Revert", exact: true }).click();
+  await expect(dependabot).toBeChecked();
+  await dependabot.uncheck();
+  await page
+    .getByRole("button", { name: "Save settings", exact: true })
+    .click();
+  await expect(page.getByText("Monitoring settings saved.")).toBeVisible();
+  expect(api.requests.filter((request) => request.method === "PUT")).toEqual([
+    expect.objectContaining({
+      path: httpRoutes.settings,
+      body: expect.objectContaining({
+        notifications: expect.objectContaining({
+          workflowFailures: true,
+          dependabotUpdateFailures: false,
+        }),
+      }),
+    }),
+  ]);
+  await page.reload();
+  await expect(dependabot).not.toBeChecked();
+  await expect(failures).toBeChecked();
+  await failures.uncheck();
+  await expect(dependabot).toBeDisabled();
+  await failures.check();
+  await expect(dependabot).toBeEnabled();
+  await expect(dependabot).not.toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dependabot.scrollIntoViewIfNeeded();
+  await expect(dependabot).toBeVisible();
+  await dependabot.check();
+  await expect(dependabot).toBeChecked();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+});
+
 test("workflow service failure and recovery", async ({ page }) => {
   await page.route(`**${httpRoutes.workflows}`, (route) =>
     route.fulfill({

@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::{Config, TS};
 
-pub const CONTRACT_VERSION: u8 = 20;
+pub const CONTRACT_VERSION: u8 = 21;
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HEALTH_HTTP_PATH: &str = "/api/health";
 pub const UPDATE_STATUS_HTTP_PATH: &str = "/api/update-status";

@@ -130,7 +130,7 @@ export type SynchronizationStatusResponse = { running: boolean, activeSourceCoun
 
 export type MonitoringSettingsResponse = { pullRequestsEnabled: boolean, issuesEnabled: boolean, notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 
-export type NotificationPreferencesContract = { workflowFailures: boolean, pullRequestOpened: boolean, pullRequestReviewRequested: boolean, pullRequestChangesRequested: boolean, pullRequestMerged: boolean, pullRequestClosed: boolean, issueOpened: boolean, issueAssigned: boolean, issueReopened: boolean, issueClosed: boolean, };
+export type NotificationPreferencesContract = { workflowFailures: boolean, dependabotUpdateFailures: boolean, pullRequestOpened: boolean, pullRequestReviewRequested: boolean, pullRequestChangesRequested: boolean, pullRequestMerged: boolean, pullRequestClosed: boolean, issueOpened: boolean, issueAssigned: boolean, issueReopened: boolean, issueClosed: boolean, };
 
 export type UpdateMonitoringSettingsRequest = { pullRequestsEnabled: boolean, issuesEnabled: boolean, notifications: NotificationPreferencesContract, onlyMyWork: boolean, synchronizationIntervalSeconds: number, recentRunsPerWorkflow: number, };
 

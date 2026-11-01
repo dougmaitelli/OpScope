@@ -32,6 +32,125 @@ struct RecordingSink(Mutex<Vec<Notification>>);
 struct PersonalSettings(Mutex<bool>);
 
 #[tokio::test]
+async fn muting_dependabot_updates_preserves_pr_ci_and_other_managed_failures() {
+    use crate::application::{MonitoringSettings, SettingsRepository};
+    let settings = Arc::new(crate::persistence::SqliteDatabase::in_memory().unwrap());
+    let mut muted = MonitoringSettings::default();
+    muted.notifications.dependabot_update_failures = false;
+    settings.save_settings(muted).unwrap();
+    let sink = Arc::new(RecordingSink::default());
+    let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
+        .with_settings(settings);
+    let mut workflows = workflows();
+    workflows[0].path = "dynamic/dependabot/dependabot-updates".into();
+    // Display names are editable and must not determine notification filtering.
+    workflows[0].name = "Dependency maintenance".into();
+    workflows[1].path = ".github/workflows/dependabot-ci.yml".into();
+    workflows.push(Workflow {
+        id: "codeql".into(),
+        name: "CodeQL".into(),
+        path: "dynamic/github-code-scanning/codeql".into(),
+        state: WorkflowState::Active,
+        web_url: "https://example.com/codeql".into(),
+    });
+    notifier
+        .observe("1", "source", &repository(), &workflows, &[])
+        .await
+        .unwrap();
+    let mut pr_ci = run("workflow-2", "pr-ci", 2, RunOutcome::Failure);
+    pr_ci.actor = Some("dependabot[bot]".into());
+    pr_ci.trigger = "pull_request".into();
+    let mut updates = run("workflow-1", "updates", 1, RunOutcome::Failure);
+    updates.trigger = "dynamic".into();
+    notifier
+        .observe(
+            "1",
+            "source",
+            &repository(),
+            &workflows,
+            &[
+                updates,
+                pr_ci,
+                run("codeql", "scan", 3, RunOutcome::Failure),
+            ],
+        )
+        .await
+        .unwrap();
+    let sent = sink.0.lock().unwrap();
+    assert_eq!(sent.len(), 1);
+    let NotificationEvents::WorkflowFailures(events) = &sent[0].events else {
+        panic!("expected workflow failures")
+    };
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.workflow_id.as_str())
+            .collect::<Vec<_>>(),
+        ["codeql", "workflow-2"]
+    );
+}
+
+#[tokio::test]
+async fn dependabot_notifications_default_on_and_muted_runs_are_not_replayed() {
+    use crate::application::{MonitoringSettings, SettingsRepository};
+    let settings = Arc::new(crate::persistence::SqliteDatabase::in_memory().unwrap());
+    let sink = Arc::new(RecordingSink::default());
+    let notifier = NotifyRepositoryFailures::new(Arc::new(MemoryStates::default()), sink.clone())
+        .with_settings(settings.clone());
+    let mut workflows = workflows();
+    workflows[0].path = "dynamic/dependabot/dependabot-updates".into();
+    notifier
+        .observe("1", "source", &repository(), &workflows, &[])
+        .await
+        .unwrap();
+    notifier
+        .observe(
+            "1",
+            "source",
+            &repository(),
+            &workflows,
+            &[run("workflow-1", "first", 1, RunOutcome::Failure)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    let mut muted = MonitoringSettings::default();
+    muted.notifications.dependabot_update_failures = false;
+    settings.save_settings(muted).unwrap();
+    let failed = run("workflow-1", "muted", 2, RunOutcome::Failure);
+    notifier
+        .observe(
+            "1",
+            "source",
+            &repository(),
+            &workflows,
+            std::slice::from_ref(&failed),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    settings
+        .save_settings(MonitoringSettings::default())
+        .unwrap();
+    notifier
+        .observe("1", "source", &repository(), &workflows, &[failed])
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 1);
+    notifier
+        .observe(
+            "1",
+            "source",
+            &repository(),
+            &workflows,
+            &[run("workflow-1", "new", 3, RunOutcome::Failure)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(sink.0.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn disabling_workflow_alerts_advances_state_without_replay() {
     use crate::application::{MonitoringSettings, SettingsRepository};
     let settings = Arc::new(crate::persistence::SqliteDatabase::in_memory().unwrap());

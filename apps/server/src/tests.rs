@@ -776,6 +776,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.recent_runs_per_workflow, 10);
     assert!(decoded.notifications.issue_opened);
     assert!(decoded.notifications.workflow_failures);
+    assert!(decoded.notifications.dependabot_update_failures);
 
     let settings = app
         .clone()
@@ -783,7 +784,7 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
             authenticated(Request::put(SETTINGS_HTTP_PATH), &session, true)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5,"notifications":{"issueOpened":false,"pullRequestReviewRequested":false}}"#,
+                    r#"{"synchronizationIntervalSeconds":120,"recentRunsPerWorkflow":5,"notifications":{"issueOpened":false,"pullRequestReviewRequested":false,"dependabotUpdateFailures":false}}"#,
                 ))?,
         )
         .await?;
@@ -794,11 +795,17 @@ async fn generic_source_routes_connect_list_and_disconnect_without_exposing_secr
     assert_eq!(decoded.recent_runs_per_workflow, 5);
     assert!(!decoded.notifications.issue_opened);
     assert!(!decoded.notifications.pull_request_review_requested);
+    assert!(!decoded.notifications.dependabot_update_failures);
     assert!(decoded.notifications.workflow_failures);
     assert!(
         !opscope_core::application::SettingsRepository::load_settings(&database)?
             .notifications
             .issue_opened
+    );
+    assert!(
+        !opscope_core::application::SettingsRepository::load_settings(&database)?
+            .notifications
+            .dependabot_update_failures
     );
 
     let synchronization = app

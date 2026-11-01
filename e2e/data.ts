@@ -272,6 +272,7 @@ export const settings: MonitoringSettingsResponse = {
   recentRunsPerWorkflow: 10,
   notifications: {
     workflowFailures: true,
+    dependabotUpdateFailures: true,
     pullRequestOpened: true,
     pullRequestReviewRequested: true,
     pullRequestChangesRequested: true,

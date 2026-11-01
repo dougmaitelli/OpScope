@@ -197,6 +197,13 @@ impl NotifyRepositoryFailures {
                     let workflow = workflows
                         .iter()
                         .find(|workflow| workflow.id == state.workflow_id)?;
+                    // Use GitHub's managed workflow path, not the actor or display name:
+                    // application CI on Dependabot pull requests must still notify.
+                    if !settings.notifications.dependabot_update_failures
+                        && workflow.path == "dynamic/dependabot/dependabot-updates"
+                    {
+                        return None;
+                    }
                     Some((workflow, state))
                 })
                 .collect::<Vec<_>>()

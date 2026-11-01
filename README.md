@@ -360,6 +360,9 @@ Choose notification events in **Settings → Notifications**:
 | Issues | New issue, assigned to you, reopened, or closed. |
 
 All event types are enabled by default. “You” is the connection's token owner.
+Turn off **Dependabot update failures** to mute GitHub's dependency update jobs.
+Failures remain visible in the dashboard, and CI failures on Dependabot pull
+requests still notify when **Latest run fails** is enabled.
 **Only show my work** applies to every event, including assignment alerts.
 Comments and successful workflow runs do not trigger notifications.
 

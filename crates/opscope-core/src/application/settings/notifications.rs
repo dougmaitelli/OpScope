@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct NotificationPreferences {
     pub workflow_failures: bool,
+    pub dependabot_update_failures: bool,
     pub pull_request_opened: bool,
     pub pull_request_review_requested: bool,
     pub pull_request_changes_requested: bool,
@@ -20,6 +21,7 @@ impl Default for NotificationPreferences {
     fn default() -> Self {
         Self {
             workflow_failures: true,
+            dependabot_update_failures: true,
             pull_request_opened: true,
             pull_request_review_requested: true,
             pull_request_changes_requested: true,
@@ -30,5 +32,19 @@ impl Default for NotificationPreferences {
             issue_reopened: true,
             issue_closed: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_preferences_preserve_choices_and_enable_dependabot_notifications() {
+        let preferences: NotificationPreferences =
+            serde_json::from_str(r#"{"workflow_failures":false,"issue_closed":false}"#).unwrap();
+        assert!(!preferences.workflow_failures);
+        assert!(!preferences.issue_closed);
+        assert!(preferences.dependabot_update_failures);
     }
 }

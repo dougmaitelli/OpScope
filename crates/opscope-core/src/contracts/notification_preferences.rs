@@ -6,6 +6,7 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase", default)]
 pub struct NotificationPreferencesContract {
     pub workflow_failures: bool,
+    pub dependabot_update_failures: bool,
     pub pull_request_opened: bool,
     pub pull_request_review_requested: bool,
     pub pull_request_changes_requested: bool,
@@ -27,6 +28,7 @@ impl From<NotificationPreferences> for NotificationPreferencesContract {
     fn from(value: NotificationPreferences) -> Self {
         Self {
             workflow_failures: value.workflow_failures,
+            dependabot_update_failures: value.dependabot_update_failures,
             pull_request_opened: value.pull_request_opened,
             pull_request_review_requested: value.pull_request_review_requested,
             pull_request_changes_requested: value.pull_request_changes_requested,
@@ -44,6 +46,7 @@ impl From<NotificationPreferencesContract> for NotificationPreferences {
     fn from(value: NotificationPreferencesContract) -> Self {
         Self {
             workflow_failures: value.workflow_failures,
+            dependabot_update_failures: value.dependabot_update_failures,
             pull_request_opened: value.pull_request_opened,
             pull_request_review_requested: value.pull_request_review_requested,
             pull_request_changes_requested: value.pull_request_changes_requested,
